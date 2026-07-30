@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
+import { shortAddress } from "@/lib/types";
 
 export default function Nav() {
   const { isConnected, address } = useAccount();
@@ -26,9 +27,12 @@ export default function Nav() {
       </Link>
 
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <Link href="/create" style={{ color: "var(--ink-soft)" }}>
+          Launch
+        </Link>
         {isConnected && (
           <Link href="/profile" style={{ color: "var(--ink-soft)" }}>
-            {address?.slice(0, 6)}...{address?.slice(-4)}
+            {shortAddress(address)}
           </Link>
         )}
         <div style={{ transform: "scale(0.85)", transformOrigin: "right center" }}>
