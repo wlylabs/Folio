@@ -1,0 +1,291 @@
+# Deploys `FolioFactory` to Base Sepolia from CI, using repository secrets for
+# the deployer key, the RPC endpoint and the Basescan API key.
+#
+# ## Manual trigger only
+#
+# There is deliberately no `push` or `schedule` trigger. Re-running this
+# workflow deploys a *second, independent* factory and overwrites
+# `deployments/base-sepolia.json` — the previous address then survives only in
+# git history and in the run's artifact. That is a decision a person makes, not
+# something a merge to a branch should cause.
+#
+# ## Required configuration
+#
+# Secrets, on the `base-sepolia` environment (Settings -> Environments):
+#
+#   DEPLOYER_PRIVATE_KEY   0x-prefixed 32-byte hex. A THROWAWAY testnet key —
+#                          `vm.envUint` needs the 0x prefix. Must hold Base
+#                          Sepolia ETH for gas.
+#   BASE_SEPOLIA_RPC_URL   Resolves the `base-sepolia` alias in foundry.toml.
+#                          https://sepolia.base.org works and is rate-limited.
+#   BASESCAN_API_KEY       Etherscan v2 key; only used when `verify` is on.
+#
+# Putting them on an environment rather than the repository is what lets you
+# add required reviewers, so a deploy waits for a human even though the trigger
+# is already manual.
+#
+# Optional repository variables (Settings -> Variables), all wei, all falling
+# back to the script's testnet defaults when unset:
+#
+#   FACTORY_VIRTUAL_ETH_RESERVE, FACTORY_MAX_RESERVE_CAP,
+#   FACTORY_GRADUATION_THRESHOLD, FACTORY_FEE_BPS, FACTORY_PRICE_MOVE_ALERT_BPS
+#
+# ## The network guard still applies
+#
+# `BaseSepoliaScript.onlyBaseSepolia` reverts on any chain id other than 84532
+# during the local simulation, before anything is signed. A wrong RPC URL in
+# the secret fails the run rather than deploying somewhere real.
+
+name: Deploy — Base Sepolia
+
+on:
+  workflow_dispatch:
+    inputs:
+      verify:
+        description: "Verify the contracts on Basescan"
+        type: boolean
+        default: true
+      commit_record:
+        description: "Commit deployments/base-sepolia.json back to this branch"
+        type: boolean
+        default: true
+      factory_owner:
+        description: "Owner of the emergency stop (blank = the deployer)"
+        type: string
+        required: false
+
+permissions: {}
+
+# Never cancel a run that may already have broadcast a transaction: the record
+# of what was deployed is written after the broadcast returns.
+concurrency:
+  group: deploy-base-sepolia
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy FolioFactory
+    runs-on: ubuntu-latest
+    # Gate approvals and scope the secrets. Create this environment even if you
+    # add no reviewers — the secrets above are read from it.
+    environment: base-sepolia
+    permissions:
+      # Only for the commit-back step. Everything else is read-only.
+      contents: write
+
+    steps:
+      # `submodules: recursive` pulls contracts/lib/forge-std, which the
+      # remappings in foundry.toml point at.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # OpenZeppelin resolves through node_modules — foundry.toml lists it in
+      # `libs` and remaps @openzeppelin/* into it — so the contracts do not
+      # build without an npm install.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      # Fails with a readable message instead of letting `forge` report a
+      # missing env var or an unresolvable RPC alias several minutes in.
+      - name: Check required secrets
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
+          BASESCAN_API_KEY: ${{ secrets.BASESCAN_API_KEY }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "${DEPLOYER_PRIVATE_KEY}" ] || missing+=("DEPLOYER_PRIVATE_KEY")
+          [ -n "${BASE_SEPOLIA_RPC_URL}" ] || missing+=("BASE_SEPOLIA_RPC_URL")
+          if [ "${{ inputs.verify }}" = "true" ] && [ -z "${BASESCAN_API_KEY}" ]; then
+            missing+=("BASESCAN_API_KEY (required because verify is on)")
+          fi
+          if [ ${#missing[@]} -gt 0 ]; then
+            printf 'Missing secret: %s\n' "${missing[@]}" >&2
+            echo "Set them on the 'base-sepolia' environment." >&2
+            exit 1
+          fi
+          case "${DEPLOYER_PRIVATE_KEY}" in
+            0x*) ;;
+            *) echo "DEPLOYER_PRIVATE_KEY must be 0x-prefixed — vm.envUint cannot parse it otherwise." >&2; exit 1 ;;
+          esac
+
+      - name: Build
+        run: forge build
+
+      # The contracts that are about to hold testnet ETH get the same gate as a
+      # pull request. Cheap next to a broadcast, and the only check between a
+      # bad commit and a deployed factory.
+      - name: Test
+        run: forge test
+
+      # Only non-empty values are exported. Setting FACTORY_FEE_BPS to an empty
+      # string is not the same as leaving it unset: `vm.envOr` returns its
+      # default only for the latter, and fails to parse the former.
+      - name: Assemble factory configuration
+        env:
+          FACTORY_OWNER: ${{ inputs.factory_owner }}
+          FACTORY_VIRTUAL_ETH_RESERVE: ${{ vars.FACTORY_VIRTUAL_ETH_RESERVE }}
+          FACTORY_MAX_RESERVE_CAP: ${{ vars.FACTORY_MAX_RESERVE_CAP }}
+          FACTORY_GRADUATION_THRESHOLD: ${{ vars.FACTORY_GRADUATION_THRESHOLD }}
+          FACTORY_FEE_BPS: ${{ vars.FACTORY_FEE_BPS }}
+          FACTORY_PRICE_MOVE_ALERT_BPS: ${{ vars.FACTORY_PRICE_MOVE_ALERT_BPS }}
+        run: |
+          set -euo pipefail
+          for name in FACTORY_OWNER \
+                      FACTORY_VIRTUAL_ETH_RESERVE \
+                      FACTORY_MAX_RESERVE_CAP \
+                      FACTORY_GRADUATION_THRESHOLD \
+                      FACTORY_FEE_BPS \
+                      FACTORY_PRICE_MOVE_ALERT_BPS; do
+            value="${!name-}"
+            if [ -n "${value}" ]; then
+              echo "${name}=${value}" >> "$GITHUB_ENV"
+              echo "Overriding ${name}=${value}"
+            fi
+          done
+
+      # Fingerprint the record before the deploy, so the steps below can tell a
+      # freshly written file from one that was already committed. Without this a
+      # failed deploy would report the *previous* factory address as if it were
+      # this run's.
+      - name: Fingerprint existing deployment record
+        run: |
+          set -euo pipefail
+          if [ -f deployments/base-sepolia.json ]; then
+            echo "RECORD_HASH_BEFORE=$(sha256sum deployments/base-sepolia.json | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          else
+            echo "RECORD_HASH_BEFORE=none" >> "$GITHUB_ENV"
+          fi
+
+      # `continue-on-error` so that a failure *after* the broadcast — most
+      # likely Basescan verification, which is routinely flaky — cannot discard
+      # the record of a factory that now exists on chain. The job is still
+      # failed, at the last step, once the record has been saved.
+      - name: Deploy
+        id: deploy
+        continue-on-error: true
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
+          BASESCAN_API_KEY: ${{ secrets.BASESCAN_API_KEY }}
+          # `confirm()` blocks on `vm.prompt` otherwise, and a workflow has no
+          # stdin — the run would hang until it timed out.
+          FOLIO_SKIP_CONFIRM: "true"
+        run: |
+          set -euo pipefail
+          verify_flag=""
+          if [ "${{ inputs.verify }}" = "true" ]; then
+            verify_flag="--verify"
+          fi
+          forge script contracts/script/DeployFactory.s.sol:DeployFactory \
+            --rpc-url base-sepolia \
+            --broadcast \
+            ${verify_flag} \
+            -vvv
+
+      - name: Read deployment record
+        id: record
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ ! -f deployments/base-sepolia.json ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No deployment record was written."
+            exit 0
+          fi
+          after="$(sha256sum deployments/base-sepolia.json | cut -d' ' -f1)"
+          if [ "${after}" = "${RECORD_HASH_BEFORE:-none}" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Deployment record is unchanged — this run deployed nothing."
+            exit 0
+          fi
+          {
+            echo "changed=true"
+            echo "factory=$(jq -r .factory deployments/base-sepolia.json)"
+            echo "implementation=$(jq -r .implementation deployments/base-sepolia.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      # Kept even on failure: if the broadcast landed but a later step did not,
+      # this artifact is the only copy of the address outside Basescan.
+      - name: Upload deployment record
+        if: always() && steps.record.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-sepolia-deployment-${{ github.run_id }}
+          path: |
+            deployments/base-sepolia.json
+            broadcast/
+          if-no-files-found: warn
+
+      - name: Summary
+        if: always() && steps.record.outputs.changed == 'true'
+        env:
+          FACTORY: ${{ steps.record.outputs.factory }}
+          IMPLEMENTATION: ${{ steps.record.outputs.implementation }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## FolioFactory deployed to Base Sepolia"
+            echo
+            echo "| | Address | Basescan |"
+            echo "|---|---|---|"
+            echo "| Factory | \`${FACTORY}\` | [view](https://sepolia.basescan.org/address/${FACTORY}) |"
+            echo "| Implementation | \`${IMPLEMENTATION}\` | [view](https://sepolia.basescan.org/address/${IMPLEMENTATION}) |"
+            echo
+            if [ "${{ steps.deploy.outcome }}" != "success" ]; then
+              echo "> The deploy step failed *after* broadcasting. The contracts above exist"
+              echo "> on chain; check the log for whether Basescan verification is what failed,"
+              echo "> and if so re-run it with \`forge verify-contract\`."
+              echo
+            fi
+            echo "### deployments/base-sepolia.json"
+            echo
+            echo '```json'
+            cat deployments/base-sepolia.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # `.gitkeep` in deployments/ asks for this file to be committed once it
+      # exists, so the frontend and the interaction scripts read the same
+      # address. Skipped when the branch is protected — push the record yourself
+      # from the artifact in that case.
+      - name: Commit deployment record
+        if: |
+          always()
+          && steps.record.outputs.changed == 'true'
+          && inputs.commit_record
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deployments/base-sepolia.json
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore: record Base Sepolia factory ${{ steps.record.outputs.factory }}"
+          if ! git push origin "HEAD:${{ github.ref_name }}"; then
+            echo "::warning::Could not push the deployment record to ${{ github.ref_name }} — the branch is likely protected. Download it from this run's artifact and commit it manually."
+          fi
+
+      # Last, so that everything above has already run. Without this the job
+      # would report success on a run whose deploy step failed.
+      - name: Report deploy status
+        if: always() && steps.deploy.outcome != 'success'
+        run: |
+          echo "The deploy step failed — see its log above." >&2
+          exit 1

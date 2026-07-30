@@ -231,6 +231,46 @@ mutates a live one. The JSON record is overwritten, so the previous address
 survives only in git history. The script prints the address it is about to
 replace as part of the confirmation.
 
+### Deploying from CI (GitHub Actions)
+
+`.github/workflows/deploy-base-sepolia.yml` runs the same script from CI, for
+when the deployer key should live in a secret store rather than on somebody's
+laptop. It is `workflow_dispatch` only — there is no push or schedule trigger,
+because re-running it deploys a second factory (see *Redeploying* above).
+
+Configure it once, on a **`base-sepolia` environment** rather than at repository
+level — that is what lets you require a reviewer before a run proceeds:
+
+| Secret | |
+|---|---|
+| `DEPLOYER_PRIVATE_KEY` | 0x-prefixed. `vm.envUint` cannot parse it otherwise. Needs Base Sepolia ETH. |
+| `BASE_SEPOLIA_RPC_URL` | Resolves the `base-sepolia` alias in `foundry.toml`. |
+| `BASESCAN_API_KEY` | Only read when the run's `verify` input is on. |
+
+The curve terms default to the same testnet numbers the script uses. Override
+any of them with repository *variables* named `FACTORY_VIRTUAL_ETH_RESERVE`,
+`FACTORY_MAX_RESERVE_CAP`, `FACTORY_GRADUATION_THRESHOLD`, `FACTORY_FEE_BPS`,
+`FACTORY_PRICE_MOVE_ALERT_BPS`; only the ones you set are passed through, since
+an empty value is not the same as an unset one to `vm.envOr`.
+
+Two things the workflow does that are worth knowing when reading a failed run:
+
+- **A failure after the broadcast does not discard the address.** Basescan
+  verification is flaky often enough that treating it as fatal would lose the
+  record of a factory that already exists on chain. The deploy step is allowed
+  to fail, the record is written to the job summary and to a run artifact, and
+  the job is only marked failed at the very end. If verification is what broke,
+  retry it with `forge verify-contract` as above — no redeploy.
+- **A stale record is never reported as this run's.** The workflow hashes
+  `deployments/base-sepolia.json` before deploying and compares afterwards, so a
+  run that fails before broadcasting says it deployed nothing instead of echoing
+  the previously committed address.
+
+On success it commits the updated `deployments/base-sepolia.json` back to the
+branch it ran on, which is what `deployments/.gitkeep` asks for. Against a
+protected branch the push is refused; the run warns and leaves the file in its
+artifact for you to commit.
+
 ---
 
 ## 4. Manual interaction scripts
