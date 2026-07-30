@@ -99,7 +99,7 @@ contract FolioFactoryTest is Test {
         assertEq(token.name(), "Midnight Kettle");
         assertEq(token.symbol(), "KETL");
         assertEq(token.decimals(), 18);
-        assertEq(token.totalSupply(), SUPPLY * 1e18);
+        assertEq(token.totalSupply(), 0, "nothing is minted until someone buys");
         assertEq(token.creator(), creator);
         assertEq(token.factory(), address(factory));
 
@@ -110,13 +110,17 @@ contract FolioFactoryTest is Test {
         assertFalse(token.graduated());
     }
 
-    /// The whole supply is curve inventory. Nothing is pre-allocated to the
-    /// creator, so there is no insider bag to dump into the first buyers.
-    function test_CreateToken_MintsEntireSupplyToTheCurve() public {
+    /// The whole supply is curve inventory, and none of it exists yet: tokens are
+    /// minted one buy at a time. Nothing is pre-allocated to the creator, so there
+    /// is no insider bag to dump into the first buyers, and the contract does not
+    /// show up as its own largest holder.
+    function test_CreateToken_PutsEntireSupplyOnTheCurveUnminted() public {
         FolioToken token = _create("Midnight Kettle", "KETL", SUPPLY);
-        assertEq(token.balanceOf(address(token)), SUPPLY * 1e18);
-        assertEq(token.balanceOf(creator), 0);
+        assertEq(token.curveSupply(), SUPPLY * 1e18);
         assertEq(token.curveTokenReserve(), SUPPLY * 1e18);
+        assertEq(token.totalSupply(), 0);
+        assertEq(token.balanceOf(address(token)), 0);
+        assertEq(token.balanceOf(creator), 0);
     }
 
     function test_CreateToken_CopiesConfig() public {
