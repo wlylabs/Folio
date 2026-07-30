@@ -93,6 +93,27 @@ import {IFolioFactory} from "./interfaces/IFolioFactory.sol";
  * ETH anywhere except to a buyer as change, a seller as proceeds, or the creator
  * as accrued fees.
  *
+ * Note what the pause does *not* touch: every view below stays callable while the
+ * platform is stopped. Halting trading is a containment measure, and there is no
+ * version of containment that is improved by also blinding the people whose money
+ * is sitting in the contract.
+ *
+ * ## The reserve cap
+ *
+ * `maxReserveCap` is the most real ETH this curve will ever hold, chosen at
+ * creation and frozen there. It is a blast-radius bound: whatever is wrong with
+ * the curve maths that nobody has found yet, it cannot put more than this at risk
+ * in this one launch. A buy that would overshoot the cap fills the reserve to
+ * exactly the cap and refunds the rest, rather than reverting — see {buy}.
+ *
+ * ## The price-move signal
+ *
+ * {LargePriceMove} fires when one trade moves the marginal price by more than the
+ * launch's `priceMoveAlertBps`. It blocks nothing. It exists so that unusual
+ * activity shows up in a log stream without anyone having to reconstruct it, and
+ * deliberately so: on a bonding curve a large price move is what a large trade
+ * *is*, and refusing those would just be a smaller cap enforced badly.
+ *
  * ## What graduation does here, and what it does not
  *
  * When the real reserve reaches `graduationThreshold` the curve stops accepting
@@ -127,14 +148,18 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
     uint16 public feeBps;
     /// @notice True once the curve has closed itself to buys at the threshold.
     bool public graduated;
+    /// @notice Price move, in basis points, at which one trade emits
+    ///         {LargePriceMove}. Zero disables the signal.
+    uint16 public priceMoveAlertBps;
 
     /// @notice Receives the trading fees. Has no other authority here.
     address public creator;
 
     /// @notice Imaginary ETH anchoring the curve's opening price, in wei.
     uint256 public virtualEthReserve;
-    /// @notice Ceiling on real ETH this curve will accept, in wei.
-    uint256 public ethCap;
+    /// @notice Ceiling on real ETH this curve will ever hold, in wei — the
+    ///         launch's blast radius, fixed at creation.
+    uint256 public maxReserveCap;
     /// @notice Real ETH reserve at which buying closes, in wei. Zero disables it.
     uint256 public graduationThreshold;
 
@@ -182,8 +207,45 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
     ///         for off-chain tooling, not a state change beyond closing buys.
     event Graduated(uint256 ethReserve, uint256 tokensSold);
 
-    /// @notice The creator withdrew their accrued fees.
-    event FeesClaimed(address indexed creator, uint256 amount);
+    /**
+     * @notice The creator withdrew their accrued fees.
+     * @dev The one function here that moves ETH to a privileged party, so it
+     *      carries a timestamp for the audit trail rather than leaving it to be
+     *      joined back from block metadata.
+     * @param creator Who claimed — always the launch's creator, since nobody else
+     *        can call {claimFees}.
+     * @param amount Wei sent.
+     * @param timestamp Block timestamp of the claim.
+     */
+    event FeesClaimed(address indexed creator, uint256 amount, uint256 timestamp);
+
+    /**
+     * @notice One trade moved the marginal price by at least `priceMoveAlertBps`.
+     *
+     * This is a monitoring signal and nothing else. The trade it describes has
+     * already settled, and no code path anywhere reads this event or the state
+     * behind it. It exists so that "something unusual happened on this launch"
+     * surfaces in a log stream directly, instead of being something an operator has
+     * to notice by diffing consecutive `TokensBought` / `TokensSold` prices.
+     *
+     * It is deliberately not a blocking circuit breaker. On a constant-product
+     * curve the price move *is* the trade size — a big move means someone bought or
+     * sold a lot, which is a thing that is supposed to be possible. Refusing those
+     * trades would be a reserve cap enforced badly, and the launch already has a
+     * real one of those.
+     *
+     * @param trader Who traded.
+     * @param priceBefore Marginal price before the trade, wei per whole token.
+     * @param priceAfter Marginal price after the trade, wei per whole token.
+     * @param moveBps Size of the move in basis points, measured against the *lower*
+     *        of the two prices. A doubling and a halving therefore both read
+     *        `10_000`, so one threshold is symmetric across both directions;
+     *        measuring against `priceBefore` instead would make a fall of any size
+     *        cap out at `10_000` and never trip a threshold set for rises.
+     */
+    event LargePriceMove(
+        address indexed trader, uint256 priceBefore, uint256 priceAfter, uint256 moveBps
+    );
 
     // -----------------------------------------------------------------------
     // Errors
@@ -264,16 +326,24 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         // Re-checked rather than trusted: this function is externally reachable on
         // a clone, and a zero virtual reserve or zero cap would make the curve
         // divide by zero or refuse every buy.
-        if (config.virtualEthReserve == 0 || config.ethCap == 0) revert InvalidConfig();
-        if (config.graduationThreshold > config.ethCap) revert InvalidConfig();
+        //
+        // Only the fields that could break the curve's arithmetic or its solvency
+        // are re-checked here. The factory's other bounds — the fee ceiling, the
+        // alert floor — are platform policy rather than safety properties, and
+        // re-enforcing policy in the token would only mean two places to keep in
+        // step. `priceMoveAlertBps` in particular cannot break anything: it is read
+        // by one `emit` and nothing else.
+        if (config.virtualEthReserve == 0 || config.maxReserveCap == 0) revert InvalidConfig();
+        if (config.graduationThreshold > config.maxReserveCap) revert InvalidConfig();
 
         __ERC20_init(name_, symbol_);
 
         factory = msg.sender;
         creator = creator_;
         feeBps = config.feeBps;
+        priceMoveAlertBps = config.priceMoveAlertBps;
         virtualEthReserve = config.virtualEthReserve;
-        ethCap = config.ethCap;
+        maxReserveCap = config.maxReserveCap;
         graduationThreshold = config.graduationThreshold;
 
         // The whole supply is curve inventory, and none of it is minted yet. It
@@ -325,7 +395,7 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
     /// @notice Real ETH the curve can still take in before hitting whichever of
     ///         the cap or the graduation threshold binds first, in wei.
     function ethHeadroom() public view returns (uint256) {
-        uint256 ceiling = ethCap;
+        uint256 ceiling = maxReserveCap;
         if (graduationThreshold != 0 && graduationThreshold < ceiling) {
             ceiling = graduationThreshold;
         }
@@ -345,8 +415,8 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
      *      exactly this much always yields at least `tokenAmount`; it may yield a
      *      unit or two more.
      *
-     *      This prices the curve and nothing else. It does not know about the ETH
-     *      cap, the graduation threshold, or the emergency stop — check
+     *      This prices the curve and nothing else. It does not know about the
+     *      reserve cap, the graduation threshold, or the emergency stop — check
      *      {ethHeadroom}, {graduated} and {tradingPaused} for those, or use
      *      {getBuyQuote}, which mirrors `buy` exactly.
      * @param tokenAmount Token units wanted. Must be below {curveTokenReserve};
@@ -385,6 +455,12 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
      *      When the curve is closed to buys this returns `(0, 0, ethIn)` rather
      *      than reverting, so a UI can render the state; `buy` reverts with
      *      {CurveClosed} in that case.
+     *
+     *      It keeps quoting while the platform is paused, and reports the price
+     *      the curve would trade at rather than zero. That is the same call as
+     *      every other view here: a stopped market is one people are entitled to
+     *      keep reading. Pair it with {tradingPaused} to render why the button is
+     *      disabled.
      * @param ethIn Wei the caller intends to send.
      * @return tokensOut Token units they would receive.
      * @return ethSpent Wei actually consumed, fee included.
@@ -487,6 +563,8 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         if (out < minTokensOut) revert SlippageExceeded(out, minTokensOut);
         tokensOut = out;
 
+        uint256 priceBefore = currentPrice();
+
         // --- Effects. Everything below settles before the one external call. ---
         ethReserve += netEth;
         tokensSold += tokensOut;
@@ -496,8 +574,10 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         bool justGraduated = graduationThreshold != 0 && ethReserve >= graduationThreshold;
         if (justGraduated) graduated = true;
 
-        emit TokensBought(msg.sender, msg.value - refund, tokensOut, currentPrice());
+        uint256 priceAfter = currentPrice();
+        emit TokensBought(msg.sender, msg.value - refund, tokensOut, priceAfter);
         if (justGraduated) emit Graduated(ethReserve, tokensSold);
+        _signalLargeMove(priceBefore, priceAfter);
 
         // --- Interactions. ---
         if (refund > 0) _sendEth(msg.sender, refund);
@@ -540,6 +620,8 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         if (grossEth > ethReserve) revert ReserveShortfall(grossEth, ethReserve);
         ethOut = out;
 
+        uint256 priceBefore = currentPrice();
+
         // --- Effects. The burn is first, so a caller who is short never reaches
         //     the accounting below. Everything settles before the payout call. ---
         _burn(msg.sender, tokenAmount);
@@ -547,7 +629,9 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         ethReserve -= grossEth;
         feesAccrued += fee;
 
-        emit TokensSold(msg.sender, tokenAmount, ethOut, currentPrice());
+        uint256 priceAfter = currentPrice();
+        emit TokensSold(msg.sender, tokenAmount, ethOut, priceAfter);
+        _signalLargeMove(priceBefore, priceAfter);
 
         // --- Interactions. ---
         _sendEth(msg.sender, ethOut);
@@ -566,7 +650,7 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         if (amount == 0) revert NothingToClaim();
 
         feesAccrued = 0;
-        emit FeesClaimed(creator, amount);
+        emit FeesClaimed(creator, amount, block.timestamp);
 
         _sendEth(creator, amount);
     }
@@ -633,6 +717,42 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         );
         fee = (grossEth * feeBps) / BPS;
         ethOut = grossEth - fee;
+    }
+
+    /**
+     * @dev Emits {LargePriceMove} when a settled trade moved the marginal price by
+     *      at least `priceMoveAlertBps`. Called after the effects and before the
+     *      external call, so the log is emitted from state that has already
+     *      settled and cannot be reached by a reentrant caller.
+     *
+     *      The move is measured against the lower of the two prices, which makes
+     *      it symmetric: a doubling and a halving are both `10_000`. Measuring
+     *      against `priceBefore` would cap every fall at `10_000` no matter how far
+     *      it went, so a threshold tuned for rises could never fire on a sell.
+     *
+     *      Costs two `currentPrice()` reads per trade on top of the one the trade
+     *      events already needed — a couple of `mulDiv`s over warm slots. Cheap
+     *      enough that making the signal opt-out per launch was not worth the
+     *      branch, so `priceMoveAlertBps == 0` is the only way off.
+     */
+    function _signalLargeMove(uint256 priceBefore, uint256 priceAfter) private {
+        uint256 threshold = priceMoveAlertBps;
+        if (threshold == 0) return;
+        // A zero price is unreachable through the factory, which refuses a supply
+        // that would floor the opening price to nothing. Guarded anyway: this
+        // function is not worth a division-by-zero panic that reverts a settled
+        // trade, and a directly-initialized clone can reach configs the factory
+        // would not have allowed.
+        if (priceBefore == 0 || priceAfter == 0) return;
+
+        (uint256 low, uint256 high) =
+            priceAfter > priceBefore ? (priceBefore, priceAfter) : (priceAfter, priceBefore);
+        if (low == high) return;
+
+        uint256 moveBps = Math.mulDiv(high - low, BPS, low);
+        if (moveBps >= threshold) {
+            emit LargePriceMove(msg.sender, priceBefore, priceAfter, moveBps);
+        }
     }
 
     /// @dev There is no `receive`, so this contract's balance only ever moves

@@ -37,9 +37,10 @@ contract FolioTradingTest is Test {
     function _config() internal pure returns (CurveConfig memory) {
         return CurveConfig({
             virtualEthReserve: 2 ether,
-            ethCap: 5 ether,
+            maxReserveCap: 5 ether,
             graduationThreshold: 4 ether,
-            feeBps: FEE_BPS
+            feeBps: FEE_BPS,
+            priceMoveAlertBps: 10_000
         });
     }
 

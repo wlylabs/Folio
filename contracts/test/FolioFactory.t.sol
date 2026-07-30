@@ -32,15 +32,16 @@ contract FolioFactoryTest is Test {
 
     /// @dev keccak of the TokenCreated signature, for log matching.
     bytes32 internal constant TOKEN_CREATED_TOPIC = keccak256(
-        "TokenCreated(address,address,string,string,uint256,(uint256,uint256,uint256,uint16))"
+        "TokenCreated(address,address,string,string,uint256,(uint256,uint256,uint256,uint16,uint16))"
     );
 
     function _config() internal pure returns (CurveConfig memory) {
         return CurveConfig({
             virtualEthReserve: 2 ether,
-            ethCap: 5 ether,
+            maxReserveCap: 5 ether,
             graduationThreshold: 4 ether,
-            feeBps: 100
+            feeBps: 100,
+            priceMoveAlertBps: 10_000
         });
     }
 
@@ -54,11 +55,13 @@ contract FolioFactoryTest is Test {
 
     function test_Constructor_SetsOwnerAndConfig() public view {
         assertEq(factory.owner(), owner);
-        (uint256 virt, uint256 cap, uint256 threshold, uint16 fee) = factory.defaultConfig();
+        (uint256 virt, uint256 cap, uint256 threshold, uint16 fee, uint16 alertBps) =
+            factory.defaultConfig();
         assertEq(virt, 2 ether);
         assertEq(cap, 5 ether);
         assertEq(threshold, 4 ether);
         assertEq(fee, 100);
+        assertEq(alertBps, 10_000);
         assertEq(factory.tokenCount(), 0);
     }
 
@@ -84,8 +87,8 @@ contract FolioFactoryTest is Test {
         new FolioFactory(owner, bad);
 
         bad = _config();
-        bad.ethCap = 0;
-        vm.expectRevert(FolioFactory.InvalidEthCap.selector);
+        bad.maxReserveCap = 0;
+        vm.expectRevert(FolioFactory.InvalidReserveCap.selector);
         new FolioFactory(owner, bad);
     }
 
@@ -126,7 +129,7 @@ contract FolioFactoryTest is Test {
     function test_CreateToken_CopiesConfig() public {
         FolioToken token = _create("Midnight Kettle", "KETL", SUPPLY);
         assertEq(token.virtualEthReserve(), 2 ether);
-        assertEq(token.ethCap(), 5 ether);
+        assertEq(token.maxReserveCap(), 5 ether);
         assertEq(token.graduationThreshold(), 4 ether);
         assertEq(token.feeBps(), 100);
     }
@@ -138,16 +141,16 @@ contract FolioFactoryTest is Test {
 
         CurveConfig memory next = _config();
         next.feeBps = 500;
-        next.ethCap = 50 ether;
+        next.maxReserveCap = 50 ether;
         vm.prank(owner);
         factory.setDefaultConfig(next);
 
         assertEq(token.feeBps(), 100);
-        assertEq(token.ethCap(), 5 ether);
+        assertEq(token.maxReserveCap(), 5 ether);
 
         FolioToken later = _create("Later", "LTR", SUPPLY);
         assertEq(later.feeBps(), 500);
-        assertEq(later.ethCap(), 50 ether);
+        assertEq(later.maxReserveCap(), 50 ether);
     }
 
     function test_CreateToken_RegistersAndCounts() public {
@@ -314,7 +317,7 @@ contract FolioFactoryTest is Test {
 
         clone = Clones.clone(factory.implementation());
         bad = _config();
-        bad.graduationThreshold = bad.ethCap + 1;
+        bad.graduationThreshold = bad.maxReserveCap + 1;
         vm.expectRevert(FolioToken.InvalidConfig.selector);
         FolioToken(clone).initialize(creator, "X", "X", SUPPLY, bad);
     }
@@ -354,13 +357,13 @@ contract FolioFactoryTest is Test {
         factory.setDefaultConfig(bad);
 
         bad = _config();
-        bad.ethCap = factory.MAX_ETH_CAP() + 1;
+        bad.maxReserveCap = factory.MAX_RESERVE_CAP() + 1;
         vm.prank(owner);
-        vm.expectRevert(FolioFactory.InvalidEthCap.selector);
+        vm.expectRevert(FolioFactory.InvalidReserveCap.selector);
         factory.setDefaultConfig(bad);
 
         bad = _config();
-        bad.graduationThreshold = bad.ethCap + 1;
+        bad.graduationThreshold = bad.maxReserveCap + 1;
         vm.prank(owner);
         vm.expectRevert(FolioFactory.InvalidGraduationThreshold.selector);
         factory.setDefaultConfig(bad);
