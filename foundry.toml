@@ -20,6 +20,24 @@ remappings = [
 [profile.default.fuzz]
 runs = 512
 
+# The handler in `test/helpers/FolioHandler.sol` filters its own preconditions
+# and never reverts, so `fail_on_revert` can stay on — which is what makes an
+# unexpected revert a failure rather than a run the fuzzer quietly discards.
+[profile.default.invariant]
+runs = 256
+depth = 128
+fail_on_revert = true
+shrink_run_limit = 5000
+
+# `forge test --profile deep` before a release: same suites, far more sequences.
+[profile.deep.fuzz]
+runs = 10_000
+
+[profile.deep.invariant]
+runs = 2_000
+depth = 256
+fail_on_revert = true
+
 [fmt]
 line_length = 100
 tab_width = 4
