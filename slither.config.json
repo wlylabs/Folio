@@ -1,0 +1,15 @@
+{
+  "filter_paths": "node_modules/|contracts/lib/|contracts/test/",
+  "exclude_dependencies": true,
+
+  "exclude_high": false,
+  "exclude_medium": false,
+  "exclude_low": false,
+  "exclude_informational": false,
+  "exclude_optimization": false,
+
+  "detectors_to_exclude": "naming-convention,solc-version,pragma,too-many-digits,assembly",
+
+  "compile_force_framework": "foundry",
+  "foundry_compile_all": false
+}

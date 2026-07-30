@@ -1,9 +1,15 @@
 [profile.default]
 src = "contracts/src"
 test = "contracts/test"
+script = "contracts/script"
 out = "contracts/out"
 libs = ["contracts/lib", "node_modules"]
 cache_path = "contracts/cache"
+# The deploy script records the factory address in `deployments/`, and every
+# interaction script reads it back from there instead of taking an address on
+# the command line. Scoped to that one directory: scripts get no other reach
+# into the filesystem.
+fs_permissions = [{ access = "read-write", path = "./deployments" }]
 solc_version = "0.8.26"
 optimizer = true
 optimizer_runs = 200
@@ -37,6 +43,20 @@ runs = 10_000
 runs = 2_000
 depth = 256
 fail_on_revert = true
+
+# Base Sepolia and nothing else. There is deliberately no mainnet alias in this
+# file — not for Base, not for Ethereum — so `--rpc-url base-sepolia` is the only
+# named network that resolves. The scripts enforce the same rule at runtime by
+# reverting on any chain id other than 84532, so a hand-typed `--rpc-url` cannot
+# route a deploy somewhere real either.
+[rpc_endpoints]
+base-sepolia = "${BASE_SEPOLIA_RPC_URL}"
+
+# `chain = 84532` pins verification to Base Sepolia on Etherscan's v2 API, which
+# is what Basescan now serves. One key covers every v2 chain, so the key itself
+# is not what keeps this on testnet — the chain id is.
+[etherscan]
+base-sepolia = { key = "${BASESCAN_API_KEY}", chain = 84532 }
 
 [fmt]
 line_length = 100
