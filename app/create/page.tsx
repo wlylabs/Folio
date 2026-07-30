@@ -3,14 +3,17 @@
 import { useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useAccount, useConfig } from "wagmi";
+import { useAccount, useBalance, useConfig } from "wagmi";
 import { deployContract, switchChain, waitForTransactionReceipt } from "wagmi/actions";
-import { parseEther } from "viem";
+import { formatUnits, parseEther } from "viem";
 import { useRouter } from "next/navigation";
 import WalletButton from "@/components/WalletButton";
+import { FaucetLinks, FaucetNotice } from "@/components/Faucet";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { FOLIO_SALE_ABI, FOLIO_SALE_BYTECODE } from "@/lib/contracts/folioSale";
-import { DEFAULT_CHAIN_SLUG, chainBySlug } from "@/lib/chains";
+import { DEFAULT_CHAIN_SLUG, chainBySlug, explorerTxUrl } from "@/lib/chains";
+import { describeTxError } from "@/lib/txErrors";
+import { formatEth } from "@/lib/types";
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
@@ -106,6 +109,16 @@ export default function CreatePage() {
   const busy = stage !== "idle";
   const chainEntry = chainBySlug(DEFAULT_CHAIN_SLUG);
 
+  // Deploying costs gas, and a wallet that has never touched this testnet has
+  // none. Read the balance up front so the form can point at a faucet instead
+  // of letting the wallet reject the signature.
+  const { data: balance } = useBalance({
+    address,
+    chainId: chainEntry?.chain.id,
+    query: { enabled: Boolean(address && chainEntry) },
+  });
+  const noGas = balance !== undefined && balance.value === 0n;
+
   const set = (key: keyof FormState) => (value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     setErrors((prev) => ({ ...prev, [key]: undefined, form: undefined }));
@@ -132,6 +145,12 @@ export default function CreatePage() {
     }
     if (!chainEntry) {
       setErrors({ form: `Unsupported chain "${DEFAULT_CHAIN_SLUG}". Check NEXT_PUBLIC_DEFAULT_CHAIN.` });
+      return;
+    }
+    if (noGas) {
+      setErrors({
+        form: `This wallet has no ${chainEntry.chain.nativeCurrency.symbol} on ${chainEntry.chain.name}, and deploying costs gas. Claim some from a faucet below, then try again.`,
+      });
       return;
     }
 
@@ -214,10 +233,14 @@ export default function CreatePage() {
 
       router.push(`/token/${contractAddress}`);
     } catch (err) {
-      setErrors({
-        form: err instanceof Error ? err.message : "Something went wrong. Check the console.",
-      });
       console.error("Launch failed:", err);
+      // Messages thrown above are already written for a person; only wallet and
+      // RPC failures need translating.
+      setErrors({
+        form: err instanceof Error && /^(Avatar upload failed|Switch your wallet|Contract deployed at|The deploy transaction)/.test(err.message)
+          ? err.message
+          : describeTxError(err),
+      });
       setStage("idle");
     }
   };
@@ -227,9 +250,10 @@ export default function CreatePage() {
       <h1 className="font-display" style={{ fontWeight: 900, fontSize: 28, marginBottom: 6 }}>
         Launch a Token
       </h1>
-      <p className="font-ui" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 20 }}>
+      <p className="font-ui" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 20, lineHeight: 1.6 }}>
         Deploys a real ERC20 sale contract to {chainEntry?.chain.name ?? DEFAULT_CHAIN_SLUG}.
-        You pay only gas.
+        You pay only gas. Buyers can also sell back at 5% under your price, and that
+        spread is yours to withdraw — the rest stays in the contract to cover them.
       </p>
 
       {!isConnected && (
@@ -241,6 +265,38 @@ export default function CreatePage() {
             Connect a wallet to sign the deployment.
           </p>
           <WalletButton variant="block" />
+        </div>
+      )}
+
+      {isConnected && chainEntry && (
+        <div
+          className="font-ui"
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: "8px 0",
+            borderTop: "1px solid var(--ink)",
+            borderBottom: "1px solid var(--rule)",
+            fontSize: 10.5,
+            color: "var(--ink-soft)",
+          }}
+        >
+          <span>{chainEntry.chain.name}</span>
+          <span style={{ fontWeight: 600, color: "var(--ink)" }}>
+            {balance
+              ? `${formatEth(Number(formatUnits(balance.value, balance.decimals)))} ${balance.symbol}`
+              : "checking balance..."}
+          </span>
+        </div>
+      )}
+
+      {isConnected && noGas && (
+        <div style={{ marginTop: 12 }}>
+          <FaucetNotice
+            chain={DEFAULT_CHAIN_SLUG}
+            heading={`No ${chainEntry?.chain.nativeCurrency.symbol ?? "test ETH"} to pay gas with`}
+          />
         </div>
       )}
 
@@ -347,7 +403,19 @@ export default function CreatePage() {
           <div className="font-ui" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
             {STAGE_LABEL[stage as Exclude<Stage, "idle">]}
             {txHash && (
-              <div style={{ wordBreak: "break-all", marginTop: 4 }}>tx {txHash}</div>
+              <div style={{ marginTop: 4 }}>
+                {explorerTxUrl(DEFAULT_CHAIN_SLUG, txHash) ? (
+                  <a
+                    href={explorerTxUrl(DEFAULT_CHAIN_SLUG, txHash) as string}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    follow it on the explorer
+                  </a>
+                ) : (
+                  <span style={{ wordBreak: "break-all" }}>tx {txHash}</span>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -369,6 +437,10 @@ export default function CreatePage() {
         >
           {busy ? "Working..." : "Publish & Launch"}
         </button>
+
+        <div className="font-ui" style={{ fontSize: 10, color: "var(--ink-soft)" }}>
+          Need test ETH? <FaucetLinks chain={DEFAULT_CHAIN_SLUG} />
+        </div>
       </div>
     </main>
   );

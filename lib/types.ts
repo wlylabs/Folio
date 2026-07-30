@@ -26,6 +26,19 @@ export type SaleStats = {
   percentSold: number;
   /** True when the numbers came from the chain rather than the database. */
   onChain: boolean;
+  /**
+   * Buyback terms, or null for a contract that has none — launches deployed
+   * before `sell()` existed have no `sellPrice()` to read, and their holders
+   * genuinely cannot sell back.
+   */
+  buyback: Buyback | null;
+};
+
+export type Buyback = {
+  /** ETH paid per whole token sold back. */
+  sellPrice: number;
+  /** ETH the contract holds to pay sellers with. */
+  reserve: number;
 };
 
 export function shortAddress(address: string | null | undefined): string {
@@ -46,4 +59,24 @@ export function formatPercent(value: number): string {
 export function formatAmount(value: number | null | undefined): string {
   const n = Number(value ?? 0);
   return Number.isFinite(n) ? n.toLocaleString("en-US") : "0";
+}
+
+/**
+ * An ETH figure at a length a person can read. Testnet prices run to several
+ * decimal places, so this keeps enough of them to distinguish 0.0002 from
+ * 0.00019 without printing all eighteen.
+ */
+export function formatEth(value: number | null | undefined): string {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return "0";
+  if (n === 0) return "0";
+  if (n < 0.000001) return "<0.000001";
+  return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+}
+
+/** A token figure, trimmed the same way. */
+export function formatTokens(value: number | null | undefined): string {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return "0";
+  return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
 }

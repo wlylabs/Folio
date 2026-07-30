@@ -1,7 +1,7 @@
-import { formatUnits } from "viem";
+import { formatEther, formatUnits } from "viem";
 import { FOLIO_SALE_ABI } from "@/lib/contracts/folioSale";
 import { publicClientFor } from "@/lib/chains";
-import { percentSold, type SaleStats, type Token } from "@/lib/types";
+import { percentSold, type Buyback, type SaleStats, type Token } from "@/lib/types";
 
 /**
  * Read live sale figures straight off the contract.
@@ -18,6 +18,7 @@ export async function fetchSaleStats(token: Token): Promise<SaleStats> {
     supply: Number(token.supply ?? 0),
     percentSold: percentSold(Number(token.sold_amount ?? 0), Number(token.supply ?? 0)),
     onChain: false,
+    buyback: null,
   };
 
   const client = publicClientFor(token.chain);
@@ -43,10 +44,42 @@ export async function fetchSaleStats(token: Token): Promise<SaleStats> {
       supply: supplyWhole,
       percentSold: percentSold(soldWhole, supplyWhole),
       onChain: true,
+      // Read separately: a pre-buyback launch has no sellPrice(), and that
+      // must not cost the page its sale figures.
+      buyback: await fetchBuyback(client, token),
     };
   } catch {
     // Placeholder address, unreachable RPC, or a contract that isn't a
     // FolioSale. Show the stored numbers instead.
     return fallback;
+  }
+}
+
+/**
+ * The buyback terms, or null if this contract has none.
+ *
+ * `sellPrice()` was added alongside `sell()`, so a read that reverts is how we
+ * recognise a launch from before the buyback existed — those tokens are
+ * buy-only, and the UI has to say so rather than offering a sell button that
+ * always fails.
+ */
+async function fetchBuyback(
+  client: NonNullable<ReturnType<typeof publicClientFor>>,
+  token: Token
+): Promise<Buyback | null> {
+  const address = token.contract_address as `0x${string}`;
+
+  try {
+    const [sellPrice, reserve] = await Promise.all([
+      client.readContract({ address, abi: FOLIO_SALE_ABI, functionName: "sellPrice" }),
+      client.getBalance({ address }),
+    ]);
+
+    return {
+      sellPrice: Number(formatEther(sellPrice)),
+      reserve: Number(formatEther(reserve)),
+    };
+  } catch {
+    return null;
   }
 }

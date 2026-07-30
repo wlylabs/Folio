@@ -1,13 +1,14 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
-import BuyBar from "@/components/BuyBar";
+import TradeBar from "@/components/TradeBar";
 import SetupNotice from "@/components/SetupNotice";
 import { sanitizeArticleHtml, articleExcerpt } from "@/lib/sanitize";
 import { fetchSaleStats } from "@/lib/saleStats";
 import { chainLabel, explorerAddressUrl } from "@/lib/chains";
 import {
   formatAmount,
+  formatEth,
   formatPercent,
   shortAddress,
   type Token,
@@ -76,7 +77,18 @@ export default async function TokenPage({
     ["Symbol", `$${token.symbol}`],
     ["Total supply", formatAmount(stats.supply || token.supply)],
     ["Sold", `${formatPercent(stats.percentSold)}${stats.onChain ? "" : " (stored)"}`],
+    ["Buy price", `${formatEth(Number(token.starting_price))} ETH`],
+    [
+      "Sell price",
+      stats.buyback ? `${formatEth(stats.buyback.sellPrice)} ETH` : "no buyback",
+    ],
   ];
+
+  // The reserve is what makes the sell button more than a promise, so it is
+  // printed next to the price rather than left for the explorer to reveal.
+  if (stats.buyback) {
+    rows.push(["Buyback reserve", `${formatEth(stats.buyback.reserve)} ETH`]);
+  }
 
   return (
     <main style={{ maxWidth: 640, margin: "0 auto", paddingBottom: 140 }}>
@@ -160,7 +172,7 @@ export default async function TokenPage({
         </div>
       </div>
 
-      <BuyBar token={token} stats={stats} />
+      <TradeBar token={token} stats={stats} />
     </main>
   );
 }

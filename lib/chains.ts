@@ -7,9 +7,32 @@ import { baseSepolia, sepolia } from "viem/chains";
  * of assuming one.
  */
 export const SUPPORTED_CHAINS = [
-  { slug: "base-sepolia", chain: baseSepolia, rpcEnv: process.env.NEXT_PUBLIC_RPC_BASE_SEPOLIA },
-  { slug: "sepolia", chain: sepolia, rpcEnv: process.env.NEXT_PUBLIC_RPC_SEPOLIA },
+  {
+    slug: "base-sepolia",
+    chain: baseSepolia,
+    rpcEnv: process.env.NEXT_PUBLIC_RPC_BASE_SEPOLIA,
+    faucets: [
+      { label: "Coinbase faucet", url: "https://portal.cdp.coinbase.com/products/faucet" },
+      { label: "Alchemy faucet", url: "https://www.alchemy.com/faucets/base-sepolia" },
+      { label: "Superchain faucet", url: "https://console.optimism.io/faucet" },
+    ],
+  },
+  {
+    slug: "sepolia",
+    chain: sepolia,
+    rpcEnv: process.env.NEXT_PUBLIC_RPC_SEPOLIA,
+    faucets: [
+      {
+        label: "Google Cloud faucet",
+        url: "https://cloud.google.com/application/web3/faucet/ethereum/sepolia",
+      },
+      { label: "Alchemy faucet", url: "https://www.alchemy.com/faucets/ethereum-sepolia" },
+      { label: "PoW faucet", url: "https://sepolia-faucet.pk910.de" },
+    ],
+  },
 ] as const;
+
+export type Faucet = { label: string; url: string };
 
 export type ChainSlug = (typeof SUPPORTED_CHAINS)[number]["slug"];
 
@@ -35,6 +58,18 @@ export function chainIdBySlug(slug: string): number | undefined {
 export function chainLabel(slug: string | null | undefined): string {
   if (!slug) return "UNKNOWN NETWORK";
   return chainBySlug(slug)?.chain.name.toUpperCase() ?? slug.toUpperCase();
+}
+
+/** Where to get free test ETH for a chain. Empty for anything unrecognised. */
+export function faucetsFor(slug: string | null | undefined): readonly Faucet[] {
+  if (!slug) return [];
+  return chainBySlug(slug)?.faucets ?? [];
+}
+
+/** Block explorer link for a transaction, when the chain publishes one. */
+export function explorerTxUrl(slug: string, hash: string): string | null {
+  const base = chainBySlug(slug)?.chain.blockExplorers?.default?.url;
+  return base ? `${base}/tx/${hash}` : null;
 }
 
 /** Block explorer link for an address, when the chain publishes one. */
