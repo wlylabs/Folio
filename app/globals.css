@@ -27,6 +27,22 @@ body {
 }
 
 /*
+ * The masthead wordmark in the nav. It sits in ink rather than the browser's
+ * link blue, and earns a hairline on hover — enough to show it leads home
+ * without printing a rule under it at rest. The transparent border reserves
+ * the row so the hover does not nudge the nav.
+ */
+.wordmark {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.wordmark:hover {
+  border-bottom-color: var(--rule);
+}
+
+/*
  * RainbowKit's modals. The theme in lib/walletTheme.ts covers colours, radii
  * and shadows; the rest is what the theme has no token for. Everything here is
  * scoped to [role="dialog"] because RainbowKitProvider wraps the whole app in

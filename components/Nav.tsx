@@ -1,11 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAccount } from "wagmi";
 import WalletButton from "@/components/WalletButton";
 
 export default function Nav() {
   const { isConnected } = useAccount();
+  // The front page opens with the full masthead, so the nav would only be
+  // repeating the wordmark a few pixels above it.
+  const showWordmark = usePathname() !== "/";
 
   return (
     <div
@@ -14,7 +18,7 @@ export default function Nav() {
         maxWidth: 640,
         margin: "0 auto",
         display: "flex",
-        justifyContent: "space-between",
+        justifyContent: showWordmark ? "space-between" : "flex-end",
         alignItems: "center",
         gap: 12,
         padding: "10px 20px",
@@ -22,9 +26,18 @@ export default function Nav() {
         fontSize: 11,
       }}
     >
-      <Link href="/" style={{ fontWeight: 700, letterSpacing: 1 }}>
-        FOLIO
-      </Link>
+      {showWordmark && (
+        // The masthead, shrunk down: same face and weight as the front page so
+        // the two read as one wordmark rather than two.
+        <Link
+          href="/"
+          aria-label="Folio — home"
+          className="font-display wordmark"
+          style={{ fontWeight: 900, fontSize: 15, letterSpacing: 0.5 }}
+        >
+          FOLIO
+        </Link>
+      )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <Link href="/create" style={{ color: "var(--ink-soft)" }}>
