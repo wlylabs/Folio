@@ -1,1 +1,27 @@
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=PT+Serif:wght@400;700&family=Inter:wght@500;600&display=swap");
 
+:root {
+  --ink: #000000;
+  --ink-soft: #333333;
+  --rule: #c0c0c0;
+  --paper: #f7f6f2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "PT Serif", serif;
+}
+
+.font-display {
+  font-family: "Playfair Display", serif;
+}
+
+.font-ui {
+  font-family: "Inter", sans-serif;
+}
