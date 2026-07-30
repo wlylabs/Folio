@@ -1,0 +1,3 @@
+`base-sepolia.json` is written here by DeployFactory.s.sol on the first deploy,
+and updated by CreateToken.s.sol with the most recent launch. Commit it once it
+exists, so the frontend and the interaction scripts read the same address.
