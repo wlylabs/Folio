@@ -1,5 +1,6 @@
 import "./globals.css";
 import Providers from "./providers";
+import Nav from "@/components/Nav";
 
 export const metadata = {
   title: "Folio — Every token, told as a story",
@@ -14,7 +15,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <Nav />
+          {children}
+        </Providers>
       </body>
     </html>
   );
