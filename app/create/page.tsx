@@ -6,8 +6,8 @@ import StarterKit from "@tiptap/starter-kit";
 import { useAccount, useConfig } from "wagmi";
 import { deployContract, switchChain, waitForTransactionReceipt } from "wagmi/actions";
 import { parseEther } from "viem";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useRouter } from "next/navigation";
+import WalletButton from "@/components/WalletButton";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { FOLIO_SALE_ABI, FOLIO_SALE_BYTECODE } from "@/lib/contracts/folioSale";
 import { DEFAULT_CHAIN_SLUG, chainBySlug } from "@/lib/chains";
@@ -232,7 +232,17 @@ export default function CreatePage() {
         You pay only gas.
       </p>
 
-      {!isConnected && <ConnectButton />}
+      {!isConnected && (
+        <div style={{ border: "1px solid var(--ink)", padding: 12 }}>
+          <p
+            className="font-ui"
+            style={{ fontSize: 11, color: "var(--ink-soft)", margin: "0 0 10px" }}
+          >
+            Connect a wallet to sign the deployment.
+          </p>
+          <WalletButton variant="block" />
+        </div>
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
         <Field label="Token name" error={errors.name}>

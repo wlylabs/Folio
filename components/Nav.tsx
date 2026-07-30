@@ -1,12 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
-import { shortAddress } from "@/lib/types";
+import WalletButton from "@/components/WalletButton";
 
 export default function Nav() {
-  const { isConnected, address } = useAccount();
+  const { isConnected } = useAccount();
 
   return (
     <div
@@ -17,6 +16,7 @@ export default function Nav() {
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
+        gap: 12,
         padding: "10px 20px",
         borderBottom: "1px solid var(--rule)",
         fontSize: 11,
@@ -31,13 +31,13 @@ export default function Nav() {
           Launch
         </Link>
         {isConnected && (
+          // The wallet chip carries the address now, so this links by name
+          // instead of repeating it.
           <Link href="/profile" style={{ color: "var(--ink-soft)" }}>
-            {shortAddress(address)}
+            Staff
           </Link>
         )}
-        <div style={{ transform: "scale(0.85)", transformOrigin: "right center" }}>
-          <ConnectButton showBalance={false} chainStatus="none" />
-        </div>
+        <WalletButton variant="nav" />
       </div>
     </div>
   );
