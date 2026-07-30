@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import SetupNotice from "@/components/SetupNotice";
+import Mark from "@/components/Mark";
 import { articleExcerpt } from "@/lib/sanitize";
 import { chainLabel } from "@/lib/chains";
-import type { Token } from "@/lib/types";
+import { formatAmount, formatDateShort, type Token } from "@/lib/types";
 
 export const revalidate = 0;
 
@@ -29,92 +30,83 @@ export default async function HomePage() {
   const tokens = await getTokens();
 
   return (
-    <main style={{ maxWidth: 640, margin: "0 auto", paddingBottom: 60 }}>
-      <header
-        style={{
-          padding: "20px 20px 0",
-          textAlign: "center",
-          borderBottom: "1px solid var(--ink)",
-        }}
-      >
-        <div className="font-display" style={{ fontWeight: 900, fontSize: 40 }}>
-          FOLIO
-        </div>
-        <div
-          className="font-ui"
-          style={{ fontSize: 10, letterSpacing: 2, color: "var(--ink-soft)", paddingBottom: 12 }}
-        >
-          EVERY TOKEN, TOLD AS A STORY
+    <main id="main">
+      <header className="shell">
+        <div className="masthead">
+          <h1 className="masthead__wordmark">FOLIO</h1>
+          <p className="masthead__tagline">Every token, told as a story</p>
+          <div className="masthead__actions">
+            <Link href="/create" className="btn btn--primary">
+              Launch a token
+            </Link>
+            <Link href="/profile" className="btn btn--outline">
+              Your desk
+            </Link>
+          </div>
         </div>
       </header>
 
-      <div
-        className="font-ui"
-        style={{
-          padding: "18px 20px 10px",
-          fontSize: 10,
-          letterSpacing: 2.5,
-          color: "var(--ink-soft)",
-        }}
-      >
-        LATEST LISTINGS
+      <div className="shell page">
+        <div className="section-head">
+          <h2 className="eyebrow">Latest listings</h2>
+          {tokens.length > 0 && (
+            <span className="eyebrow nums">
+              {formatAmount(tokens.length)} published
+            </span>
+          )}
+        </div>
+
+        {tokens.length === 0 ? (
+          <div className="empty">
+            <p style={{ marginBottom: "var(--sp-4)" }}>
+              Nothing has been published yet.
+            </p>
+            <Link href="/create" className="btn btn--primary">
+              Launch the first one
+            </Link>
+          </div>
+        ) : (
+          <div className="feed">
+            {tokens.map((t, i) => (
+              // The newest launch runs as the lead story; the rest fill the
+              // grid beneath it.
+              <FeedCard key={t.id} token={t} lead={i === 0} />
+            ))}
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}
+
+function FeedCard({ token, lead }: { token: Token; lead: boolean }) {
+  const excerpt = articleExcerpt(token.article_body, lead ? 220 : 120);
+
+  return (
+    <Link
+      href={`/token/${token.contract_address}`}
+      className={`card${lead ? " card--lead" : ""}`}
+    >
+      <div className="card__meta">
+        <Mark
+          src={token.avatar_url}
+          symbol={token.symbol}
+          name={token.name}
+          size={lead ? "lg" : "sm"}
+        />
+        <span className="card__kicker">
+          {chainLabel(token.chain)} · ${token.symbol}
+        </span>
       </div>
 
-      {tokens.length === 0 && (
-        <p style={{ padding: "0 20px", color: "var(--ink-soft)", lineHeight: 1.7 }}>
-          No tokens yet. <Link href="/create">Launch the first one</Link>.
-        </p>
-      )}
+      <h3 className="card__title">{token.article_title || token.name}</h3>
 
-      {tokens.map((t) => {
-        const excerpt = articleExcerpt(t.article_body, 120);
-        return (
-          <Link
-            key={t.id}
-            href={`/token/${t.contract_address}`}
-            style={{ textDecoration: "none", color: "inherit", display: "block" }}
-          >
-            <article
-              style={{
-                display: "flex",
-                gap: 12,
-                padding: "16px 20px",
-                borderBottom: "1px solid var(--rule)",
-              }}
-            >
-              {t.avatar_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={t.avatar_url}
-                  alt={`${t.name} avatar`}
-                  width={48}
-                  height={48}
-                  style={{
-                    width: 48,
-                    height: 48,
-                    objectFit: "cover",
-                    border: "1px solid var(--rule)",
-                    flexShrink: 0,
-                  }}
-                />
-              )}
-              <div style={{ minWidth: 0 }}>
-                <div className="font-ui" style={{ fontSize: 9, color: "var(--ink-soft)" }}>
-                  {chainLabel(t.chain)} · ${t.symbol}
-                </div>
-                <div className="font-display" style={{ fontWeight: 700, fontSize: 21, lineHeight: 1.2 }}>
-                  {t.article_title || t.name}
-                </div>
-                {excerpt && (
-                  <p style={{ fontSize: 13, color: "var(--ink-soft)", margin: "4px 0 0", lineHeight: 1.5 }}>
-                    {excerpt}
-                  </p>
-                )}
-              </div>
-            </article>
-          </Link>
-        );
-      })}
-    </main>
+      {excerpt && <p className="card__excerpt">{excerpt}</p>}
+
+      <div className="card__foot">
+        <span className="nums">{formatAmount(token.supply)} supply</span>
+        <span className="nums">{formatDateShort(token.created_at)}</span>
+      </div>
+    </Link>
   );
 }

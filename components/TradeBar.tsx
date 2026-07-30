@@ -3,7 +3,7 @@
 import { useAccount, useBalance, useConfig, useReadContract } from "wagmi";
 import { getAccount, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { formatUnits, parseEther, parseUnits } from "viem";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FOLIO_SALE_ABI } from "@/lib/contracts/folioSale";
 import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
@@ -20,13 +20,18 @@ type Side = "buy" | "sell";
 const DECIMALS = 18;
 
 /**
- * The sticky trade bar: buy on one tab, sell back on the other.
+ * The trade panel: buy on one tab, sell back on the other.
+ *
+ * On a phone it is docked to the bottom edge, because it is the reason the
+ * page exists and should never be more than a thumb away. From 1024px it
+ * stops being a dock and settles into the article rail beside the contract
+ * data — same markup either way, the breakpoint lives in globals.css.
  *
  * Both legs read the wallet's live balances so the button can say why it is
  * disabled — no test ETH, no tokens to sell — before the user signs anything
- * and the wallet answers with a raw revert. After a confirmed trade it refreshes
- * the server component, so the sale figures above update in place instead of
- * asking the user to reload.
+ * and the wallet answers with a raw revert. After a confirmed trade it
+ * refreshes the server component, so the sale figures update in place instead
+ * of asking the user to reload.
  */
 export default function TradeBar({ token, stats }: { token: Token; stats: SaleStats }) {
   const { address, isConnected, status: walletStatus } = useAccount();
@@ -43,6 +48,8 @@ export default function TradeBar({ token, stats }: { token: Token; stats: SaleSt
   const [sellTokens, setSellTokens] = useState("");
   const [status, setStatus] = useState<Status | null>(null);
   const [pending, setPending] = useState(false);
+
+  const dockRef = useDockHeight();
 
   const chainEntry = chainBySlug(token.chain);
   const targetChainId = chainEntry?.chain.id;
@@ -187,212 +194,221 @@ export default function TradeBar({ token, stats }: { token: Token; stats: SaleSt
   const sellDisabled = pending || sellUnits === null || !canSell || noGas;
 
   return (
-    <div
-      style={{
-        position: "sticky",
-        bottom: 0,
-        padding: "10px 20px calc(12px + env(safe-area-inset-bottom))",
-        background: "var(--paper)",
-        borderTop: "3px double var(--ink)",
-      }}
-    >
-      <div style={{ display: "flex", gap: 0, marginBottom: 10, borderBottom: "1px solid var(--rule)" }}>
-        <Tab active={side === "buy"} onClick={() => setSide("buy")}>
-          Buy
-        </Tab>
-        <Tab active={side === "sell"} onClick={() => setSide("sell")}>
-          Sell
-        </Tab>
-        <div
-          className="font-ui"
-          style={{
-            marginLeft: "auto",
-            alignSelf: "center",
-            fontSize: 10,
-            color: "var(--ink-soft)",
-            textAlign: "right",
-          }}
-        >
-          {tokenBalance !== null && <>you hold {formatTokens(tokenBalance)} ${token.symbol}</>}
-          {ethBalance && <> · {formatEth(Number(formatUnits(ethBalance.value, 18)))} ETH</>}
-        </div>
-      </div>
+    <div className="trade-dock" ref={dockRef}>
+      <div className="trade-dock__inner">
+        <div className="tabs" role="tablist" aria-label="Trade side">
+          <button
+            type="button"
+            role="tab"
+            className="tab"
+            aria-selected={side === "buy"}
+            onClick={() => setSide("buy")}
+          >
+            Buy
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className="tab"
+            aria-selected={side === "sell"}
+            onClick={() => setSide("sell")}
+          >
+            Sell
+          </button>
 
-      {status && (
-        <div
-          className="font-ui"
-          role="status"
-          style={{
-            fontSize: 11,
-            lineHeight: 1.5,
-            marginBottom: 8,
-            color: status.kind === "error" ? "#b00020" : "var(--ink-soft)",
-            wordBreak: "break-word",
-          }}
-        >
-          {status.message}
-          {statusTx && (
-            <>
-              {" "}
-              <a href={statusTx} target="_blank" rel="noopener noreferrer">
-                view transaction
-              </a>
-            </>
-          )}
+          <div className="tabs__aside">
+            {tokenBalance !== null && <>{formatTokens(tokenBalance)} ${token.symbol}</>}
+            {ethBalance && <> · {formatEth(Number(formatUnits(ethBalance.value, 18)))} ETH</>}
+          </div>
         </div>
-      )}
 
-      {!stats.onChain && (
-        <div className="font-ui" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginBottom: 8 }}>
-          Live sale data unavailable — this listing may predate on-chain deployment
-          {explorer && (
-            <>
-              {" · "}
-              <a href={explorer} target="_blank" rel="noopener noreferrer">
-                view contract
-              </a>
-            </>
-          )}
-        </div>
-      )}
+        {status && (
+          <p
+            className={`status${status.kind === "error" ? " status--error" : ""}`}
+            role="status"
+          >
+            {status.message}
+            {statusTx && (
+              <>
+                {" "}
+                <a href={statusTx} target="_blank" rel="noopener noreferrer">
+                  view transaction
+                </a>
+              </>
+            )}
+          </p>
+        )}
 
-      {isConnected && noGas && (
-        <div style={{ marginBottom: 8 }}>
+        {!stats.onChain && (
+          <p className="status">
+            Live sale data unavailable — this listing may predate on-chain deployment
+            {explorer && (
+              <>
+                {" · "}
+                <a href={explorer} target="_blank" rel="noopener noreferrer">
+                  view contract
+                </a>
+              </>
+            )}
+          </p>
+        )}
+
+        {isConnected && noGas && (
           <FaucetNotice
             chain={token.chain}
             heading={`No ${chainEntry?.chain.nativeCurrency.symbol ?? "test ETH"} in this wallet`}
           />
-        </div>
-      )}
+        )}
 
-      {side === "buy" ? (
-        <>
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-            <Amount
-              label="SPEND (ETH)"
-              value={spendEth}
-              onChange={setSpendEth}
-              disabled={pending || soldOut}
-              step="0.0001"
-            />
+        {side === "buy" ? (
+          <>
+            <div className="trade-row">
+              <Amount
+                label="Spend (ETH)"
+                value={spendEth}
+                onChange={setSpendEth}
+                disabled={pending || soldOut}
+                step="0.0001"
+              />
 
-            {walletWaking ? (
-              <Action onClick={noop} disabled>
-                Reconnecting wallet...
-              </Action>
-            ) : isConnected ? (
-              <Action onClick={handleBuy} disabled={buyDisabled}>
-                {soldOut ? "Sold out" : pending ? "Confirming..." : `Buy $${token.symbol}`}
-              </Action>
-            ) : (
-              <div style={{ flex: 1 }}>
-                <WalletButton variant="block" />
+              <div className="trade-row__action">
+                {walletWaking ? (
+                  <button type="button" className="btn btn--primary btn--block" disabled>
+                    Reconnecting wallet...
+                  </button>
+                ) : isConnected ? (
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--block"
+                    onClick={handleBuy}
+                    disabled={buyDisabled}
+                  >
+                    {soldOut ? "Sold out" : pending ? "Confirming..." : `Buy $${token.symbol}`}
+                  </button>
+                ) : (
+                  <WalletButton variant="block" />
+                )}
               </div>
-            )}
-          </div>
+            </div>
 
-          <Foot>
-            {token.starting_price} ETH per token
-            {tokensOut !== null && tokensOut > 0 && (
-              <> · you receive ≈ {formatTokens(tokensOut)} ${token.symbol}</>
-            )}
-          </Foot>
-        </>
-      ) : (
-        <>
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-            <Amount
-              label={`SELL ($${token.symbol})`}
-              value={sellTokens}
-              onChange={setSellTokens}
-              disabled={pending || !buyback}
-              step="1"
-              placeholder="0"
-              onMax={
-                tokenBalanceRaw && tokenBalanceRaw > 0n
-                  ? () => setSellTokens(trimZeros(formatUnits(tokenBalanceRaw, DECIMALS)))
-                  : undefined
-              }
-            />
+            <p className="trade-foot">
+              {token.starting_price} ETH per token
+              {tokensOut !== null && tokensOut > 0 && (
+                <> · you receive ≈ {formatTokens(tokensOut)} ${token.symbol}</>
+              )}
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="trade-row">
+              <Amount
+                label={`Sell ($${token.symbol})`}
+                value={sellTokens}
+                onChange={setSellTokens}
+                disabled={pending || !buyback}
+                step="1"
+                placeholder="0"
+                onMax={
+                  tokenBalanceRaw && tokenBalanceRaw > 0n
+                    ? () => setSellTokens(trimZeros(formatUnits(tokenBalanceRaw, DECIMALS)))
+                    : undefined
+                }
+              />
 
-            {walletWaking ? (
-              <Action onClick={noop} disabled>
-                Reconnecting wallet...
-              </Action>
-            ) : isConnected ? (
-              <Action onClick={handleSell} disabled={sellDisabled}>
-                {pending
-                  ? "Confirming..."
-                  : !buyback
-                    ? "No buyback"
-                    : tokenBalance === 0
-                      ? `No $${token.symbol} held`
-                      : `Sell $${token.symbol}`}
-              </Action>
-            ) : (
-              <div style={{ flex: 1 }}>
-                <WalletButton variant="block" />
+              <div className="trade-row__action">
+                {walletWaking ? (
+                  <button type="button" className="btn btn--primary btn--block" disabled>
+                    Reconnecting wallet...
+                  </button>
+                ) : isConnected ? (
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--block"
+                    onClick={handleSell}
+                    disabled={sellDisabled}
+                  >
+                    {pending
+                      ? "Confirming..."
+                      : !buyback
+                        ? "No buyback"
+                        : tokenBalance === 0
+                          ? `No $${token.symbol} held`
+                          : `Sell $${token.symbol}`}
+                  </button>
+                ) : (
+                  <WalletButton variant="block" />
+                )}
               </div>
-            )}
-          </div>
+            </div>
 
-          <Foot>
-            {buyback ? (
-              <>
-                {formatEth(buyback.sellPrice)} ETH per token back
-                {ethOut !== null && ethOut > 0 && <> · you receive ≈ {formatEth(ethOut)} ETH</>}
-                {overSells && <> · more than you hold</>}
-              </>
-            ) : (
-              <>
-                This launch was deployed before the buyback existed, so its tokens can only be
-                bought — there is nothing on the contract to sell them back to.
-              </>
-            )}
-          </Foot>
-        </>
-      )}
+            <p className="trade-foot">
+              {buyback ? (
+                <>
+                  {formatEth(buyback.sellPrice)} ETH per token back
+                  {ethOut !== null && ethOut > 0 && <> · you receive ≈ {formatEth(ethOut)} ETH</>}
+                  {overSells && <> · more than you hold</>}
+                </>
+              ) : (
+                <>
+                  This launch was deployed before the buyback existed, so its tokens can only be
+                  bought — there is nothing on the contract to sell them back to.
+                </>
+              )}
+            </p>
+          </>
+        )}
 
-      {isConnected && !noGas && (
-        <div className="font-ui" style={{ fontSize: 10, color: "var(--ink-soft)", marginTop: 4 }}>
-          Out of test ETH? <FaucetLinks chain={token.chain} />
-        </div>
-      )}
+        {isConnected && !noGas && (
+          <p className="trade-foot">
+            Out of test ETH? <FaucetLinks chain={token.chain} />
+          </p>
+        )}
+      </div>
     </div>
   );
 }
 
-function Tab({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="font-ui"
-      style={{
-        padding: "6px 14px",
-        background: "transparent",
-        border: "none",
-        borderBottom: active ? "2px solid var(--ink)" : "2px solid transparent",
-        color: active ? "var(--ink)" : "var(--ink-soft)",
-        fontSize: 10,
-        fontWeight: 600,
-        letterSpacing: 1.5,
-        textTransform: "uppercase",
-        cursor: "pointer",
-        marginBottom: -1,
-      }}
-    >
-      {children}
-    </button>
-  );
+/**
+ * Publishes the dock's height as `--dock-h`, and marks the document as having
+ * a dock at all, so the page can reserve exactly that much room at its bottom
+ * edge (see globals.css).
+ *
+ * The height has to be measured rather than assumed: the bar grows a line for
+ * a faucet warning and another for a transaction status, so a constant would
+ * either waste a strip of every article or let the bar cover the last of one.
+ */
+function useDockHeight() {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty("--dock-h", `${node.offsetHeight}px`);
+
+    root.dataset.dock = "true";
+    publish();
+
+    const cleanup = () => {
+      delete root.dataset.dock;
+      root.style.removeProperty("--dock-h");
+    };
+
+    // ResizeObserver is everywhere the wallet connectors are, but the first
+    // measurement above still stands if it happens to be missing.
+    if (typeof ResizeObserver === "undefined") return cleanup;
+
+    const observer = new ResizeObserver(publish);
+    observer.observe(node);
+
+    return () => {
+      observer.disconnect();
+      cleanup();
+    };
+  }, []);
+
+  return ref;
 }
 
 function Amount({
@@ -413,36 +429,12 @@ function Amount({
   onMax?: () => void;
 }) {
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <span
-        className="font-ui"
-        style={{
-          fontSize: 9,
-          letterSpacing: 1,
-          color: "var(--ink-soft)",
-          display: "flex",
-          gap: 6,
-          alignItems: "baseline",
-        }}
-      >
+    <label className="field">
+      <span className="field__label">
         {label}
         {onMax && (
-          <button
-            type="button"
-            onClick={onMax}
-            className="font-ui"
-            style={{
-              padding: 0,
-              border: "none",
-              background: "none",
-              color: "var(--ink)",
-              fontSize: 9,
-              letterSpacing: 1,
-              textDecoration: "underline",
-              cursor: "pointer",
-            }}
-          >
-            MAX
+          <button type="button" onClick={onMax} className="link-button">
+            Max
           </button>
         )}
       </span>
@@ -455,60 +447,11 @@ function Amount({
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        style={{
-          width: 108,
-          padding: "9px 8px",
-          border: "1px solid var(--rule)",
-          fontFamily: "PT Serif, serif",
-          fontSize: 14,
-        }}
+        className="input input--compact"
       />
     </label>
   );
 }
-
-function Action({
-  onClick,
-  disabled,
-  children,
-}: {
-  onClick: () => void;
-  disabled: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="font-ui"
-      style={{
-        flex: 1,
-        padding: "14px 0",
-        background: "var(--ink)",
-        color: "var(--paper)",
-        fontSize: 12,
-        fontWeight: 600,
-        letterSpacing: 1,
-        border: "none",
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.6 : 1,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Foot({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="font-ui" style={{ fontSize: 10.5, color: "var(--ink-soft)", marginTop: 6, lineHeight: 1.5 }}>
-      {children}
-    </div>
-  );
-}
-
-/** The disabled reconnecting slab still wants the same shape as a live button. */
-function noop() {}
 
 /** A positive wei amount, or null if the field isn't a usable number yet. */
 function toWei(input: string): bigint | null {
