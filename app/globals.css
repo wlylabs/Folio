@@ -25,3 +25,21 @@ body {
 .font-ui {
   font-family: "Inter", sans-serif;
 }
+
+/*
+ * RainbowKit's modals. The theme in lib/walletTheme.ts covers colours, radii
+ * and shadows; the rest is what the theme has no token for. Everything here is
+ * scoped to [role="dialog"] because RainbowKitProvider wraps the whole app in
+ * [data-rk] — an unscoped rule would restyle the articles too.
+ */
+[data-rk] [role="dialog"],
+[data-rk] [role="dialog"] * {
+  /* The theme's fonts.body reaches only some of the modal's text nodes. */
+  font-family: "Inter", sans-serif;
+  /*
+   * Square off wallet logos, avatars and buttons. Blanket rather than targeted
+   * because RainbowKit's class names are content-hashed, and nothing else in
+   * Folio has a rounded corner.
+   */
+  border-radius: 0 !important;
+}

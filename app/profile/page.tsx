@@ -1,9 +1,9 @@
 "use client";
 
 import { useAccount } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import WalletButton from "@/components/WalletButton";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { chainLabel } from "@/lib/chains";
 import {
@@ -58,7 +58,9 @@ export default function ProfilePage() {
         <p className="font-ui" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 16 }}>
           Connect your wallet to view your staff page.
         </p>
-        <ConnectButton />
+        <div style={{ maxWidth: 260, margin: "0 auto" }}>
+          <WalletButton variant="block" />
+        </div>
       </main>
     );
   }

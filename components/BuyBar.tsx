@@ -1,12 +1,12 @@
 "use client";
 
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useConfig } from "wagmi";
 import { switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { formatEther, parseEther } from "viem";
 import { useMemo, useState } from "react";
 import { FOLIO_SALE_ABI } from "@/lib/contracts/folioSale";
 import { chainBySlug, explorerAddressUrl } from "@/lib/chains";
+import WalletButton from "@/components/WalletButton";
 import type { SaleStats, Token } from "@/lib/types";
 
 type Status = { kind: "info" | "error" | "success"; message: string };
@@ -181,7 +181,7 @@ export default function BuyBar({ token, stats }: { token: Token; stats: SaleStat
           </button>
         ) : (
           <div style={{ flex: 1 }}>
-            <ConnectButton />
+            <WalletButton variant="block" />
           </div>
         )}
       </div>
