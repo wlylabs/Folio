@@ -74,6 +74,24 @@ export function formatEth(value: number | null | undefined): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
 }
 
+/** A publication date, or "undated" for a row that has no usable timestamp. */
+export function formatDate(value: string | null | undefined): string {
+  if (!value) return "undated";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "undated"
+    : date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+}
+
+/** The same date, short enough to sit in a card footer. */
+export function formatDateShort(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 /** A token figure, trimmed the same way. */
 export function formatTokens(value: number | null | undefined): string {
   const n = Number(value ?? 0);

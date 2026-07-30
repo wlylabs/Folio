@@ -4,14 +4,33 @@
  */
 export default function SetupNotice() {
   return (
-    <main style={{ maxWidth: 640, margin: "0 auto", padding: "40px 20px" }}>
-      <h1 className="font-display" style={{ fontWeight: 900, fontSize: 26, marginBottom: 12 }}>
+    <main id="main" className="shell shell--measure page">
+      <p className="eyebrow">Setup required</p>
+      <h1
+        style={{
+          fontWeight: 900,
+          fontSize: "var(--fs-h1)",
+          margin: "var(--sp-2) 0 var(--sp-4)",
+        }}
+      >
         Finish setting up Folio
       </h1>
-      <p style={{ fontSize: 15, lineHeight: 1.7, marginBottom: 16 }}>
+      <p style={{ marginBottom: "var(--sp-5)", color: "var(--ink-soft)" }}>
         Supabase isn&apos;t configured yet, so there are no listings to show.
       </p>
-      <ol className="font-ui" style={{ fontSize: 12.5, lineHeight: 2, paddingLeft: 20 }}>
+
+      <ol
+        className="font-ui"
+        style={{
+          fontSize: "var(--fs-ui)",
+          lineHeight: 1.6,
+          paddingLeft: "1.25rem",
+          display: "flex",
+          flexDirection: "column",
+          gap: "var(--sp-3)",
+          margin: 0,
+        }}
+      >
         <li>
           Copy <code>.env.example</code> to <code>.env.local</code>
         </li>

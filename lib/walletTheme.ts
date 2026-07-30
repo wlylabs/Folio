@@ -6,10 +6,12 @@ import { lightTheme, type Theme } from "@rainbow-me/rainbowkit";
  * read `var(--ink)` for values it composes into gradients or shadows.
  */
 export const PAPER = "#f7f6f2";
-export const INK = "#000000";
-export const INK_SOFT = "#333333";
-export const RULE = "#c0c0c0";
-export const ALERT = "#b00020";
+export const PAPER_RAISED = "#fffdf8";
+export const INK = "#14120e";
+export const INK_SOFT = "#55514a";
+export const INK_MUTED = "#6f6a61";
+export const RULE = "#dbd6cb";
+export const ALERT = "#a4222f";
 
 const base = lightTheme({
   accentColor: INK,
@@ -42,15 +44,15 @@ export const folioWalletTheme: Theme = {
     error: ALERT,
     generalBorder: RULE,
     generalBorderDim: RULE,
-    menuItemBackground: "rgba(0, 0, 0, 0.05)",
-    modalBackdrop: "rgba(0, 0, 0, 0.45)",
+    menuItemBackground: "rgba(20, 18, 14, 0.05)",
+    modalBackdrop: "rgba(20, 18, 14, 0.45)",
     modalBackground: PAPER,
     modalBorder: INK,
     modalText: INK,
-    modalTextDim: RULE,
+    modalTextDim: INK_MUTED,
     modalTextSecondary: INK_SOFT,
-    profileAction: PAPER,
-    profileActionHover: "rgba(0, 0, 0, 0.06)",
+    profileAction: PAPER_RAISED,
+    profileActionHover: "rgba(20, 18, 14, 0.06)",
     profileForeground: PAPER,
     selectedOptionBorder: INK,
     standby: INK_SOFT,

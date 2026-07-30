@@ -46,7 +46,15 @@ export function sanitizeArticleHtml(html: string | null | undefined): string {
 
 /** Plain text version of an article body, for previews and meta descriptions. */
 export function articleExcerpt(html: string | null | undefined, maxLength = 160): string {
-  const text = sanitizeHtml(html || "", { allowedTags: [], allowedAttributes: {} })
+  // Stripping the tags outright welds the last word of one block to the first
+  // of the next — "...reached temperature.A slow start". Blocks are boundaries
+  // between sentences, so they have to leave a space behind.
+  const spaced = (html || "").replace(
+    /<\/(p|div|h[1-6]|li|blockquote|pre|tr|section|article)>|<(br|hr)\s*\/?>/gi,
+    " "
+  );
+
+  const text = sanitizeHtml(spaced, { allowedTags: [], allowedAttributes: {} })
     .replace(/\s+/g, " ")
     .trim();
   if (text.length <= maxLength) return text;

@@ -251,23 +251,30 @@ export default function CreatePage() {
   };
 
   return (
-    <main style={{ maxWidth: 640, margin: "0 auto", padding: "20px 20px 60px" }}>
-      <h1 className="font-display" style={{ fontWeight: 900, fontSize: 28, marginBottom: 6 }}>
-        Launch a Token
-      </h1>
-      <p className="font-ui" style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 20, lineHeight: 1.6 }}>
-        Deploys a real ERC20 sale contract to {chainEntry?.chain.name ?? DEFAULT_CHAIN_SLUG}.
-        You pay only gas. Buyers can also sell back at 5% under your price, and that
-        spread is yours to withdraw — the rest stays in the contract to cover them.
-      </p>
+    <main id="main" className="shell shell--form page">
+      <header style={{ marginBottom: "var(--sp-5)" }}>
+        <p className="eyebrow">New listing</p>
+        <h1
+          style={{
+            fontWeight: 900,
+            fontSize: "var(--fs-h1)",
+            margin: "var(--sp-2) 0 var(--sp-3)",
+          }}
+        >
+          Launch a token
+        </h1>
+        <p style={{ color: "var(--ink-soft)", maxWidth: "var(--measure)" }}>
+          Deploys a real ERC20 sale contract to {chainEntry?.chain.name ?? DEFAULT_CHAIN_SLUG}.
+          You pay only gas. Buyers can also sell back at 5% under your price, and that
+          spread is yours to withdraw — the rest stays in the contract to cover them.
+        </p>
+      </header>
 
       {!isConnected && (
-        <div style={{ border: "1px solid var(--ink)", padding: 12 }}>
-          <p
-            className="font-ui"
-            style={{ fontSize: 11, color: "var(--ink-soft)", margin: "0 0 10px" }}
-          >
-            Connect a wallet to sign the deployment.
+        <div className="notice" style={{ marginBottom: "var(--sp-5)" }}>
+          <p className="notice__title">Connect a wallet to sign the deployment</p>
+          <p style={{ marginBottom: "var(--sp-4)" }}>
+            Nothing is published until you approve the transaction.
           </p>
           <WalletButton variant="block" />
         </div>
@@ -278,17 +285,18 @@ export default function CreatePage() {
           className="font-ui"
           style={{
             display: "flex",
+            flexWrap: "wrap",
             justifyContent: "space-between",
-            gap: 12,
-            padding: "8px 0",
+            gap: "var(--sp-3)",
+            padding: "var(--sp-3) 0",
             borderTop: "1px solid var(--ink)",
             borderBottom: "1px solid var(--rule)",
-            fontSize: 10.5,
+            fontSize: "var(--fs-micro)",
             color: "var(--ink-soft)",
           }}
         >
           <span>{chainEntry.chain.name}</span>
-          <span style={{ fontWeight: 600, color: "var(--ink)" }}>
+          <span className="nums" style={{ fontWeight: 600, color: "var(--ink)" }}>
             {balance
               ? `${formatEth(Number(formatUnits(balance.value, balance.decimals)))} ${balance.symbol}`
               : "checking balance..."}
@@ -297,7 +305,7 @@ export default function CreatePage() {
       )}
 
       {isConnected && noGas && (
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: "var(--sp-4)" }}>
           <FaucetNotice
             chain={DEFAULT_CHAIN_SLUG}
             heading={`No ${chainEntry?.chain.nativeCurrency.symbol ?? "test ETH"} to pay gas with`}
@@ -305,110 +313,101 @@ export default function CreatePage() {
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
-        <Field label="Token name" error={errors.name}>
-          <input
-            placeholder="e.g. Midnight Kettle"
-            value={form.name}
-            onChange={(e) => set("name")(e.target.value)}
-            disabled={busy}
-            maxLength={64}
-            style={inputStyle}
-          />
-        </Field>
+      <div className="stack" style={{ marginTop: "var(--sp-5)", gap: "var(--sp-5)" }}>
+        <div className="form-grid">
+          <Field label="Token name" error={errors.name}>
+            <input
+              placeholder="e.g. Midnight Kettle"
+              value={form.name}
+              onChange={(e) => set("name")(e.target.value)}
+              disabled={busy}
+              maxLength={64}
+              className="input"
+            />
+          </Field>
 
-        <Field label="Symbol" error={errors.symbol}>
-          <input
-            placeholder="e.g. KETL"
-            value={form.symbol}
-            onChange={(e) => set("symbol")(e.target.value.toUpperCase())}
-            disabled={busy}
-            maxLength={16}
-            style={inputStyle}
-          />
-        </Field>
+          <Field label="Symbol" error={errors.symbol}>
+            <input
+              placeholder="e.g. KETL"
+              value={form.symbol}
+              onChange={(e) => set("symbol")(e.target.value.toUpperCase())}
+              disabled={busy}
+              maxLength={16}
+              className="input"
+            />
+          </Field>
 
-        <Field label="Total supply" error={errors.supply}>
-          <input
-            type="number"
-            min="1"
-            step="1"
-            inputMode="numeric"
-            placeholder="1000000"
-            value={form.supply}
-            onChange={(e) => set("supply")(e.target.value)}
-            disabled={busy}
-            style={inputStyle}
-          />
-        </Field>
+          <Field label="Total supply" error={errors.supply}>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              inputMode="numeric"
+              placeholder="1000000"
+              value={form.supply}
+              onChange={(e) => set("supply")(e.target.value)}
+              disabled={busy}
+              className="input"
+            />
+          </Field>
 
-        <Field label="Price per token (ETH)" error={errors.startingPrice}>
-          <input
-            type="number"
-            min="0"
-            step="0.0001"
-            inputMode="decimal"
-            placeholder="0.0002"
-            value={form.startingPrice}
-            onChange={(e) => set("startingPrice")(e.target.value)}
-            disabled={busy}
-            style={inputStyle}
-          />
-        </Field>
+          <Field label="Price per token (ETH)" error={errors.startingPrice}>
+            <input
+              type="number"
+              min="0"
+              step="0.0001"
+              inputMode="decimal"
+              placeholder="0.0002"
+              value={form.startingPrice}
+              onChange={(e) => set("startingPrice")(e.target.value)}
+              disabled={busy}
+              className="input"
+            />
+          </Field>
 
-        <Field label="Article headline" error={errors.articleTitle}>
-          <input
-            placeholder="The story of your launch"
-            value={form.articleTitle}
-            onChange={(e) => set("articleTitle")(e.target.value)}
-            disabled={busy}
-            maxLength={200}
-            style={inputStyle}
-          />
-        </Field>
+          <Field label="Article headline" error={errors.articleTitle} wide>
+            <input
+              placeholder="The story of your launch"
+              value={form.articleTitle}
+              onChange={(e) => set("articleTitle")(e.target.value)}
+              disabled={busy}
+              maxLength={200}
+              className="input"
+            />
+          </Field>
 
-        <Field label="Token avatar (optional, max 2 MB)" error={errors.avatar}>
-          <input
-            type="file"
-            accept="image/*"
-            disabled={busy}
-            onChange={(e) => {
-              setAvatar(e.target.files?.[0] ?? null);
-              setErrors((prev) => ({ ...prev, avatar: undefined }));
-            }}
-            className="font-ui"
-            style={{ fontSize: 12 }}
-          />
-        </Field>
+          <Field label="Token avatar" hint="Optional, max 2 MB" error={errors.avatar} wide>
+            <input
+              type="file"
+              accept="image/*"
+              disabled={busy}
+              onChange={(e) => {
+                setAvatar(e.target.files?.[0] ?? null);
+                setErrors((prev) => ({ ...prev, avatar: undefined }));
+              }}
+              className="file-input"
+            />
+          </Field>
 
-        <Field label="Article body">
-          <div style={{ border: "1px solid var(--rule)", padding: 12, minHeight: 160 }}>
-            <EditorContent editor={editor} />
-          </div>
-        </Field>
+          <Field label="Article body" hint="This is what readers see on the listing" wide>
+            <div className="editor">
+              <EditorContent editor={editor} />
+            </div>
+          </Field>
+        </div>
 
         {errors.form && (
-          <div
-            className="font-ui"
-            role="alert"
-            style={{
-              fontSize: 12,
-              lineHeight: 1.5,
-              padding: "10px 12px",
-              border: "1px solid var(--ink)",
-              background: "#fff",
-              wordBreak: "break-word",
-            }}
-          >
+          <div className="notice notice--alert" role="alert">
             {errors.form}
           </div>
         )}
 
         {busy && (
-          <div className="font-ui" style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+          <p className="status" role="status">
             {STAGE_LABEL[stage as Exclude<Stage, "idle">]}
             {txHash && (
-              <div style={{ marginTop: 4 }}>
+              <>
+                {" "}
                 {explorerTxUrl(DEFAULT_CHAIN_SLUG, txHash) ? (
                   <a
                     href={explorerTxUrl(DEFAULT_CHAIN_SLUG, txHash) as string}
@@ -418,33 +417,26 @@ export default function CreatePage() {
                     follow it on the explorer
                   </a>
                 ) : (
-                  <span style={{ wordBreak: "break-all" }}>tx {txHash}</span>
+                  <span>tx {txHash}</span>
                 )}
-              </div>
+              </>
             )}
-          </div>
+          </p>
         )}
 
-        <button
-          onClick={handleSubmit}
-          disabled={!isConnected || busy}
-          className="font-ui"
-          style={{
-            padding: "14px 0",
-            background: "var(--ink)",
-            color: "var(--paper)",
-            fontWeight: 600,
-            letterSpacing: 1,
-            border: "none",
-            cursor: !isConnected || busy ? "not-allowed" : "pointer",
-            opacity: !isConnected || busy ? 0.6 : 1,
-          }}
-        >
-          {busy ? "Working..." : "Publish & Launch"}
-        </button>
+        <div>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!isConnected || busy}
+            className="btn btn--primary btn--block"
+          >
+            {busy ? "Working..." : "Publish & launch"}
+          </button>
 
-        <div className="font-ui" style={{ fontSize: 10, color: "var(--ink-soft)" }}>
-          Need test ETH? <FaucetLinks chain={DEFAULT_CHAIN_SLUG} />
+          <p className="field__hint" style={{ marginTop: "var(--sp-3)" }}>
+            Need test ETH? <FaucetLinks chain={DEFAULT_CHAIN_SLUG} />
+          </p>
         </div>
       </div>
     </main>
@@ -453,35 +445,23 @@ export default function CreatePage() {
 
 function Field({
   label,
+  hint,
   error,
+  wide,
   children,
 }: {
   label: string;
+  hint?: string;
   error?: string;
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <span
-        className="font-ui"
-        style={{ fontSize: 9.5, letterSpacing: 1.5, color: "var(--ink-soft)" }}
-      >
-        {label.toUpperCase()}
-      </span>
+    <label className={`field${wide ? " field--wide" : ""}`}>
+      <span className="field__label">{label}</span>
       {children}
-      {error && (
-        <span className="font-ui" style={{ fontSize: 11, color: "#b00020" }}>
-          {error}
-        </span>
-      )}
+      {hint && !error && <span className="field__hint">{hint}</span>}
+      {error && <span className="field__error">{error}</span>}
     </label>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  padding: "12px",
-  border: "1px solid var(--rule)",
-  fontFamily: "PT Serif, serif",
-  fontSize: 14,
-  width: "100%",
-};

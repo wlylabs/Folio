@@ -3,11 +3,13 @@ import type { Metadata } from "next";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import TradeBar from "@/components/TradeBar";
 import SetupNotice from "@/components/SetupNotice";
+import Mark from "@/components/Mark";
 import { sanitizeArticleHtml, articleExcerpt } from "@/lib/sanitize";
 import { fetchSaleStats } from "@/lib/saleStats";
 import { chainLabel, explorerAddressUrl } from "@/lib/chains";
 import {
   formatAmount,
+  formatDate,
   formatEth,
   formatPercent,
   shortAddress,
@@ -67,16 +69,15 @@ export default async function TokenPage({
     [
       "Contract",
       explorer ? (
-        <a href={explorer} target="_blank" rel="noopener noreferrer">
+        <a href={explorer} target="_blank" rel="noopener noreferrer" className="mono">
           {shortAddress(token.contract_address)}
         </a>
       ) : (
-        shortAddress(token.contract_address)
+        <span className="mono">{shortAddress(token.contract_address)}</span>
       ),
     ],
     ["Symbol", `$${token.symbol}`],
     ["Total supply", formatAmount(stats.supply || token.supply)],
-    ["Sold", `${formatPercent(stats.percentSold)}${stats.onChain ? "" : " (stored)"}`],
     ["Buy price", `${formatEth(Number(token.starting_price))} ETH`],
     [
       "Sell price",
@@ -91,96 +92,84 @@ export default async function TokenPage({
   }
 
   return (
-    <main style={{ maxWidth: 640, margin: "0 auto", paddingBottom: 140 }}>
-      <div style={{ padding: "16px 20px 0" }}>
-        <div className="font-ui" style={{ fontSize: 9.5, letterSpacing: 2, color: "var(--ink-soft)" }}>
-          {chainLabel(token.chain)} · TOKEN FEATURE
-        </div>
+    <main id="main" className="shell page article">
+      <div className="article__head">
+        <p className="eyebrow">{chainLabel(token.chain)} · Token feature</p>
 
-        <h1 className="font-display" style={{ fontWeight: 900, fontSize: 30, lineHeight: 1.15, margin: "10px 0" }}>
-          {token.article_title}
-        </h1>
+        <h1 className="article__title">{token.article_title}</h1>
 
-        <div
-          className="font-ui"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "10px 0",
-            borderTop: "1px solid var(--ink)",
-            borderBottom: "1px solid var(--rule)",
-            marginBottom: 16,
-            fontSize: 10,
-            color: "var(--ink-soft)",
-          }}
-        >
-          {token.avatar_url && (
-            // Plain <img>: next/image is deliberately unused, see next.config.js.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={token.avatar_url}
-              alt={`${token.name} avatar`}
-              width={28}
-              height={28}
-              style={{ width: 28, height: 28, objectFit: "cover", border: "1px solid var(--rule)" }}
-            />
-          )}
+        <div className="article__byline">
+          <Mark
+            src={token.avatar_url}
+            symbol={token.symbol}
+            name={token.name}
+            size="sm"
+          />
           <span>
-            by <b style={{ color: "var(--ink)" }}>{shortAddress(token.creator_wallet)}</b>
+            by{" "}
+            <b className="mono" style={{ color: "var(--ink)" }}>
+              {shortAddress(token.creator_wallet)}
+            </b>
           </span>
-          <span>· {formatDate(token.created_at)}</span>
-        </div>
-
-        <div
-          style={{ fontSize: 15.5, lineHeight: 1.75 }}
-          // Sanitized server-side: article_body is written through the public
-          // anon key, so it is untrusted input.
-          dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(token.article_body) }}
-        />
-
-        <div style={{ margin: "22px 0", border: "1px solid var(--ink)" }}>
-          <div
-            className="font-ui"
-            style={{
-              fontSize: 9.5,
-              letterSpacing: 2,
-              background: "var(--ink)",
-              color: "var(--paper)",
-              padding: "8px 12px",
-            }}
-          >
-            CONTRACT DATA · TESTNET
-          </div>
-          {rows.map(([label, value]) => (
-            <div
-              key={label}
-              className="font-ui"
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                padding: "9px 12px",
-                borderBottom: "1px solid var(--rule)",
-                fontSize: 11.5,
-              }}
-            >
-              <span style={{ color: "var(--ink-soft)" }}>{label}</span>
-              <span style={{ fontWeight: 600 }}>{value}</span>
-            </div>
-          ))}
+          <span aria-hidden="true">·</span>
+          <span>{formatDate(token.created_at)}</span>
         </div>
       </div>
 
-      <TradeBar token={token} stats={stats} />
+      <article
+        className="article__body prose"
+        // Sanitized server-side: article_body is written through the public
+        // anon key, so it is untrusted input.
+        dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(token.article_body) }}
+      />
+
+      <aside className="article__rail" aria-label="Sale data and trading">
+        <section className="factbox">
+          <h2 className="factbox__head">
+            <span>Contract data</span>
+            <span>Testnet</span>
+          </h2>
+
+          {/*
+            Progress leads the box: the share sold is the one figure a reader
+            scans for, and a bar says it faster than a percentage does.
+          */}
+          <div className="factbox__row" style={{ display: "block" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: "var(--sp-3)",
+                marginBottom: "var(--sp-2)",
+              }}
+            >
+              <span className="factbox__label">
+                Sold{stats.onChain ? "" : " (stored)"}
+              </span>
+              <span className="factbox__value">{formatPercent(stats.percentSold)}</span>
+            </div>
+            <div
+              className="meter"
+              role="progressbar"
+              aria-label="Share of supply sold"
+              aria-valuenow={Math.round(stats.percentSold)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div className="meter__fill" style={{ width: `${stats.percentSold}%` }} />
+            </div>
+          </div>
+
+          {rows.map(([label, value]) => (
+            <div key={label} className="factbox__row">
+              <span className="factbox__label">{label}</span>
+              <span className="factbox__value">{value}</span>
+            </div>
+          ))}
+        </section>
+
+        <TradeBar token={token} stats={stats} />
+      </aside>
     </main>
   );
-}
-
-function formatDate(value: string | null): string {
-  if (!value) return "undated";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? "undated"
-    : date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 }

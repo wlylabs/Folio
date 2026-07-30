@@ -4,10 +4,12 @@ import { useAccount } from "wagmi";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import WalletButton from "@/components/WalletButton";
+import Mark from "@/components/Mark";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { chainLabel } from "@/lib/chains";
 import {
   formatAmount,
+  formatDateShort,
   formatPercent,
   percentSold,
   shortAddress,
@@ -54,12 +56,17 @@ export default function ProfilePage() {
 
   if (!isConnected) {
     return (
-      <main style={{ maxWidth: 640, margin: "0 auto", padding: "60px 20px", textAlign: "center" }}>
-        <p className="font-ui" style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 16 }}>
-          Connect your wallet to view your staff page.
-        </p>
-        <div style={{ maxWidth: 260, margin: "0 auto" }}>
-          <WalletButton variant="block" />
+      <main id="main" className="shell shell--measure page">
+        <div className="empty">
+          <p className="eyebrow" style={{ marginBottom: "var(--sp-3)" }}>
+            Staff page
+          </p>
+          <p style={{ marginBottom: "var(--sp-5)" }}>
+            Connect your wallet to see the launches published from it.
+          </p>
+          <div style={{ maxWidth: "18rem", margin: "0 auto" }}>
+            <WalletButton variant="block" />
+          </div>
         </div>
       </main>
     );
@@ -69,102 +76,84 @@ export default function ProfilePage() {
   const totalSold = tokens.reduce((sum, t) => sum + toNumber(t.sold_amount), 0);
 
   return (
-    <main style={{ maxWidth: 640, margin: "0 auto", paddingBottom: 60 }}>
-      <div style={{ padding: "20px 20px 0" }}>
-        <div className="font-ui" style={{ fontSize: 9.5, letterSpacing: 2, color: "var(--ink-soft)" }}>
-          STAFF PAGE
-        </div>
+    <main id="main" className="shell page">
+      <header style={{ marginBottom: "var(--sp-5)" }}>
+        <p className="eyebrow">Staff page</p>
         <h1
-          className="font-display"
-          style={{ fontWeight: 900, fontSize: 26, margin: "8px 0 4px", wordBreak: "break-all" }}
+          className="mono"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontWeight: 900,
+            fontSize: "var(--fs-h1)",
+            margin: "var(--sp-2) 0 var(--sp-1)",
+          }}
         >
           {shortAddress(address)}
         </h1>
-        <div className="font-ui" style={{ fontSize: 10, color: "var(--ink-soft)", marginBottom: 16 }}>
-          {chain?.name || "Unknown network"}
-        </div>
+        <p className="eyebrow">{chain?.name || "Unknown network"}</p>
+      </header>
 
-        <div style={{ border: "1px solid var(--ink)", marginBottom: 24 }}>
-          <div
-            className="font-ui"
-            style={{
-              fontSize: 9.5,
-              letterSpacing: 2,
-              background: "var(--ink)",
-              color: "var(--paper)",
-              padding: "8px 12px",
-            }}
-          >
-            CONTRIBUTOR STATS
+      <div className="stats" style={{ marginBottom: "var(--sp-7)" }}>
+        {(
+          [
+            ["Tokens published", formatAmount(tokens.length)],
+            ["Total supply issued", formatAmount(totalSupplyIssued)],
+            ["Total sold", formatAmount(totalSold)],
+          ] as const
+        ).map(([label, value]) => (
+          <div key={label} className="stat">
+            <div className="stat__label">{label}</div>
+            <div className="stat__value">{value}</div>
           </div>
-          {(
-            [
-              ["Tokens published", formatAmount(tokens.length)],
-              ["Total supply issued", formatAmount(totalSupplyIssued)],
-              ["Total sold", formatAmount(totalSold)],
-            ] as const
-          ).map(([label, value]) => (
-            <div
-              key={label}
-              className="font-ui"
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "9px 12px",
-                borderBottom: "1px solid var(--rule)",
-                fontSize: 11.5,
-              }}
-            >
-              <span style={{ color: "var(--ink-soft)" }}>{label}</span>
-              <span style={{ fontWeight: 600 }}>{value}</span>
-            </div>
-          ))}
-        </div>
+        ))}
       </div>
 
-      <div
-        className="font-ui"
-        style={{
-          padding: "0 20px 10px",
-          fontSize: 10,
-          letterSpacing: 2.5,
-          color: "var(--ink-soft)",
-        }}
-      >
-        BYLINE — PUBLISHED TOKENS
+      <div className="section-head">
+        <h2 className="eyebrow">Byline — published tokens</h2>
       </div>
 
-      {loading && <p style={{ padding: "0 20px", color: "var(--ink-soft)" }}>Loading...</p>}
+      {loading && <p className="muted">Loading...</p>}
 
       {error && (
-        <p className="font-ui" role="alert" style={{ padding: "0 20px", fontSize: 12, color: "#b00020" }}>
+        <div className="notice notice--alert" role="alert">
           {error}
-        </p>
+        </div>
       )}
 
       {!loading && !error && tokens.length === 0 && (
-        <p style={{ padding: "0 20px", color: "var(--ink-soft)", lineHeight: 1.7 }}>
-          You haven&apos;t published a token yet. <Link href="/create">Launch one</Link>.
-        </p>
+        <div className="empty">
+          <p style={{ marginBottom: "var(--sp-4)" }}>
+            You haven&apos;t published a token yet.
+          </p>
+          <Link href="/create" className="btn btn--primary">
+            Launch one
+          </Link>
+        </div>
       )}
 
-      {tokens.map((t) => (
-        <Link
-          key={t.id}
-          href={`/token/${t.contract_address}`}
-          style={{ textDecoration: "none", color: "inherit", display: "block" }}
-        >
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--rule)" }}>
-            <div className="font-ui" style={{ fontSize: 9, color: "var(--ink-soft)" }}>
-              {chainLabel(t.chain)} · ${t.symbol} · Sold{" "}
-              {formatPercent(percentSold(toNumber(t.sold_amount), toNumber(t.supply)))}
-            </div>
-            <div className="font-display" style={{ fontWeight: 700, fontSize: 18 }}>
-              {t.article_title || t.name}
-            </div>
-          </div>
-        </Link>
-      ))}
+      {tokens.length > 0 && (
+        <div className="feed">
+          {tokens.map((t) => (
+            <Link key={t.id} href={`/token/${t.contract_address}`} className="card">
+              <div className="card__meta">
+                <Mark src={t.avatar_url} symbol={t.symbol} name={t.name} size="sm" />
+                <span className="card__kicker">
+                  {chainLabel(t.chain)} · ${t.symbol}
+                </span>
+              </div>
+
+              <h3 className="card__title">{t.article_title || t.name}</h3>
+
+              <div className="card__foot">
+                <span className="nums">
+                  {formatPercent(percentSold(toNumber(t.sold_amount), toNumber(t.supply)))} sold
+                </span>
+                <span className="nums">{formatDateShort(t.created_at)}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </main>
   );
 }
