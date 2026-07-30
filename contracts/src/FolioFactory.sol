@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {FolioToken} from "./FolioToken.sol";
 import {CurveConfig} from "./types/CurveConfig.sol";
 
@@ -26,33 +27,50 @@ import {CurveConfig} from "./types/CurveConfig.sol";
  *
  * ## What the owner can and cannot do
  *
- * The owner is the platform, and its power is bounded in code, not by convention:
+ * The owner is the platform, and its power is bounded in code, not by convention.
+ * There are exactly three privileged functions and this is all of them:
  *
  * - {setDefaultConfig} changes the terms offered to *future* launches. Every token
  *   snapshots the config at creation, so live launches are untouchable. The setter
  *   is also fenced by hard constants below — even the owner cannot set a fee above
- *   `MAX_FEE_BPS` or a cap above `MAX_ETH_CAP`.
+ *   `MAX_FEE_BPS` or a cap above `MAX_RESERVE_CAP`.
  * - {pause} halts new launches and, because tokens read `paused()` from here,
  *   halts buying and selling on every launch. Read that plainly: it is a
  *   break-glass switch that stops holders selling too. It exists so a curve bug
  *   found post-deploy can be contained rather than drained, and it is the reason
- *   the per-launch `ethCap` exists as well — to bound what a bug can reach before
- *   anyone notices.
- * - Nothing here can move a token's reserve, mint supply, reassign a creator, or
- *   block a creator from claiming fees. There is no other privileged function.
+ *   the per-launch `maxReserveCap` exists as well — to bound what a bug can reach
+ *   before anyone notices. It does not reach `claimFees`, and it does not stop a
+ *   single view function anywhere in the system: a paused Folio is a Folio you can
+ *   still read in full.
+ * - {unpause} releases it.
  *
- * Ownership transfer is two-step, so a typo in an address cannot orphan the
- * switch.
+ * Nothing here can move a token's reserve, mint supply, reassign a creator, block a
+ * creator from claiming fees, or alter a live launch's terms. In particular there is
+ * deliberately **no per-launch cap setter**: being able to retune a live market's
+ * ceiling is a lever over people's open positions, and it would buy nothing that
+ * {pause} does not already cover.
+ *
+ * ## Ownership cannot be lost, only handed over
+ *
+ * Transfer is two-step, so a typo cannot orphan the switch — the recipient has to
+ * call {acceptOwnership} from the address in question, which proves it can
+ * transact. {renounceOwnership} is disabled on top of that, because the one thing
+ * it can accomplish is destroying the emergency stop forever, by accident, in one
+ * transaction. Together those two mean the owner seat can only ever move to an
+ * address that has demonstrated it holds the keys.
  */
-contract FolioFactory is Ownable2Step, Pausable {
+contract FolioFactory is Ownable2Step, Pausable, ReentrancyGuard {
     // -----------------------------------------------------------------------
     // Hard limits — these bound the owner as much as the caller
     // -----------------------------------------------------------------------
 
     /// @notice Ceiling on the per-leg fee, in basis points (5%).
     uint16 public constant MAX_FEE_BPS = 500;
-    /// @notice Ceiling on a launch's real-ETH cap.
-    uint256 public constant MAX_ETH_CAP = 1_000_000 ether;
+    /// @notice Ceiling on a launch's real-ETH reserve cap.
+    uint256 public constant MAX_RESERVE_CAP = 1_000_000 ether;
+    /// @notice Floor on a creator-chosen reserve cap. Below this a launch could not
+    ///         take in enough ETH to trade meaningfully before closing itself.
+    uint256 public constant MIN_RESERVE_CAP = 0.001 ether;
     /// @notice Floor on the virtual reserve, so the opening price is meaningful.
     uint256 public constant MIN_VIRTUAL_ETH_RESERVE = 0.000001 ether;
     /// @notice Ceiling on the virtual reserve, keeping curve products far below
@@ -64,6 +82,9 @@ contract FolioFactory is Ownable2Step, Pausable {
     uint256 public constant MAX_NAME_LENGTH = 64;
     /// @notice Ceiling on the ERC20 symbol length, in bytes.
     uint256 public constant MAX_SYMBOL_LENGTH = 16;
+    /// @notice Floor on a non-zero `priceMoveAlertBps`. A threshold below this would
+    ///         fire on essentially every trade, which is not a signal.
+    uint16 public constant MIN_PRICE_MOVE_ALERT_BPS = 100;
 
     // -----------------------------------------------------------------------
     // State
@@ -94,7 +115,9 @@ contract FolioFactory is Ownable2Step, Pausable {
      * @param name ERC20 name.
      * @param symbol ERC20 symbol.
      * @param totalSupply Supply in token units, 18 decimals included.
-     * @param config The curve terms this launch is frozen to.
+     * @param config The curve terms this launch is frozen to — the *effective*
+     *        terms, after any creator-chosen cap and the threshold clamp that
+     *        follows from it, not the platform default they were derived from.
      */
     event TokenCreated(
         address indexed token,
@@ -105,8 +128,33 @@ contract FolioFactory is Ownable2Step, Pausable {
         CurveConfig config
     );
 
-    /// @notice The default curve terms for future launches changed.
-    event DefaultConfigUpdated(CurveConfig config);
+    /**
+     * @notice The default curve terms for future launches changed.
+     * @dev Carries `by` and `timestamp` so the audit trail for the one adjustable
+     *      platform parameter is self-contained, rather than something you have to
+     *      reconstruct by joining logs against block metadata.
+     * @param by Who changed it.
+     * @param config The new default terms.
+     * @param timestamp Block timestamp of the change.
+     */
+    event DefaultConfigUpdated(address indexed by, CurveConfig config, uint256 timestamp);
+
+    /**
+     * @notice The emergency stop was engaged. Trading is halted on every launch.
+     * @dev OpenZeppelin's `Pausable` emits its own `Paused(address)` alongside
+     *      this. That one exists for tooling that already knows the standard;
+     *      this one is the platform's own audit record and carries the timestamp.
+     * @param by Who engaged it.
+     * @param timestamp Block timestamp of the pause.
+     */
+    event EmergencyPaused(address indexed by, uint256 timestamp);
+
+    /**
+     * @notice The emergency stop was released.
+     * @param by Who released it.
+     * @param timestamp Block timestamp of the unpause.
+     */
+    event EmergencyUnpaused(address indexed by, uint256 timestamp);
 
     // -----------------------------------------------------------------------
     // Errors
@@ -119,9 +167,17 @@ contract FolioFactory is Ownable2Step, Pausable {
     error InvalidSupply();
     error FeeTooHigh();
     error InvalidVirtualReserve();
-    error InvalidEthCap();
+    error InvalidReserveCap();
     error InvalidGraduationThreshold();
+    error InvalidPriceMoveAlert();
     error SupplyTooLargeForCurve();
+    /// @notice A creator-chosen cap below `MIN_RESERVE_CAP`.
+    error ReserveCapTooLow();
+    /// @notice A creator-chosen cap above the platform's current default. The cap
+    ///         may only ever be tightened, never loosened.
+    error ReserveCapAboveDefault();
+    /// @notice {renounceOwnership} is disabled. See the note on ownership above.
+    error RenounceDisabled();
 
     /**
      * @notice Deploys the factory and, with it, the one shared token implementation.
@@ -134,7 +190,7 @@ contract FolioFactory is Ownable2Step, Pausable {
         _validateConfig(config);
         defaultConfig = config;
         implementation = address(new FolioToken());
-        emit DefaultConfigUpdated(config);
+        emit DefaultConfigUpdated(msg.sender, config, block.timestamp);
     }
 
     // -----------------------------------------------------------------------
@@ -142,25 +198,127 @@ contract FolioFactory is Ownable2Step, Pausable {
     // -----------------------------------------------------------------------
 
     /**
-     * @notice Launch a token: clone the implementation and start its curve.
-     * @dev The clone is registered before it is initialized, so the external call
-     *      that finishes setup is the last thing this function does. That call
-     *      goes to a proxy this function just created over an implementation fixed
-     *      at construction, so it cannot re-enter anything unexpected — the
-     *      ordering is kept regardless, because relying on the callee's good
-     *      behaviour is how reentrancy bugs get written.
+     * @notice Launch a token on the platform's default terms.
+     * @dev Equivalent to the four-argument overload with `maxReserveCap` zero.
+     * @param name_ ERC20 name, 1 to `MAX_NAME_LENGTH` bytes.
+     * @param symbol_ ERC20 symbol, 1 to `MAX_SYMBOL_LENGTH` bytes.
+     * @param wholeSupply Total supply in whole tokens, 1 to `MAX_WHOLE_SUPPLY`.
+     * @return token Address of the new launch.
+     */
+    function createToken(string calldata name_, string calldata symbol_, uint256 wholeSupply)
+        external
+        returns (address token)
+    {
+        return _createToken(name_, symbol_, wholeSupply, 0);
+    }
+
+    /**
+     * @notice Launch a token, choosing how much ETH its curve may ever hold.
+     *
+     * The cap is this launch's blast radius. It is the maximum real ETH that can
+     * ever sit in the reserve, and therefore the most that a curve bug nobody has
+     * found yet could put at risk in this one launch. A creator who wants a smaller
+     * number than the platform default is free to pick one; the reverse is refused,
+     * so the platform's ceiling always binds.
+     *
+     * Once the reserve reaches the cap the curve is closed to buys. A buy that
+     * would overshoot is **not** rejected — it fills the reserve to exactly the cap
+     * and the unused ETH is sent straight back to the buyer. Rejecting instead
+     * would mean only an exactly-sized trade could ever land a launch on its own
+     * ceiling, so every near-cap buy would race and most would fail; the refund
+     * path makes the landing deterministic. Either way the invariant is the same
+     * one: `ethReserve` never exceeds `maxReserveCap`.
+     *
      * @param name_ ERC20 name, 1 to `MAX_NAME_LENGTH` bytes.
      * @param symbol_ ERC20 symbol, 1 to `MAX_SYMBOL_LENGTH` bytes.
      * @param wholeSupply Total supply in whole tokens, 1 to `MAX_WHOLE_SUPPLY`.
      *        18 decimals are added by the token. The whole supply becomes curve
      *        inventory; none of it is pre-allocated to the creator.
+     * @param maxReserveCap Ceiling on real ETH this launch's reserve may hold, in
+     *        wei. Zero means "use the platform default". Otherwise it must be at
+     *        least `MIN_RESERVE_CAP` and no more than the current default cap. If
+     *        it lands below the default graduation threshold, the threshold is
+     *        clamped down to it — a launch cannot be asked to graduate at a number
+     *        its own reserve is forbidden to reach.
      * @return token Address of the new launch.
      */
-    function createToken(string calldata name_, string calldata symbol_, uint256 wholeSupply)
-        external
-        whenNotPaused
-        returns (address token)
-    {
+    function createToken(
+        string calldata name_,
+        string calldata symbol_,
+        uint256 wholeSupply,
+        uint256 maxReserveCap
+    ) external returns (address token) {
+        return _createToken(name_, symbol_, wholeSupply, maxReserveCap);
+    }
+
+    // -----------------------------------------------------------------------
+    // Owner controls
+    // -----------------------------------------------------------------------
+
+    /**
+     * @notice Set the curve terms future launches will use.
+     * @dev Cannot reach launches that already exist — each one holds its own copy.
+     *      Lowering the default cap here also lowers the ceiling a creator may
+     *      choose from, since {createToken} validates against the live default.
+     * @param config The new default terms.
+     */
+    function setDefaultConfig(CurveConfig calldata config) external onlyOwner {
+        _validateConfig(config);
+        defaultConfig = config;
+        emit DefaultConfigUpdated(msg.sender, config, block.timestamp);
+    }
+
+    /**
+     * @notice Engage the emergency stop: no new launches, and no buying or selling
+     *         on any existing launch.
+     * @dev Intended for a curve bug found after deploy. It does not block
+     *      `claimFees`, it does not block any view function, and it cannot move
+     *      anyone's funds.
+     */
+    function pause() external onlyOwner {
+        _pause();
+        emit EmergencyPaused(msg.sender, block.timestamp);
+    }
+
+    /// @notice Release the emergency stop, resuming launches and trading.
+    function unpause() external onlyOwner {
+        _unpause();
+        emit EmergencyUnpaused(msg.sender, block.timestamp);
+    }
+
+    /**
+     * @notice Disabled. Ownership can be handed over with {transferOwnership} plus
+     *         {acceptOwnership}, and cannot be given up.
+     * @dev Renouncing would permanently destroy the emergency stop and the config
+     *      setter in a single transaction, with no way back and nothing gained. It
+     *      is the one irreversible mistake left on this contract, so it is closed
+     *      to everyone, the owner included.
+     */
+    function renounceOwnership() public pure override {
+        revert RenounceDisabled();
+    }
+
+    // -----------------------------------------------------------------------
+    // Internal
+    // -----------------------------------------------------------------------
+
+    /**
+     * @dev Shared body of both {createToken} overloads.
+     *
+     *      The clone is registered before it is initialized, so the external call
+     *      that finishes setup is the last thing this function does. That call goes
+     *      to a proxy created here over an implementation fixed at construction, so
+     *      it has no way to call back — the ordering and the `nonReentrant` guard
+     *      are kept anyway, because relying on the callee's good behaviour is how
+     *      reentrancy bugs get written, and because a later change to `initialize`
+     *      should not silently become a reentrancy bug.
+     */
+    function _createToken(
+        string calldata name_,
+        string calldata symbol_,
+        uint256 wholeSupply,
+        uint256 maxReserveCap
+    ) private whenNotPaused nonReentrant returns (address token) {
         uint256 nameLength = bytes(name_).length;
         uint256 symbolLength = bytes(symbol_).length;
         if (nameLength == 0) revert EmptyName();
@@ -170,6 +328,21 @@ contract FolioFactory is Ownable2Step, Pausable {
         if (wholeSupply == 0 || wholeSupply > MAX_WHOLE_SUPPLY) revert InvalidSupply();
 
         CurveConfig memory config = defaultConfig;
+
+        // A creator may tighten their own blast radius, never widen it. The
+        // platform default is the ceiling, so lowering the default here later also
+        // lowers what any future creator may ask for.
+        if (maxReserveCap != 0) {
+            if (maxReserveCap < MIN_RESERVE_CAP) revert ReserveCapTooLow();
+            if (maxReserveCap > config.maxReserveCap) revert ReserveCapAboveDefault();
+            config.maxReserveCap = maxReserveCap;
+            // A threshold above the cap is unreachable, and the token rejects that
+            // combination outright. Clamping is the useful reading of a small cap:
+            // the launch graduates when it fills up.
+            if (config.graduationThreshold > maxReserveCap) {
+                config.graduationThreshold = maxReserveCap;
+            }
+        }
 
         // The opening price in wei per whole token is `virtualEthReserve /
         // wholeSupply`. Below one wei it floors to zero, which would hand out the
@@ -187,40 +360,6 @@ contract FolioFactory is Ownable2Step, Pausable {
         FolioToken(token).initialize(msg.sender, name_, symbol_, wholeSupply, config);
     }
 
-    // -----------------------------------------------------------------------
-    // Owner controls
-    // -----------------------------------------------------------------------
-
-    /**
-     * @notice Set the curve terms future launches will use.
-     * @dev Cannot reach launches that already exist — each one holds its own copy.
-     * @param config The new default terms.
-     */
-    function setDefaultConfig(CurveConfig calldata config) external onlyOwner {
-        _validateConfig(config);
-        defaultConfig = config;
-        emit DefaultConfigUpdated(config);
-    }
-
-    /**
-     * @notice Engage the emergency stop: no new launches, and no buying or selling
-     *         on any existing launch.
-     * @dev Intended for a curve bug found after deploy. It does not block
-     *      `claimFees`, and it cannot move anyone's funds.
-     */
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    /// @notice Release the emergency stop, resuming launches and trading.
-    function unpause() external onlyOwner {
-        _unpause();
-    }
-
-    // -----------------------------------------------------------------------
-    // Internal
-    // -----------------------------------------------------------------------
-
     /// @dev Shared by the constructor and the setter so both paths enforce the
     ///      same bounds.
     function _validateConfig(CurveConfig memory config) private pure {
@@ -231,7 +370,16 @@ contract FolioFactory is Ownable2Step, Pausable {
         ) {
             revert InvalidVirtualReserve();
         }
-        if (config.ethCap == 0 || config.ethCap > MAX_ETH_CAP) revert InvalidEthCap();
-        if (config.graduationThreshold > config.ethCap) revert InvalidGraduationThreshold();
+        if (config.maxReserveCap < MIN_RESERVE_CAP || config.maxReserveCap > MAX_RESERVE_CAP) {
+            revert InvalidReserveCap();
+        }
+        if (config.graduationThreshold > config.maxReserveCap) {
+            revert InvalidGraduationThreshold();
+        }
+        // Zero disables the monitoring signal; anything non-zero has to be coarse
+        // enough to mean something when it fires.
+        if (config.priceMoveAlertBps != 0 && config.priceMoveAlertBps < MIN_PRICE_MOVE_ALERT_BPS) {
+            revert InvalidPriceMoveAlert();
+        }
     }
 }
