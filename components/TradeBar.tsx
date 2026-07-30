@@ -1,7 +1,7 @@
 "use client";
 
 import { useAccount, useBalance, useConfig, useReadContract } from "wagmi";
-import { switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
+import { getAccount, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { formatUnits, parseEther, parseUnits } from "viem";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -10,6 +10,7 @@ import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
 import WalletButton from "@/components/WalletButton";
 import { FaucetLinks, FaucetNotice } from "@/components/Faucet";
 import { describeTxError } from "@/lib/txErrors";
+import { ensureWalletReady } from "@/lib/walletReady";
 import { formatEth, formatTokens, type SaleStats, type Token } from "@/lib/types";
 
 type Status = { kind: "info" | "error" | "success"; message: string; tx?: string };
@@ -28,9 +29,14 @@ const DECIMALS = 18;
  * asking the user to reload.
  */
 export default function TradeBar({ token, stats }: { token: Token; stats: SaleStats }) {
-  const { address, isConnected, chainId } = useAccount();
+  const { address, isConnected, status: walletStatus } = useAccount();
   const config = useConfig();
   const router = useRouter();
+
+  // `isConnected` is already true while wagmi is reviving a stored session, and
+  // the connector it hands out until that finishes cannot sign — so a buy
+  // offered here fails on signature. Only "connected" is a wallet that answers.
+  const walletWaking = isConnected && walletStatus !== "connected";
 
   const [side, setSide] = useState<Side>("buy");
   const [spendEth, setSpendEth] = useState(String(token.starting_price));
@@ -82,12 +88,18 @@ export default function TradeBar({ token, stats }: { token: Token; stats: SaleSt
 
   const overSells = sellUnits !== null && tokenBalanceRaw !== undefined && sellUnits > tokenBalanceRaw;
 
-  /** Common preamble: a supported chain, and the wallet pointed at it. */
+  /** Common preamble: a supported chain, a live wallet, and the two pointed at each other. */
   async function prepare() {
     if (!chainEntry) {
       throw new Error(`This token is on an unsupported network ("${token.chain}").`);
     }
-    if (chainId !== chainEntry.chain.id) {
+
+    // Before the chain check, because reviving a session can change the chain
+    // the wallet reports — and reading it from the store rather than the render
+    // closure keeps that fresh.
+    await ensureWalletReady(config);
+
+    if (getAccount(config).chainId !== chainEntry.chain.id) {
       await switchChain(config, { chainId: chainEntry.chain.id }).catch(() => {
         throw new Error(`Switch your wallet to ${chainEntry.chain.name} to trade.`);
       });
@@ -264,7 +276,11 @@ export default function TradeBar({ token, stats }: { token: Token; stats: SaleSt
               step="0.0001"
             />
 
-            {isConnected ? (
+            {walletWaking ? (
+              <Action onClick={noop} disabled>
+                Reconnecting wallet...
+              </Action>
+            ) : isConnected ? (
               <Action onClick={handleBuy} disabled={buyDisabled}>
                 {soldOut ? "Sold out" : pending ? "Confirming..." : `Buy $${token.symbol}`}
               </Action>
@@ -299,7 +315,11 @@ export default function TradeBar({ token, stats }: { token: Token; stats: SaleSt
               }
             />
 
-            {isConnected ? (
+            {walletWaking ? (
+              <Action onClick={noop} disabled>
+                Reconnecting wallet...
+              </Action>
+            ) : isConnected ? (
               <Action onClick={handleSell} disabled={sellDisabled}>
                 {pending
                   ? "Confirming..."
@@ -486,6 +506,9 @@ function Foot({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
+/** The disabled reconnecting slab still wants the same shape as a live button. */
+function noop() {}
 
 /** A positive wei amount, or null if the field isn't a usable number yet. */
 function toWei(input: string): bigint | null {
