@@ -17,6 +17,13 @@ export function describeTxError(err: unknown): string {
     return "Not enough ETH in your wallet to cover this plus gas. Top up from a faucet.";
   }
 
+  // wagmi's wording for a session it can't sign with — a stored connection it
+  // hasn't revived, or one the wallet has since dropped. Reaching a user, it
+  // reads as a bug in the page rather than something they can fix.
+  if (/Connector not connected|Connector unavailable while reconnecting/i.test(message)) {
+    return "Your wallet session dropped. Reconnect your wallet, then try again.";
+  }
+
   // --- sale ---
   if (/SoldOut/.test(message)) return "This sale is sold out.";
   if (/PaymentTooSmall/.test(message)) return "That amount is too small to buy any tokens.";

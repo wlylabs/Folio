@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useAccount, useBalance, useConfig } from "wagmi";
-import { deployContract, switchChain, waitForTransactionReceipt } from "wagmi/actions";
+import { deployContract, getAccount, switchChain, waitForTransactionReceipt } from "wagmi/actions";
 import { formatUnits, parseEther } from "viem";
 import { useRouter } from "next/navigation";
 import WalletButton from "@/components/WalletButton";
@@ -13,6 +13,7 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { FOLIO_SALE_ABI, FOLIO_SALE_BYTECODE } from "@/lib/contracts/folioSale";
 import { DEFAULT_CHAIN_SLUG, chainBySlug, explorerTxUrl } from "@/lib/chains";
 import { describeTxError } from "@/lib/txErrors";
+import { ensureWalletReady } from "@/lib/walletReady";
 import { formatEth } from "@/lib/types";
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
@@ -82,7 +83,7 @@ function validate(form: FormState, avatar: File | null): Errors {
 }
 
 export default function CreatePage() {
-  const { address, isConnected, chainId } = useAccount();
+  const { address, isConnected } = useAccount();
   const config = useConfig();
   const router = useRouter();
 
@@ -169,10 +170,14 @@ export default function CreatePage() {
         avatarUrl = await uploadAvatar(avatar, address);
       }
 
+      // A stored session can look connected while its connector is still
+      // asleep, so wake it before the deploy rather than failing on signature.
+      setStage("deploying");
+      await ensureWalletReady(config);
+
       // The wallet must be on the chain we're deploying to, or the contract
       // lands on whatever network happens to be selected.
-      setStage("deploying");
-      if (chainId !== chainEntry.chain.id) {
+      if (getAccount(config).chainId !== chainEntry.chain.id) {
         await switchChain(config, { chainId: chainEntry.chain.id }).catch((err) => {
           throw new Error(
             `Switch your wallet to ${chainEntry.chain.name} to launch. (${
