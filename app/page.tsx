@@ -2,6 +2,7 @@ import Link from "next/link";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import SetupNotice from "@/components/SetupNotice";
 import Mark from "@/components/Mark";
+import FiatValue from "@/components/FiatValue";
 import { articleExcerpt } from "@/lib/sanitize";
 import { chainLabel, DEFAULT_CHAIN_SLUG } from "@/lib/chains";
 import { FACTORY_DEPLOYMENT } from "@/lib/contracts/deployment";
@@ -184,14 +185,38 @@ function CurveTerms() {
   const config = FACTORY_DEPLOYMENT?.defaultConfig;
   if (!config) return null;
 
-  const terms: [string, string][] = [
-    ["Opening curve", `${formatEth(Number(config.virtualEthReserve) / 1e18)} ETH virtual`],
-    ["Reserve ceiling", `${formatEth(Number(config.maxReserveCap) / 1e18)} ETH`],
+  const virtualReserve = Number(config.virtualEthReserve) / 1e18;
+  const reserveCeiling = Number(config.maxReserveCap) / 1e18;
+  const threshold = Number(config.graduationThreshold) / 1e18;
+
+  // "Starting reserve", not "market cap": this is the virtual ETH the curve
+  // prices from, and calling it a cap would invite a comparison with platforms
+  // where that word means price times supply.
+  const terms: [string, React.ReactNode][] = [
+    [
+      "Starting reserve",
+      <>
+        {formatEth(virtualReserve)} ETH virtual
+        <FiatValue eth={virtualReserve} block />
+      </>,
+    ],
+    [
+      "Reserve ceiling",
+      <>
+        {formatEth(reserveCeiling)} ETH
+        <FiatValue eth={reserveCeiling} block />
+      </>,
+    ],
     [
       "Buys close at",
-      config.graduationThreshold > 0n
-        ? `${formatEth(Number(config.graduationThreshold) / 1e18)} ETH`
-        : "never",
+      config.graduationThreshold > 0n ? (
+        <>
+          {formatEth(threshold)} ETH
+          <FiatValue eth={threshold} block />
+        </>
+      ) : (
+        "never"
+      ),
     ],
     ["Creator fee", `${formatBps(config.feeBps)} per leg`],
   ];

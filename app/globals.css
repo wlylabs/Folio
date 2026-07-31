@@ -764,6 +764,35 @@ p {
   line-height: 1.1;
 }
 
+/* ==========================================================================
+   Fiat conversion
+
+   The ETH figure is what the contract charges; the line under it is what that
+   is worth today. Set in the UI face, a size down and a shade back, so it
+   reads as an aside to the number above rather than a second price.
+   ========================================================================== */
+
+.fiat {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.fiat--block {
+  display: block;
+  margin-top: 0.15em;
+}
+
+/* The USD/IDR pair in the nav. */
+.currency-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
 /* A small square identity mark: the avatar, or its initials as a fallback. */
 .mark {
   flex-shrink: 0;

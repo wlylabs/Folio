@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { FOLIO_SALE_ABI } from "@/lib/contracts/folioSale";
 import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
 import WalletButton from "@/components/WalletButton";
+import FiatValue from "@/components/FiatValue";
 import { FaucetLinks, FaucetNotice } from "@/components/Faucet";
 import { useDockHeight } from "@/components/useDockHeight";
 import { classifyTxError } from "@/lib/txErrors";
@@ -284,6 +285,8 @@ export default function LegacySaleBar({
                 onChange={setSpendEth}
                 disabled={pending || soldOut}
                 step="0.0001"
+                // What the typed amount is worth, following every keystroke.
+                hint={<FiatValue eth={spendWei === null ? null : Number(formatUnits(spendWei, DECIMALS))} />}
               />
 
               <div className="trade-row__action">
@@ -307,7 +310,7 @@ export default function LegacySaleBar({
             </div>
 
             <p className="trade-foot">
-              {token.starting_price} ETH per token
+              {token.starting_price} ETH <FiatValue eth={Number(token.starting_price)} /> per token
               {tokensOut !== null && tokensOut > 0 && (
                 <> · you receive ≈ {formatTokens(tokensOut)} ${token.symbol}</>
               )}
@@ -359,8 +362,13 @@ export default function LegacySaleBar({
             <p className="trade-foot">
               {buyback ? (
                 <>
-                  {formatEth(buyback.sellPrice)} ETH per token back
-                  {ethOut !== null && ethOut > 0 && <> · you receive ≈ {formatEth(ethOut)} ETH</>}
+                  {formatEth(buyback.sellPrice)} ETH <FiatValue eth={buyback.sellPrice} /> per token
+                  back
+                  {ethOut !== null && ethOut > 0 && (
+                    <>
+                      {" · "}you receive ≈ {formatEth(ethOut)} ETH <FiatValue eth={ethOut} parens />
+                    </>
+                  )}
                   {overSells && <> · more than you hold</>}
                 </>
               ) : (
@@ -390,6 +398,7 @@ function Amount({
   disabled,
   step,
   placeholder,
+  hint,
   onMax,
 }: {
   label: string;
@@ -398,6 +407,8 @@ function Amount({
   disabled?: boolean;
   step: string;
   placeholder?: string;
+  /** A line under the field — the typed amount in the reader's currency. */
+  hint?: React.ReactNode;
   onMax?: () => void;
 }) {
   return (
@@ -421,6 +432,7 @@ function Amount({
         disabled={disabled}
         className="input input--compact"
       />
+      {hint}
     </label>
   );
 }

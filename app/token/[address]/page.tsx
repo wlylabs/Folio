@@ -4,6 +4,7 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import TradeBar from "@/components/TradeBar";
 import SetupNotice from "@/components/SetupNotice";
 import Mark from "@/components/Mark";
+import FiatValue from "@/components/FiatValue";
 import { sanitizeArticleHtml, articleExcerpt } from "@/lib/sanitize";
 import { fetchTokenStats } from "@/lib/tokenStats";
 import { chainLabel, explorerAddressUrl } from "@/lib/chains";
@@ -168,6 +169,22 @@ export default async function TokenPage({
   );
 }
 
+/**
+ * An ETH figure with its worth in the reader's currency underneath.
+ *
+ * The conversion is a client component inside an otherwise server-rendered
+ * table: the ETH is in the HTML the server sends, and the estimate appears
+ * beside it once the rate lands — or never, if the price feed is unreachable.
+ */
+function Eth({ value, suffix = "" }: { value: number; suffix?: string }) {
+  return (
+    <>
+      {formatEth(value)} ETH{suffix}
+      <FiatValue eth={value} block />
+    </>
+  );
+}
+
 /** The fact rows, which differ by what kind of contract is actually there. */
 function factRows(
   token: Token,
@@ -191,15 +208,17 @@ function factRows(
       ["Symbol", `$${token.symbol}`],
       ["Max supply", formatAmount(stats.supply)],
       ["In circulation", formatAmount(stats.sold)],
-      ["Price now", `${formatEth(stats.price)} ETH`],
-      ["Market cap", `${formatEth(stats.marketCap)} ETH`],
-      ["Reserve", `${formatEth(stats.reserve)} ETH`],
-      ["Reserve cap", `${formatEth(stats.reserveCap)} ETH`],
+      ["Price now", <Eth key="price" value={stats.price} />],
+      ["Market cap", <Eth key="cap" value={stats.marketCap} />],
+      ["Reserve", <Eth key="reserve" value={stats.reserve} />],
+      ["Reserve cap", <Eth key="reserve-cap" value={stats.reserveCap} />],
       [
         "Buys close at",
-        stats.graduationThreshold > 0
-          ? `${formatEth(stats.graduationThreshold)} ETH in reserve`
-          : "never",
+        stats.graduationThreshold > 0 ? (
+          <Eth key="threshold" value={stats.graduationThreshold} suffix=" in reserve" />
+        ) : (
+          "never"
+        ),
       ],
       ["Creator fee", `${formatBps(stats.feeBps)} per leg`],
     ];
@@ -220,13 +239,15 @@ function factRows(
       ["Symbol", `$${token.symbol}`],
       ["Design", "Fixed-price sale (pre-factory)"],
       ["Total supply", formatAmount(stats.supply || token.supply)],
-      ["Buy price", `${formatEth(Number(token.starting_price))} ETH`],
-      ["Sell price", stats.buyback ? `${formatEth(stats.buyback.sellPrice)} ETH` : "no buyback"],
+      ["Buy price", <Eth key="buy" value={Number(token.starting_price)} />],
+      [
+        "Sell price",
+        stats.buyback ? <Eth key="sell" value={stats.buyback.sellPrice} /> : "no buyback",
+      ],
       ...(stats.buyback
-        ? ([["Buyback reserve", `${formatEth(stats.buyback.reserve)} ETH`]] as [
-            string,
-            React.ReactNode,
-          ][])
+        ? ([
+            ["Buyback reserve", <Eth key="buyback" value={stats.buyback.reserve} />],
+          ] as [string, React.ReactNode][])
         : []),
     ];
   }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAccount } from "wagmi";
 import WalletButton from "@/components/WalletButton";
+import CurrencySelector from "@/components/CurrencySelector";
 
 export default function Nav() {
   const { isConnected } = useAccount();
@@ -42,6 +43,9 @@ export default function Nav() {
               Staff
             </Link>
           )}
+          {/* Sits with the wallet chip rather than beside a price: it governs
+              every conversion on the page, not the nearest one. */}
+          <CurrencySelector />
           <WalletButton variant="nav" />
         </div>
       </nav>

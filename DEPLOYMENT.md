@@ -635,7 +635,7 @@ Nothing else changes.
 
 ### Env vars the frontend adds
 
-None are required. All four are optional and documented in `.env.example`:
+None are required. All five are optional and documented in `.env.example`:
 
 | Variable | Why you'd set it |
 | --- | --- |
@@ -643,6 +643,7 @@ None are required. All four are optional and documented in `.env.example`:
 | `SUPABASE_SERVICE_ROLE_KEY` | Let the indexer write as the service role. Server-only — it bypasses row level security. |
 | `INDEXER_SECRET` | Require `Authorization: Bearer <secret>` on `/api/indexer`. Set it on anything public. |
 | `INDEXER_FROM_BLOCK` | Override the indexer's scan floor. |
+| `COINGECKO_API_KEY` | Use a CoinGecko Pro plan for `/api/eth-price` instead of the free public endpoint. Server-only. |
 
 ### Keeping the feed in step with the chain
 
