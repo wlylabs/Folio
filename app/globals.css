@@ -1284,3 +1284,148 @@ html[data-dock] body {
    */
   border-radius: 0 !important;
 }
+
+/* ==========================================================================
+   Footer legal links
+   ========================================================================== */
+
+.footer__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+}
+
+.footer__links a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule-strong);
+  padding-bottom: 1px;
+}
+
+.footer__links a:hover {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+/* ==========================================================================
+   Legal documents (/terms, /privacy)
+
+   Set as articles, because that is what they are. The body itself is .prose,
+   the same rules a token's article body renders under.
+   ========================================================================== */
+
+.legal__head {
+  padding-bottom: var(--sp-4);
+  margin-bottom: var(--sp-5);
+  border-bottom: 1px solid var(--ink);
+}
+
+/*
+ * The draft flag. Deliberately loud — a policy that has not been read by a
+ * lawyer should not look like one that has. Removed by flipping `draft` in
+ * lib/legal.ts.
+ */
+.legal__badge {
+  display: inline-block;
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--alert);
+  color: var(--alert);
+  background: var(--paper-raised);
+  font-family: var(--font-ui);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.legal__title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: var(--fs-h1);
+  line-height: 1.12;
+  margin: 0 0 var(--sp-3);
+  text-wrap: balance;
+}
+
+/* The document opens with its own status block; it does not need the extra
+   top margin .prose gives every other heading. */
+.legal .prose > *:first-child {
+  margin-top: 0;
+}
+
+/* ==========================================================================
+   Cookie consent
+
+   A strip on the bottom edge, not a modal. It asks a question; it does not
+   hold the page hostage until the reader answers.
+   ========================================================================== */
+
+.consent {
+  position: fixed;
+  left: 0;
+  right: 0;
+  /*
+   * Clears the trade dock on article pages, where both want the bottom edge.
+   * TradeBar publishes its measured height as --dock-h and sets data-dock
+   * while mounted (components/useDockHeight.ts); everywhere else this is 0.
+   */
+  bottom: 0;
+  z-index: 40;
+  background: var(--paper-raised);
+  border-top: 1px solid var(--ink);
+  box-shadow: 0 -10px 30px rgba(20, 18, 14, 0.1);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+html[data-dock] .consent {
+  bottom: var(--dock-h);
+}
+
+.consent__inner {
+  width: 100%;
+  max-width: var(--shell);
+  margin-inline: auto;
+  padding: var(--sp-4) var(--gutter);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3) var(--sp-5);
+}
+
+.consent__copy {
+  margin: 0;
+  flex: 1 1 22rem;
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.consent__actions {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+/* On a phone the two buttons share the row rather than stacking. */
+@media (max-width: 32rem) {
+  .consent__actions {
+    width: 100%;
+  }
+
+  .consent__actions .btn {
+    flex: 1 1 0;
+  }
+}
+
+@media (min-width: 64rem) {
+  /* The dock stops being a dock at this width — it joins the article rail —
+     so the banner returns to the bottom edge. */
+  html[data-dock] .consent {
+    bottom: 0;
+  }
+}

@@ -28,4 +28,17 @@ export const wagmiConfig = getDefaultConfig({
   projectId: projectId || "00000000000000000000000000000000",
   chains,
   ssr: true,
+  walletConnectParameters: {
+    // Turns off the event client in @walletconnect/core, which reports session
+    // activity to pulse.walletconnect.org. Nothing here needs it.
+    //
+    // It does NOT silence every WalletConnect beacon. @walletconnect/
+    // ethereum-provider builds a Reown AppKit modal whose own pulse ping fires
+    // on provider init — on page load, before the consent banner is answered —
+    // and it hardcodes that modal's options, so there is no flag to pass. The
+    // only levers are `showQrModal: false` (which would take RainbowKit's QR
+    // pairing with it) or not constructing the connector until the reader asks
+    // to connect. See the note in README.md.
+    telemetryEnabled: false,
+  },
 });

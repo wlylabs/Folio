@@ -22,13 +22,21 @@ signature-based auth (Sign-In With Ethereum minting a Supabase JWT), which isn't
 implemented here. Row-level security in `lib/schema.sql` blocks client-side
 updates and deletes, so existing listings can't be tampered with.
 
-`TERMS.md` and `PRIVACY.md` hold draft policies covering the testnet stage.
-Both are unreviewed drafts — a lawyer has to look at them before this runs
-against real value or real users, and each still has placeholders (governing
-law and contact in the terms, contact in the privacy policy). The privacy
-policy also describes a cookie consent banner and analytics that this codebase
-does not currently have; either build them or cut those sentences before the
-policy is published anywhere users can read it.
+`TERMS.md` and `PRIVACY.md` hold draft policies covering the testnet stage, and
+`/terms` and `/privacy` render those two files directly — the markdown at the
+repo root is the only copy. Both are unreviewed drafts, so both pages carry a
+"Draft — pending legal review" badge; clearing `draft` in `lib/legal.ts`
+removes it. Each document still has placeholders (governing law and contact in
+the terms, contact in the privacy policy), and a lawyer has to look at them
+before this runs against real value or real users.
+
+One gap worth knowing about, because the privacy policy implies otherwise: the
+consent banner gates Folio's own analytics, and there are none yet, but
+WalletConnect pings `pulse.walletconnect.org` on page load regardless. It comes
+from the Reown AppKit modal that `@walletconnect/ethereum-provider` builds
+during provider init, which hardcodes its own options — see the note in
+`lib/wagmiConfig.ts` for the two ways out. Until one of them is taken, a
+third-party request does happen before the reader has answered the banner.
 
 ## Setup (from your phone, via GitHub Codespaces)
 

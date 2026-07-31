@@ -28,6 +28,12 @@ export default function Footer() {
         }}
       >
         <p className="eyebrow">Folio · Testnet edition · {chain}</p>
+
+        <nav className="footer__links" aria-label="Legal">
+          <Link href="/terms">Terms</Link>
+          <Link href="/privacy">Privacy</Link>
+        </nav>
+
         <p
           className="font-ui"
           style={{ fontSize: "var(--fs-micro)", color: "var(--ink-muted)" }}
