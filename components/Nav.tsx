@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAccount } from "wagmi";
 import SettingsMenu from "@/components/SettingsMenu";
+import Logo from "@/components/Logo";
 
 export default function Nav() {
   const { isConnected } = useAccount();
@@ -19,7 +20,8 @@ export default function Nav() {
           // The masthead, shrunk down: same face and weight as the front page
           // so the two read as one wordmark rather than two.
           <Link href="/" aria-label="Folio — home" className="wordmark">
-            FOLIO
+            <Logo className="wordmark__mark" />
+            <span className="wordmark__text">FOLIO</span>
           </Link>
         )}
 

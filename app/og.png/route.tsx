@@ -58,6 +58,29 @@ export function GET() {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column" }}>
+          {/*
+            The folded-sheet mark of components/Logo.tsx, rebuilt as boxes.
+            Satori draws only a subset of SVG, and this shape is two
+            rectangles, so laying it out costs nothing and cannot render
+            differently than the layout engine expects.
+
+            The crease is its own centred child rather than a border on a
+            half-width one: box-sizing is border-box here, so a half-width box
+            puts its right edge short of the middle and the fold lands
+            visibly off-centre.
+          */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              width: 56,
+              height: 67,
+              border: `5px solid ${INK}`,
+              marginBottom: 24,
+            }}
+          >
+            <div style={{ width: 8, height: "100%", background: INK }} />
+          </div>
           <div
             style={{
               fontSize: 168,
