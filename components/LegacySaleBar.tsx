@@ -71,6 +71,8 @@ export default function LegacySaleBar({
   const {
     balance: ethBalance,
     noGas,
+    unreadable: gasUnreadable,
+    elsewhere: gasElsewhere,
     checking: checkingGas,
     refetch: refetchEth,
   } = useGasBalance({ address, chainId: targetChainId });
@@ -276,10 +278,13 @@ export default function LegacySaleBar({
           </p>
         )}
 
-        {isConnected && noGas && (
+        {isConnected && (noGas || gasUnreadable) && (
           <FaucetNotice
             chain={token.chain}
             heading={`No ${chainEntry?.chain.nativeCurrency.symbol ?? "test ETH"} in this wallet`}
+            address={address}
+            elsewhere={gasElsewhere}
+            unreadable={gasUnreadable}
             onRecheck={() => void refetchEth()}
             checking={checkingGas}
           />

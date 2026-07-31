@@ -170,6 +170,8 @@ export default function LaunchForm() {
   const {
     balance,
     noGas,
+    unreadable: gasUnreadable,
+    elsewhere: gasElsewhere,
     checking: checkingGas,
     refetch: refetchBalance,
   } = useGasBalance({ address, chainId: chainEntry?.chain.id });
@@ -446,16 +448,21 @@ export default function LaunchForm() {
           <span className="nums" style={{ fontWeight: 600, color: "var(--ink)" }}>
             {balance
               ? `${formatEth(Number(formatUnits(balance.value, balance.decimals)))} ${balance.symbol}`
-              : "checking balance..."}
+              : gasUnreadable
+                ? "balance unavailable"
+                : "checking balance..."}
           </span>
         </div>
       )}
 
-      {isConnected && noGas && (
+      {isConnected && (noGas || gasUnreadable) && (
         <div style={{ marginTop: "var(--sp-4)" }}>
           <FaucetNotice
             chain={faucetChain}
             heading={`No ${chainEntry?.chain.nativeCurrency.symbol ?? "test ETH"} to pay gas with`}
+            address={address}
+            elsewhere={gasElsewhere}
+            unreadable={gasUnreadable}
             onRecheck={() => void refetchBalance()}
             checking={checkingGas}
           />
