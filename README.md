@@ -4,10 +4,15 @@ Every token launch is published as an article. Built with Next.js, wagmi/Rainbow
 
 ## Status
 
-Launches are real. Publishing deploys `contracts/FolioSale.sol` — an ERC20 that
-runs its own fixed-price sale — to a testnet from your wallet, and the article
-page reads sale progress straight off the chain. Holders can buy and sell back
-against that contract; there is no external liquidity pool involved.
+Launches are real. Publishing calls `createToken` on `FolioFactory`, which
+clones a `FolioToken` — an ERC20 that is also its own bonding-curve market maker
+— and the article page prices every trade off that curve live. Holders buy from
+and sell back to the curve; there is no external liquidity pool involved.
+
+The factory is deployed once per network and its address lives in
+`deployments/base-sepolia.json`, written by `contracts/script/DeployFactory.s.sol`.
+`lib/contracts/deployment.ts` is the only module that reads it, so re-deploying
+is a one-file change.
 
 Still a testnet project, and one thing is worth knowing before you rely on it:
 `creator_wallet` is a **claim, not a proof**. The browser talks to Supabase with
@@ -55,78 +60,93 @@ with "insufficient funds". The links live in `SUPPORTED_CHAINS` in
 
 ## How a launch works
 
-1. **Validate** the form client-side (name, symbol, supply, price, headline),
-   and check the wallet actually has gas on the target chain.
+1. **Validate** the form client-side (name, symbol, supply, optional reserve
+   cap, headline), and check the wallet actually has gas on the target chain.
 2. **Upload** the optional avatar to Supabase Storage.
-3. **Switch** the wallet to the target chain, then **deploy** `FolioSale` with
-   your name, symbol, supply, price and address as the proceeds recipient.
-4. **Wait** for the receipt and take the real contract address from it.
+3. **Switch** the wallet to the factory's chain, then call
+   `factory.createToken(name, symbol, supply, maxReserveCap)`.
+4. **Wait** for the receipt and read the new token's address out of the
+   `TokenCreated` event — never computed, never assumed.
 5. **Insert** the article row keyed to that address, and redirect to it.
 
-If the deploy succeeds but the database insert fails, the error message includes
-the deployed address so the contract isn't lost.
+Supply defaults to 1,000,000,000, the memecoin convention, and is editable. It
+doesn't change what a launch opens at: the whole supply sits on the curve, so
+the opening market cap is `virtualEthReserve` whatever supply you pick.
+
+If the token is created but the database insert fails, the error message
+includes the address so the launch isn't lost — and `/api/indexer` will list it
+from the event log regardless.
 
 ## How trading works
 
 The trade bar on an article page has a buy leg and a sell leg, both settling
-against the launch's own contract at a fixed price:
+against the launch's own curve:
 
-- **Buy** sends ETH to `buy()` and receives tokens out of the contract's
-  inventory at `price`.
-- **Sell** returns tokens to `sell()` and receives ETH at `sellPrice()`, which
-  is `price` minus a 5% spread. The tokens go back into inventory, so a
-  sold-out launch reopens when someone sells back into it.
+- **Buy** sends ETH to `buy(minTokensOut)`. The quote under the field is
+  `getBuyQuote(ethIn)` — the same code path `buy` runs — re-read on every change
+  to the amount and on a timer while the panel is open.
+- **Sell** returns tokens to `sell(amount, minEthOut)` at `getSellPrice(amount)`.
+  Tokens are burned and the curve retraces the path a buy of that size took.
+  Selling is never closed except by the platform emergency stop.
 
-Both legs read the wallet's balances first, so the button can say *why* it is
-disabled — no test ETH, no tokens to sell — before anything is signed. On
-confirmation the page revalidates, so the sale figures update in place.
+There is no fixed price to display, so nothing is displayed as fixed. Both legs
+carry a **slippage tolerance** (1% by default) which becomes the `minTokensOut`
+/ `minEthOut` floor on chain: if the price moves between the quote and the block,
+the trade reverts instead of filling at whatever a sandwich left behind.
 
-The 5% spread is what the creator earns. It also means the contract cannot pay
-every holder out *and* hand the creator the whole balance, so `withdraw()` only
-releases what is above `reserveRequired()` — the ETH needed to buy back every
-circulating token. A holder can therefore always sell, which is the property
-that makes the sell button worth trusting. The reserve is printed on the article
-page next to the price.
+Both legs read the wallet's balances and the live curve state first, so the
+button can say *why* it is disabled — no test ETH, no tokens to sell, curve
+graduated, trading paused — before anything is signed.
 
-Launches deployed before the buyback existed have no `sellPrice()` to read.
-`fetchSaleStats` treats that failed read as "no buyback", and the sell tab says
-so instead of offering a button that would always revert.
+**Paused** is its own state and says so plainly. The factory's emergency stop
+halts buying *and* selling on every launch; the panel disables both and explains
+that holdings are untouched and creator fees are still claimable.
 
-## The contract
+The **reserve** is printed beside the buttons: the real ETH backing the curve,
+against its cap, with the headroom left before buys close. `reserveHealthBps` on
+the article page states the same thing as a ratio — 100% means every token in
+circulation can be sold back right now.
 
-`contracts/FolioSale.sol` is a dependency-free ERC20 plus fixed-price sale with a
-buyback. The whole supply is minted to the contract itself as sale inventory, so
-`sold()` and `balanceOf(contract)` always reconcile and the frontend can read
-progress without indexing events or running a cron.
+Launches from the retired fixed-price design still work. `lib/tokenStats.ts`
+discovers which contract is at an address by reading it, and the page renders the
+panel that describes it honestly rather than one that would revert.
 
-`buy()` caps a purchase at the remaining inventory and refunds the difference,
-so overpaying on a nearly-sold-out launch never overcharges. Proceeds stay in
-the contract for the creator to `withdraw()` rather than being pushed on each
-sale, so a buyer's transaction can't be griefed by a reverting recipient.
+## The contracts
 
-`sell()` is the reverse leg. It floors each payout while the reserve is computed
-over the whole position, so the reserve is always sufficient — a sum of floors
-never exceeds the floor of the sum. Both legs settle state before their external
-call, so neither can be re-entered against a stale balance, and `withdraw()`
-derives its amount from the live balance, which the value transfer has already
-debited by the time a reentrant frame runs.
+`contracts/src/FolioFactory.sol` deploys launches as EIP-1167 minimal proxies —
+~41k gas each instead of ~1.5M for a full ERC20 — over one shared
+`FolioToken` implementation its own constructor deploys. It holds the platform's
+default curve terms and the single emergency stop, both bounded by hard
+constants that fence the owner as much as anyone else.
 
-A price under 2 wei would floor `sellPrice()` to zero and mint tokens nobody
-could sell, so the constructor rejects it.
+`contracts/src/FolioToken.sol` is the ERC20 and the market maker. Constant
+product, `x * y = k`, with a virtual ETH reserve giving the curve a finite
+opening price. Fees are taken outside the curve, so the reserve never subsidises
+them and the sell-back guarantee stays exact. See `contracts/README.md` for the
+full design and `DEPLOYMENT.md` for deploying it.
+
+`contracts/FolioSale.sol` is the retired design, kept because listings created
+under it are still live.
 
 ```
-npm run compile:contracts   # regenerate lib/contracts/folioSale.ts (needs solc)
-npm test                    # run the sale against an in-memory EVM
+npm run compile:contracts   # regenerate lib/contracts/*.ts from the .sol files
+npm run forge:test          # the contract test suite
+npm run watch:launches      # index TokenCreated events as they land
 ```
 
-The compiled ABI and bytecode are committed, so builds and deploys never need a
-Solidity compiler — only edits to the `.sol` file do.
+The compiled ABIs are committed, so builds and deploys never need a Solidity
+compiler — only edits to a `.sol` file do.
 
 ## Notes
 
-- **Sale figures come from the chain.** `tokens.sold_amount` is only a fallback
-  for rows whose contract can't be reached, since nothing on chain writes back
-  to Postgres.
+- **Curve figures come from the chain.** `tokens.sold_amount` and
+  `tokens.starting_price` are fallbacks for rows whose contract can't be
+  reached, since nothing on chain writes back to Postgres. The database stores
+  the article; the contract stores the market.
+- **New listings are indexed from the event log.** The create page writes its
+  own row, and `/api/indexer` reconciles anything created outside it — a Foundry
+  script, Basescan, or a browser that closed at the wrong moment. Pages read the
+  table; they never scan the chain for the feed.
 - **Article HTML is sanitized on render** (`lib/sanitize.ts`) with an allowlist
   matching Tiptap's output. Stored bodies are untrusted — they arrive through
   the public anon key.
@@ -135,7 +155,12 @@ Solidity compiler — only edits to the `.sol` file do.
 ## Possible next steps
 
 - [ ] Sign-In With Ethereum so `creator_wallet` is verified rather than claimed
-- [ ] A creator-side withdraw button — `withdraw()` is live on the contract but
-      has no UI, so the spread has to be claimed by hand for now
-- [ ] Mainnet support, which needs a real audit of the sale contract first
+- [ ] A creator-side fee claim button — `claimFees()` is live on the token but
+      has no UI, so fees have to be claimed from Basescan for now
+- [ ] A price chart from the `TokensBought` / `TokensSold` log, which is the
+      thing a curve most obviously wants and the event stream already supports
+- [ ] Graduation handling beyond closing the curve — the contract emits
+      `Graduated` and stops there on purpose; migrating that liquidity to a DEX
+      is an off-chain decision nobody has made yet
+- [ ] Mainnet support, which needs a real audit first
 - [ ] Richer editor (images inside articles, embeds) with the allowlist widened to match

@@ -9,6 +9,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "compile:contracts": "node scripts/compile-contracts.mjs",
+    "watch:launches": "node scripts/watch-launches.mjs",
     "test": "node contracts/test/folioSale.test.mjs",
     "forge:build": "forge build",
     "forge:test": "forge test",

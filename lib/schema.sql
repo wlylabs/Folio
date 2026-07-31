@@ -1,5 +1,27 @@
 -- Folio schema. Run this in the Supabase SQL editor (Project -> SQL Editor -> New query).
 -- Safe to re-run: every statement is guarded.
+--
+-- ---------------------------------------------------------------------------
+-- What this table is for, now that launches run on a bonding curve
+--
+-- It stores the article, and nothing that the chain is the authority on. The
+-- factory migration deliberately added no columns: curve terms, reserve, price,
+-- supply issued and pause state are all read from the token contract on each
+-- request (lib/tokenStats.ts), because a copy in Postgres could only ever be
+-- stale — nothing on chain writes back here.
+--
+-- Two columns are therefore worth reading carefully:
+--
+--   starting_price  the curve's *opening* marginal price, virtualEthReserve
+--                   divided by supply. It is a record of where the launch
+--                   began, not a price anything trades at. Every live price
+--                   comes from getBuyQuote/getSellPrice.
+--   sold_amount     only a fallback for rows whose contract can't be reached.
+--
+-- Rows written by /api/indexer (a launch created outside the site) carry a
+-- placeholder article and a real address, supply and creator from the
+-- TokenCreated event.
+-- ---------------------------------------------------------------------------
 
 create table if not exists tokens (
   id uuid primary key default gen_random_uuid(),

@@ -451,6 +451,62 @@ Work top to bottom. Tick each before wiring up the frontend.
 
 ---
 
+## 6. Wiring the frontend
+
+The frontend reads `deployments/base-sepolia.json` directly — `lib/contracts/deployment.ts`
+is the only module that knows an address, and every page goes through it. A
+re-deploy is therefore: run `DeployFactory`, commit the JSON it rewrote, push.
+Nothing else changes.
+
+### What to check after a re-deploy
+
+- [ ] `deployments/base-sepolia.json` is committed, and `factory` is the new address.
+- [ ] `deployedAtBlock` is non-zero. The indexer uses it as its scan floor; when
+      it is zero the indexer finds the block by bisecting on `eth_getCode`,
+      which works but costs ~20 RPC reads on the first run of each server
+      process.
+- [ ] The create page's "Curve terms" box shows the terms you deployed with.
+      They are read from the same JSON, so a mismatch means a stale file.
+
+### Env vars the frontend adds
+
+None are required. All four are optional and documented in `.env.example`:
+
+| Variable | Why you'd set it |
+| --- | --- |
+| `NEXT_PUBLIC_FACTORY_ADDRESS` | Point a preview build at a different factory without editing the repo. Overrides the JSON. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Let the indexer write as the service role. Server-only — it bypasses row level security. |
+| `INDEXER_SECRET` | Require `Authorization: Bearer <secret>` on `/api/indexer`. Set it on anything public. |
+| `INDEXER_FROM_BLOCK` | Override the indexer's scan floor. |
+
+### Keeping the feed in step with the chain
+
+A token created by `CreateToken.s.sol`, or straight from Basescan, has no
+listing row — the create page is what normally writes one. `/api/indexer` closes
+that gap by diffing the factory's `TokenCreated` log against the table and
+inserting what's missing, with a placeholder article. It is idempotent, so call
+it as often as you like:
+
+```bash
+# after creating a token from a script
+curl -X POST http://localhost:3000/api/indexer
+
+# or hold a subscription open and let it fire on each launch
+npm run watch:launches
+```
+
+On Vercel, the same endpoint fits a cron:
+
+```json
+{ "crons": [{ "path": "/api/indexer", "schedule": "*/5 * * * *" }] }
+```
+
+Hobby projects are capped at one cron run a day; a Pro project can run it every
+few minutes. Either way, pages themselves never scan the chain for the feed —
+they read the table.
+
+---
+
 ## Troubleshooting
 
 **`WrongNetwork(84532, 1)`** — the RPC is not Base Sepolia. Working as intended.
