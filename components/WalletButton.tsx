@@ -3,19 +3,29 @@
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { shortAddress } from "@/lib/types";
 
-type Variant = "nav" | "block";
+type Variant = "menu" | "block";
 
 /**
  * The wallet control, drawn in Folio's print language instead of RainbowKit's
  * default rounded blue pill.
  *
  * `block` is the full-width slab used inside forms and the trade dock — same
- * geometry and weight as the Buy button it sits beside. `nav` is the compact
- * hairline chip in the masthead: once connected it splits into network and
- * account halves, each opening its own modal, and the network half folds away
- * on a narrow phone where the address is the half worth keeping.
+ * geometry and weight as the Buy button it sits beside. `menu` is the stacked
+ * pair inside the settings panel: once connected it splits into a network row
+ * and an account row, each opening its own modal, because the panel is where a
+ * reader goes to change either one.
+ *
+ * `onOpenModal` fires just before a RainbowKit modal is asked to open. The
+ * settings panel uses it to close itself first — a dropdown left standing
+ * behind a modal is a second layer nobody asked for.
  */
-export default function WalletButton({ variant = "block" }: { variant?: Variant }) {
+export default function WalletButton({
+  variant = "block",
+  onOpenModal,
+}: {
+  variant?: Variant;
+  onOpenModal?: () => void;
+}) {
   return (
     <ConnectButton.Custom>
       {({ account, chain, openAccountModal, openChainModal, openConnectModal, mounted }) => {
@@ -26,14 +36,19 @@ export default function WalletButton({ variant = "block" }: { variant?: Variant 
         const connected = ready && account && chain;
         const block = variant === "block";
 
+        // Every opener goes through here, so the panel closes on the way to any
+        // modal without each call site remembering to do it.
+        const open = (openModal: () => void) => () => {
+          onOpenModal?.();
+          openModal();
+        };
+
         return (
           <div
             aria-hidden={!ready}
             style={
               ready
-                ? block
-                  ? { width: "100%" }
-                  : undefined
+                ? { width: "100%" }
                 : { opacity: 0, pointerEvents: "none", userSelect: "none" }
             }
           >
@@ -42,12 +57,10 @@ export default function WalletButton({ variant = "block" }: { variant?: Variant 
                 return (
                   <button
                     type="button"
-                    onClick={openConnectModal}
-                    className={buttonClass(variant, "outline")}
+                    onClick={open(openConnectModal)}
+                    className="btn btn--block btn--outline"
                   >
-                    {/* "Connect wallet" wraps to two lines in the masthead on a
-                        320px phone; in a form the full label has room. */}
-                    {block ? "Connect wallet" : "Connect"}
+                    Connect wallet
                   </button>
                 );
               }
@@ -56,8 +69,8 @@ export default function WalletButton({ variant = "block" }: { variant?: Variant 
                 return (
                   <button
                     type="button"
-                    onClick={openChainModal}
-                    className={buttonClass(variant, "alert")}
+                    onClick={open(openChainModal)}
+                    className="btn btn--block btn--alert"
                   >
                     Wrong network
                   </button>
@@ -71,7 +84,7 @@ export default function WalletButton({ variant = "block" }: { variant?: Variant 
                   // An address is not a label, so it keeps its own casing.
                   <button
                     type="button"
-                    onClick={openAccountModal}
+                    onClick={open(openAccountModal)}
                     className="btn btn--block btn--outline btn--plain"
                   >
                     {who}
@@ -81,20 +94,26 @@ export default function WalletButton({ variant = "block" }: { variant?: Variant 
               }
 
               return (
-                <div className="chip-group">
+                <div className="wallet-rows">
                   <button
                     type="button"
-                    onClick={openChainModal}
-                    className="chip-half chip-half--caps chip-half--optional"
+                    onClick={open(openChainModal)}
+                    className="wallet-row"
                   >
-                    {chain.name ?? "Network"}
+                    <span className="wallet-row__label">Network</span>
+                    <span className="wallet-row__value">{chain.name ?? "Unknown"}</span>
                   </button>
                   <button
                     type="button"
-                    onClick={openAccountModal}
-                    className="chip-half chip-half--divided"
+                    onClick={open(openAccountModal)}
+                    className="wallet-row"
                   >
-                    {who}
+                    <span className="wallet-row__label">Account</span>
+                    {/* An address is not a label, so it keeps its own casing. */}
+                    <span className="wallet-row__value wallet-row__value--plain">
+                      {who}
+                      {account.displayBalance ? ` · ${account.displayBalance}` : ""}
+                    </span>
                   </button>
                 </div>
               );
@@ -104,10 +123,4 @@ export default function WalletButton({ variant = "block" }: { variant?: Variant 
       }}
     </ConnectButton.Custom>
   );
-}
-
-function buttonClass(variant: Variant, tone: "outline" | "alert"): string {
-  const size = variant === "block" ? "btn--block" : "btn--sm";
-  const skin = tone === "alert" ? "btn--alert" : "btn--outline";
-  return `btn ${size} ${skin}`;
 }

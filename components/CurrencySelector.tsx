@@ -12,27 +12,37 @@ import { CURRENCIES } from "@/lib/currency";
  * between visits, and every figure on the page follows it immediately — the
  * rate for both currencies is already in hand, so switching costs no request.
  *
- * Absent until a rate arrives. A currency switch with nothing to convert is a
- * control that does nothing, and while the price feed is down that is exactly
- * what it would be.
+ * It lives in the settings panel, beside the wallet, rather than loose in the
+ * masthead: it governs every conversion on the site, not the nearest price.
+ * That is also why it stays visible when the price feed is down — a preference
+ * a reader can set today and see honoured tomorrow is worth showing even while
+ * there is no rate to convert with. The note says as much rather than leaving a
+ * toggle that appears to do nothing.
  */
 export default function CurrencySelector() {
   const { currency, setCurrency, rate } = useCurrency();
-  if (rate === null) return null;
 
   return (
-    <div className="currency-toggle" role="group" aria-label="Display currency">
-      {CURRENCIES.map(({ code, label }) => (
-        <button
-          key={code}
-          type="button"
-          className="chip"
-          aria-pressed={currency === code}
-          onClick={() => setCurrency(code)}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <>
+      <div className="chip-row" role="group" aria-label="Display currency">
+        {CURRENCIES.map(({ code, label }) => (
+          <button
+            key={code}
+            type="button"
+            className="chip"
+            aria-pressed={currency === code}
+            onClick={() => setCurrency(code)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <p className="settings__note">
+        {rate === null
+          ? "The price feed is unreachable, so figures stay in ETH alone. This choice applies as soon as a rate arrives."
+          : "Every ETH figure on the site carries a second line in this currency. Prices are still quoted and settled in ETH."}
+      </p>
+    </>
   );
 }
