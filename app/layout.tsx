@@ -2,6 +2,8 @@ import "./globals.css";
 import Providers from "./providers";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
+import CookieBanner from "@/components/CookieBanner";
+import { siteUrl } from "@/lib/siteUrl";
 
 import { Inter, PT_Serif, Playfair_Display } from "next/font/google";
 import type { Metadata, Viewport } from "next";
@@ -34,6 +36,12 @@ const ui = Inter({
 });
 
 export const metadata: Metadata = {
+  // Canonical and og:url on child routes are written relative ("/terms"), so
+  // they need an origin to resolve against.
+  metadataBase: new URL(siteUrl()),
+  // No `template` here on purpose: the legal routes set their own complete
+  // titles, and a template would suffix "— Folio" onto strings that already
+  // end in it.
   title: "Folio — Every token, told as a story",
   description: "A testnet token launchpad where every token is an article.",
 };
@@ -66,6 +74,16 @@ export default function RootLayout({
             {children}
             <Footer />
           </div>
+          {/*
+           * Outside .app-frame: the banner is fixed to the viewport, not part
+           * of the page's column.
+           *
+           * When analytics is added, mount it here and gate it on
+           * hasAnalyticsConsent() from lib/consent.ts — re-checking on the
+           * CONSENT_EVENT, so a reader who accepts gets it without a reload
+           * and one who declines never loads the script at all.
+           */}
+          <CookieBanner />
         </Providers>
       </body>
     </html>

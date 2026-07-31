@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { DEFAULT_CHAIN_SLUG, chainBySlug } from "@/lib/chains";
+import { CONTACT_EMAIL } from "@/lib/contact";
 
 /**
  * The colophon. Small, but it answers the question a launchpad has to answer
@@ -28,6 +29,14 @@ export default function Footer() {
         }}
       >
         <p className="eyebrow">Folio · Testnet edition · {chain}</p>
+
+        <nav className="footer__links" aria-label="Legal">
+          <Link href="/terms">Terms</Link>
+          <Link href="/privacy">Privacy</Link>
+          {/* Plain <a>: next/link is for routes, and this leaves the site. */}
+          <a href={`mailto:${CONTACT_EMAIL}`}>Contact</a>
+        </nav>
+
         <p
           className="font-ui"
           style={{ fontSize: "var(--fs-micro)", color: "var(--ink-muted)" }}
