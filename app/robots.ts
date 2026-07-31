@@ -12,9 +12,9 @@ import { siteUrl } from "@/lib/siteUrl";
  * robots.txt block would stop a crawler reading those links at all.
  *
  * /desk is different and is blocked outright: it is a password box, it links
- * nowhere a crawler needs, and the articles it produces are already public at
- * /read. This is not what keeps it private — lib/desk.ts is — it just keeps it
- * out of a search result.
+ * nowhere a crawler needs, and the articles it produces are already public in
+ * Postfolio. This is not what keeps it private — lib/desk.ts is — it just keeps
+ * it out of a search result.
  */
 export default function robots(): MetadataRoute.Robots {
   return {

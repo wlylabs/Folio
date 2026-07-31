@@ -8,7 +8,7 @@ import { createHmac, timingSafeEqual, createHash } from "node:crypto";
  * signature, and the chain is the thing rate-limiting it. The article desk is
  * not — it spends a model quota and writes straight to the front page for free,
  * so "whoever finds the URL" is the wrong answer to who may press the button.
- * Everyone else reads what the desk published at /read.
+ * Everyone else reads what the desk published in Postfolio.
  *
  * ## Why a password and not a wallet
  *

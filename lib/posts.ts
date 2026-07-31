@@ -1,4 +1,6 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { isTopic } from "@/lib/topics";
+import { postfolioPath } from "@/lib/postfolio";
 
 /**
  * Reads of the `posts` table — the articles Folio publishes that are not
@@ -40,9 +42,17 @@ export type PostCard = Pick<
   "id" | "slug" | "title" | "excerpt" | "topic" | "tags" | "created_at" | "cover_url"
 >;
 
+/** Where an article reads: Postfolio, not the launchpad. See lib/postfolio.ts. */
 export function postPath(post: Pick<Post, "slug">): string {
-  return `/read/${post.slug}`;
+  return postfolioPath(post.slug);
 }
+
+export type PostQuery = {
+  /** Restrict to one beat. An unknown value is ignored rather than empty. */
+  topic?: string | null;
+  /** Leave one slug out — what "read next" on an article page needs. */
+  excludeSlug?: string | null;
+};
 
 /**
  * Published articles, newest first.
@@ -52,14 +62,22 @@ export function postPath(post: Pick<Post, "slug">): string {
  * down with it — and the front page's other half is the launch feed, which has
  * no reason to fail at the same time.
  */
-export async function listPosts(limit = 40): Promise<PostCard[]> {
+export async function listPosts(limit = 40, query: PostQuery = {}): Promise<PostCard[]> {
   if (!isSupabaseConfigured) return [];
 
-  const { data, error } = await supabase
+  let request = supabase
     .from("posts")
     .select(POST_CARD_COLUMNS)
     .order("created_at", { ascending: false })
     .limit(limit);
+
+  // Filtering in the query rather than in the page: a beat with two articles
+  // must not be a page showing two of the last forty rows that happened to
+  // match.
+  if (isTopic(query.topic)) request = request.eq("topic", query.topic);
+  if (query.excludeSlug) request = request.neq("slug", query.excludeSlug.toLowerCase());
+
+  const { data, error } = await request;
 
   if (error) {
     // A deployment that has not run the `posts` half of lib/schema.sql lands
@@ -121,4 +139,4 @@ export function postByline(post: Pick<Post, "model">): string {
   return `Folio article desk · ${name}`;
 }
 
-export { topicLabel } from "@/lib/topics";
+export { topicLabel, isTopic } from "@/lib/topics";

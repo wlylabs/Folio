@@ -279,6 +279,21 @@ p {
   flex: 1 0 auto;
 }
 
+/*
+ * Postfolio wraps its pages in .pf (app/postfolio/layout.tsx), so <main> is one
+ * level deeper there and the rule above no longer reaches it. Both elements
+ * have to grow or a short article floats the colophon halfway up the window.
+ */
+.app-frame > .pf {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+}
+
+.app-frame > .pf > main {
+  flex: 1 0 auto;
+}
+
 .shell {
   width: 100%;
   max-width: var(--shell);
@@ -378,6 +393,11 @@ p {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Wraps rather than overflows. The bar now carries a wordmark, a view switch
+     and the settings, and on the narrowest phone with a wallet connected that
+     is one item more than fits — a second row is a worse bar than a wide one,
+     but a page that scrolls sideways is a broken one. */
+  flex-wrap: wrap;
   gap: var(--sp-4);
   min-height: var(--nav-h);
   padding-block: var(--sp-2);
@@ -428,6 +448,18 @@ p {
   border-bottom-color: var(--rule-strong);
 }
 
+/*
+ * Below this the mark stands in for the lockup. "POSTFOLIO" is nine characters
+ * of display face beside a switch and a settings button, and the mark says the
+ * same thing in a fifth of the width — the link keeps its aria-label, so what
+ * is dropped is ink and not meaning.
+ */
+@media (max-width: 26rem) {
+  .wordmark__text {
+    display: none;
+  }
+}
+
 .nav-link {
   display: inline-flex;
   align-items: center;
@@ -449,6 +481,68 @@ p {
 .nav-link[aria-current="page"] {
   color: var(--ink);
   font-weight: 600;
+}
+
+/* --- The view switch --------------------------------------------------------
+
+   Launchpad or Postfolio, in the masthead on every page. Drawn as one framed
+   pair rather than two nav links because the two are exclusive: at any moment
+   you are reading one of them, and a control that shows which one you are in
+   has to look like a switch that is thrown, not like two destinations.
+
+   The selected half is set solid — ink on paper reversed — which is the same
+   move .btn--primary makes, and the strongest contrast this palette has. It is
+   also the only state carried without colour, so it survives a reader who
+   cannot tell the accent from the muted grey.
+*/
+.mode-switch {
+  display: inline-flex;
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-raised);
+  font-family: var(--font-ui);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.mode-switch__opt {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding-inline: var(--sp-3);
+  color: var(--ink-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.mode-switch__opt + .mode-switch__opt {
+  border-left: 1px solid var(--rule-strong);
+}
+
+.mode-switch__opt[data-on="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mode-switch__opt:hover:not([data-on="true"]) {
+    background: var(--paper-sunk);
+    color: var(--ink);
+  }
+}
+
+/* On a narrow phone the switch shares the bar with a wordmark, a wallet dot and
+   sometimes a staff link. Tightening the tracking buys back the ~12px that
+   otherwise wraps the row. */
+@media (max-width: 26rem) {
+  .mode-switch__opt {
+    padding-inline: var(--sp-2);
+    letter-spacing: 0.04em;
+  }
 }
 
 /* ==========================================================================
@@ -2254,5 +2348,523 @@ html[data-dock] .consent {
   font-size: var(--fs-eyebrow);
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+/* ==========================================================================
+   Postfolio — the reading view
+
+   The second of Folio's two views, scoped to the .pf wrapper that
+   app/postfolio/layout.tsx puts around every page under /postfolio. Nothing in
+   here leaks into the launchpad, and nothing here restyles a shared class: the
+   two views share the paper, the ink and the three faces, and differ in how
+   they arrange them.
+
+   What makes it read as a blog rather than as a feed is the arrangement, not a
+   second palette. The launchpad is centred, gridded and quantitative — cards
+   of equal weight carrying figures you compare down a column. This is
+   left-aligned and linear: one lead piece, then a dated column of headlines
+   with a rail beside it, then a reading column set wider and looser than
+   anything on the market side. The accent is the only new colour, and it is
+   used the way a printed section front uses one — on the beat, and on the
+   underline a headline picks up when you point at it.
+   ========================================================================== */
+
+.pf {
+  /* Burnt sienna: warm enough to sit on this paper without looking like a link
+     colour borrowed from another site, dark enough to pass contrast on it as
+     text (7.2:1 on --paper). */
+  --pf-accent: #8a3324;
+}
+
+/* --- Masthead & beats ----------------------------------------------------- */
+
+.pf-mast {
+  padding-block: var(--sp-6) var(--sp-5);
+}
+
+.pf-mast__eyebrow {
+  font-family: var(--font-ui);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--pf-accent);
+}
+
+.pf-mast__name {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: var(--fs-mast);
+  line-height: 0.95;
+  letter-spacing: -0.01em;
+  margin-top: var(--sp-3);
+}
+
+.pf-mast__tagline {
+  font-family: var(--font-ui);
+  font-size: var(--fs-eyebrow);
+  font-weight: 500;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-top: var(--sp-3);
+}
+
+.pf-mast__lede {
+  max-width: var(--measure);
+  margin-top: var(--sp-4);
+  font-size: var(--fs-lead);
+  line-height: 1.6;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+/*
+ * The beat filter. A row of section names under the nameplate is how a
+ * publication has always said which parts of it there are — and, unlike a
+ * dropdown, it says so without being opened.
+ */
+.pf-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  padding-block: var(--sp-3);
+  border-top: 2px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: var(--sp-6);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.pf-topic {
+  color: var(--ink-muted);
+  text-decoration: none;
+  padding-bottom: 2px;
+  border-bottom: 2px solid transparent;
+  transition:
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.pf-topic[data-on="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--pf-accent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pf-topic:hover {
+    color: var(--ink);
+  }
+}
+
+/* --- The lead piece ------------------------------------------------------- */
+
+.pf-lead {
+  display: grid;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-7);
+  padding-bottom: var(--sp-6);
+  border-bottom: 1px solid var(--rule);
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Text first in the source, image first on screen once there is room for the
+   pair: the headline is what the page is offering, and a screen reader should
+   not have to walk past a decorative cover to reach it. */
+@media (min-width: 52rem) {
+  .pf-lead--figure {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-6);
+    align-items: center;
+  }
+
+  .pf-lead--figure .pf-lead__cover {
+    order: -1;
+  }
+}
+
+/* A headline is unreadable long before a 70rem shell runs out, so the text
+   block is capped whether or not there is a cover holding it to one column. */
+.pf-lead__text {
+  max-width: 48rem;
+}
+
+.pf-lead__cover img {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  background: var(--paper-sunk);
+  border: 1px solid var(--rule);
+}
+
+.pf-lead__title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(1.6rem, 1.15rem + 2vw, 2.5rem);
+  line-height: 1.08;
+  margin-block: var(--sp-3);
+  text-wrap: balance;
+}
+
+.pf-lead__excerpt {
+  max-width: var(--measure);
+  font-size: var(--fs-lead);
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.pf-lead__more {
+  display: inline-block;
+  margin-top: var(--sp-4);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pf-accent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pf-lead:hover .pf-lead__title,
+  .pf-entry:hover .pf-entry__title,
+  .pf-next__item:hover .pf-next__title {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.14em;
+    text-decoration-color: var(--pf-accent);
+  }
+}
+
+/* --- The archive column & its rail ---------------------------------------- */
+
+.pf-layout {
+  display: grid;
+  gap: var(--sp-7);
+}
+
+@media (min-width: 64rem) {
+  .pf-layout {
+    grid-template-columns: minmax(0, 1fr) 16rem;
+    gap: var(--sp-8);
+  }
+}
+
+.pf-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * A row, not a card. Cards say "compare these"; a dated list down a hairline
+ * rule says "these happened in this order", which is what an archive is.
+ */
+.pf-entry {
+  display: flex;
+  gap: var(--sp-4);
+  justify-content: space-between;
+  padding-block: var(--sp-5);
+  border-top: 1px solid var(--rule);
+  color: inherit;
+  text-decoration: none;
+}
+
+.pf-entry:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.pf-entry__text {
+  min-width: 0;
+}
+
+.pf-entry__meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-eyebrow);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.pf-entry__topic {
+  font-weight: 600;
+  color: var(--pf-accent);
+}
+
+.pf-entry__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-h2);
+  line-height: 1.2;
+  margin-block: var(--sp-2);
+  text-wrap: balance;
+}
+
+.pf-entry__excerpt {
+  max-width: var(--measure);
+  color: var(--ink-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pf-entry__thumb {
+  flex: 0 0 auto;
+  width: 6.5rem;
+}
+
+@media (min-width: 48rem) {
+  .pf-entry__thumb {
+    width: 10rem;
+  }
+}
+
+.pf-entry__thumb img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: var(--paper-sunk);
+  border: 1px solid var(--rule);
+}
+
+.pf-list__end {
+  font-size: var(--fs-small);
+  color: var(--ink-soft);
+}
+
+.pf-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* Sticky only where there is a column to be sticky in. Below the breakpoint the
+   rail is stacked under the archive and pinning it would park it over the
+   footer. */
+@media (min-width: 64rem) {
+  .pf-rail {
+    position: sticky;
+    top: calc(var(--nav-h) + var(--sp-4));
+    align-self: start;
+  }
+}
+
+.pf-rail__block {
+  border-top: 2px solid var(--ink);
+  padding-top: var(--sp-3);
+}
+
+.pf-rail__head {
+  font-family: var(--font-ui);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+  margin-bottom: var(--sp-3);
+}
+
+.pf-rail__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pf-rail__list li + li {
+  margin-top: var(--sp-2);
+}
+
+.pf-rail__list a {
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.pf-rail__list a:hover {
+  border-bottom-color: var(--ink);
+}
+
+.pf-rail__actions {
+  margin-top: var(--sp-4);
+}
+
+/* --- The article ---------------------------------------------------------- */
+
+.pf-article__back {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: var(--sp-5);
+}
+
+.pf-article__back a {
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.pf-article__back a:hover {
+  color: var(--ink);
+}
+
+.pf-article__kicker {
+  font-family: var(--font-ui);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--pf-accent);
+}
+
+.pf-article__kicker a {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.pf-article__kicker a:hover {
+  border-bottom-color: currentColor;
+}
+
+.pf-article__title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(1.9rem, 1.35rem + 2.4vw, 3rem);
+  line-height: 1.08;
+  margin: var(--sp-3) 0 var(--sp-4);
+  text-wrap: balance;
+}
+
+/*
+ * The standfirst — the same sentence the search result and the card promised,
+ * printed where the reader arrives. Set in the text face at lead size so it
+ * reads as the top of the article rather than as a caption above it.
+ */
+.pf-article__deck {
+  font-size: var(--fs-lead);
+  line-height: 1.55;
+  color: var(--ink-soft);
+  margin-bottom: var(--sp-5);
+  text-wrap: pretty;
+}
+
+.pf-article__byline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  padding-block: var(--sp-3);
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+}
+
+.pf-article__author {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.pf-article__dateline {
+  color: var(--ink-muted);
+}
+
+.pf-article__cover {
+  margin: var(--sp-5) 0 0;
+}
+
+.pf-article__cover img {
+  width: 100%;
+  background: var(--paper-sunk);
+  border: 1px solid var(--rule);
+}
+
+/*
+ * The body. `.prose` already sets the measure and the rhythm; this adds the two
+ * things a blog post does that a token feature does not — an opening paragraph
+ * set a size larger, in the way a print feature drops into its first line, and
+ * links that carry the section's accent instead of the site's hairline grey.
+ */
+.pf-prose {
+  margin-top: var(--sp-6);
+}
+
+.pf-prose > p:first-of-type {
+  font-size: 1.1em;
+  line-height: 1.65;
+  color: var(--ink);
+}
+
+.pf-prose a {
+  text-decoration-color: var(--pf-accent);
+  text-decoration-thickness: 1.5px;
+}
+
+.pf-prose blockquote {
+  border-left-color: var(--pf-accent);
+  border-left-width: 3px;
+  font-style: normal;
+  font-size: 1.05em;
+}
+
+/* --- What to read after it ------------------------------------------------ */
+
+.pf-next {
+  margin-top: var(--sp-8);
+}
+
+.pf-next__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-4);
+}
+
+@media (min-width: 44rem) {
+  .pf-next__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-5);
+  }
+}
+
+.pf-next__item {
+  border-top: 2px solid var(--ink);
+  padding-top: var(--sp-3);
+  color: inherit;
+  text-decoration: none;
+}
+
+.pf-next__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-h3);
+  line-height: 1.25;
+  margin-top: var(--sp-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pf-article__foot {
+  margin-top: var(--sp-7);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
+  line-height: 1.6;
   color: var(--ink-muted);
 }

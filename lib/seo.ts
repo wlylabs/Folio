@@ -4,7 +4,13 @@ import { articleExcerpt } from "./sanitize";
 import { shortAddress, type Token } from "./types";
 // Type-only: this module is imported by the article agent, and a value import
 // here would drag the Supabase client into it for nothing.
-import type { Post, PostSource } from "./posts";
+import type { Post, PostCard, PostSource } from "./posts";
+import {
+  POSTFOLIO_DESCRIPTION,
+  POSTFOLIO_NAME,
+  POSTFOLIO_PATH,
+  postfolioPath,
+} from "./postfolio";
 
 /**
  * One place for the strings and shapes that end up in <head>.
@@ -89,14 +95,15 @@ export function tokenDescription(
 }
 
 /**
- * Only http(s) URLs are allowed through to og:image.
+ * Only http(s) URLs are allowed through to og:image — and, in Postfolio, to
+ * the `src` of a rendered cover.
  *
  * avatar_url arrives from a table anyone holding the public anon key may
  * insert into, and the insert policy does not constrain it. A relative or
  * `javascript:` value would at best resolve to nonsense against metadataBase
  * and at worst throw during metadata resolution, taking the page with it.
  */
-function isHttpUrl(value: string | null | undefined): value is string {
+export function isHttpUrl(value: string | null | undefined): value is string {
   if (!value) return false;
   try {
     const { protocol } = new URL(value);
@@ -276,7 +283,7 @@ export function postJsonLd(
   post: Post,
   sources: PostSource[] = []
 ): Record<string, unknown> {
-  const url = absoluteUrl(`/read/${post.slug}`);
+  const url = absoluteUrl(postfolioPath(post.slug));
   const image = socialImage(post.cover_url, post.title);
   const published = toIsoDate(post.created_at);
 
@@ -306,6 +313,38 @@ export function postJsonLd(
             ...(source.publisher
               ? { publisher: { "@type": "Organization", name: source.publisher } }
               : {}),
+          })),
+        }
+      : {}),
+  };
+}
+
+/**
+ * schema.org/Blog for the Postfolio index.
+ *
+ * The launchpad's front page is a WebSite and this is a Blog, which is the
+ * distinction the two views are built on: one is the publication, the other is
+ * the part of it that is only writing. `blogPost` lists what is on the page and
+ * nothing more — every headline in it is one a reader can see without
+ * scrolling past the feed.
+ */
+export function blogJsonLd(posts: PostCard[]): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Blog",
+    name: `${POSTFOLIO_NAME} — ${SITE_NAME}`,
+    url: absoluteUrl(POSTFOLIO_PATH),
+    description: POSTFOLIO_DESCRIPTION,
+    publisher: PUBLISHER,
+    inLanguage: "en",
+    ...(posts.length
+      ? {
+          blogPost: posts.map((post) => ({
+            "@type": "BlogPosting",
+            headline: post.title.slice(0, 110),
+            description: post.excerpt,
+            url: absoluteUrl(postfolioPath(post.slug)),
+            ...(toIsoDate(post.created_at) ? { datePublished: toIsoDate(post.created_at) } : {}),
           })),
         }
       : {}),
