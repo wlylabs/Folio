@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {console2} from "forge-std/console2.sol";
-import {BaseSepoliaScript} from "./BaseSepoliaScript.sol";
+import {FolioScript} from "./FolioScript.sol";
 import {FolioFactory} from "../src/FolioFactory.sol";
 import {FolioToken} from "../src/FolioToken.sol";
 import {TradeProbe} from "./TradeProbe.sol";
@@ -41,16 +41,16 @@ import {TradeProbe} from "./TradeProbe.sol";
  * cannot sell either. That is the cost of containment, and it is why
  * {Unpause} exists.
  */
-contract Pause is BaseSepoliaScript {
+contract Pause is FolioScript {
     /// @notice `DEPLOYER_PRIVATE_KEY` is not the factory owner.
     error NotFactoryOwner(address owner, address caller);
 
-    function run() external onlyBaseSepolia {
+    function run() external onlySupportedNetwork {
         FolioFactory factory = loadFactory();
         address owner = factory.owner();
         address caller = deployer();
 
-        header("Emergency pause - Base Sepolia");
+        header(string.concat("Emergency pause - ", networkName()));
         console2.log("  Factory        : %s", vm.toString(address(factory)));
         console2.log("  Factory owner  : %s", vm.toString(owner));
         console2.log("  Your wallet    : %s", vm.toString(caller));
@@ -75,14 +75,14 @@ contract Pause is BaseSepoliaScript {
 
         header("Paused");
         console2.log("  factory.paused() : %s", factory.paused() ? "true" : "false");
-        console2.log("  Basescan         : %s", addressLink(address(factory)));
+        console2.log("  Explorer         : %s", addressLink(address(factory)));
 
         _verifyTradingHalted();
 
         header("Next");
         console2.log("  Release it with:");
         console2.log("    forge script contracts/script/Unpause.s.sol:Unpause \\");
-        console2.log("      --rpc-url base-sepolia --broadcast -vvv");
+        console2.log("      --rpc-url %s --broadcast -vvv", networkSlug());
         console2.log("");
     }
 

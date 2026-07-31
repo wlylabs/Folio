@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {console2} from "forge-std/console2.sol";
-import {BaseSepoliaScript} from "./BaseSepoliaScript.sol";
+import {FolioScript} from "./FolioScript.sol";
 import {FolioToken} from "../src/FolioToken.sol";
 
 /**
@@ -15,8 +15,8 @@ import {FolioToken} from "../src/FolioToken.sol";
  *   --rpc-url base-sepolia --broadcast -vvv
  * ```
  *
- * Acts on `FOLIO_TOKEN` if set, otherwise on the `lastToken` from
- * `deployments/base-sepolia.json`.
+ * Acts on `FOLIO_TOKEN` if set, otherwise on the `lastToken` recorded for
+ * whichever network `--rpc-url` selected — `deployments/<network>.json`.
  *
  * ## Slippage
  *
@@ -29,7 +29,7 @@ import {FolioToken} from "../src/FolioToken.sol";
  * The token figure printed is the caller's measured balance delta, so it
  * reflects what actually settled rather than what the quote predicted.
  */
-contract Buy is BaseSepoliaScript {
+contract Buy is FolioScript {
     /// @dev Snapshot taken before the trade, so the report can show deltas.
     ///      Grouped into a struct because `run` otherwise runs out of stack.
     struct Before {
@@ -38,11 +38,11 @@ contract Buy is BaseSepoliaScript {
         uint256 eth;
     }
 
-    function run() external onlyBaseSepolia {
+    function run() external onlySupportedNetwork {
         FolioToken token = loadToken();
         uint256 ethIn = vm.envOr("BUY_ETH", uint256(0.01 ether));
 
-        header("Buy - Base Sepolia");
+        header(string.concat("Buy - ", networkName()));
         console2.log("  Token   : %s (%s)", token.symbol(), vm.toString(address(token)));
         console2.log("  Buyer   : %s", vm.toString(deployer()));
         console2.log("  Sending : %s ETH", formatEth(ethIn));

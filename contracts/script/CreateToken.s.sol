@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {console2} from "forge-std/console2.sol";
-import {BaseSepoliaScript} from "./BaseSepoliaScript.sol";
+import {FolioScript} from "./FolioScript.sol";
 import {FolioFactory} from "../src/FolioFactory.sol";
 import {FolioToken} from "../src/FolioToken.sol";
 
@@ -27,8 +27,8 @@ import {FolioToken} from "../src/FolioToken.sol";
  * parsed out of logs, which is what makes it exact even when several launches
  * land in the same block.
  */
-contract CreateToken is BaseSepoliaScript {
-    function run() external onlyBaseSepolia returns (FolioToken token) {
+contract CreateToken is FolioScript {
+    function run() external onlySupportedNetwork returns (FolioToken token) {
         FolioFactory factory = loadFactory();
 
         string memory name = vm.envOr("TOKEN_NAME", string("Folio Testnet Launch"));
@@ -36,7 +36,7 @@ contract CreateToken is BaseSepoliaScript {
         uint256 supply = vm.envOr("TOKEN_SUPPLY", uint256(1_000_000));
         uint256 cap = vm.envOr("TOKEN_MAX_RESERVE_CAP", uint256(0));
 
-        header("Create launch - Base Sepolia");
+        header(string.concat("Create launch - ", networkName()));
         console2.log("  Factory      : %s", vm.toString(address(factory)));
         console2.log("  Name         : %s", name);
         console2.log("  Symbol       : %s", symbol);
@@ -72,14 +72,14 @@ contract CreateToken is BaseSepoliaScript {
         console2.log("  Graduates at    : %s ETH", formatEth(token.graduationThreshold()));
         console2.log("");
         console2.log("  Registered by factory : %s", factory.isFolioToken(created) ? "yes" : "NO");
-        console2.log("  Basescan              : %s", addressLink(created));
+        console2.log("  Explorer              : %s", addressLink(created));
 
         _recordLastToken(created);
 
         header("Next");
         console2.log("  Buy into it:");
         console2.log("    BUY_ETH=0.01ether forge script contracts/script/Buy.s.sol:Buy \\");
-        console2.log("      --rpc-url base-sepolia --broadcast -vvv");
+        console2.log("      --rpc-url %s --broadcast -vvv", networkSlug());
         console2.log("");
     }
 
@@ -92,12 +92,12 @@ contract CreateToken is BaseSepoliaScript {
      *      so a failed write costs nothing but a manual `FOLIO_TOKEN=`.
      */
     function _recordLastToken(address token) private {
-        if (!vm.exists(DEPLOYMENTS_PATH)) {
+        if (!vm.exists(deploymentsPath())) {
             console2.log("  No deployment record to update.");
             console2.log("  Pass FOLIO_TOKEN=%s to the next script.", vm.toString(token));
             return;
         }
-        vm.writeJson(vm.toString(token), DEPLOYMENTS_PATH, ".lastToken");
-        console2.log("  Recorded as lastToken in %s", DEPLOYMENTS_PATH);
+        vm.writeJson(vm.toString(token), deploymentsPath(), ".lastToken");
+        console2.log("  Recorded as lastToken in %s", deploymentsPath());
     }
 }

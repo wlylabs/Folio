@@ -13,9 +13,16 @@ fs_permissions = [{ access = "read-write", path = "./deployments" }]
 solc_version = "0.8.26"
 optimizer = true
 optimizer_runs = 200
-# Paris, not Cancun: no PUSH0, no transient storage, no MCOPY. The contracts have
-# to run unmodified on Robinhood Chain, whose EVM revision isn't known yet, and
-# nothing here needs a post-Merge opcode.
+# Paris, not Cancun: no PUSH0, no transient storage, no MCOPY. Both target
+# chains almost certainly accept Shanghai and Cancun opcodes — Robinhood Chain
+# is Arbitrum Orbit, and Arbitrum has had PUSH0 since ArbOS 11 and TSTORE/MCOPY
+# since ArbOS 20 — but "almost certainly" is doing real work in that sentence
+# and paris makes it unnecessary. What it costs was measured, not assumed:
+# building at cancun instead saves ~63k gas on the one-off factory deploy
+# (2,835,297 -> 2,772,093, 2.2%) and under 0.4% on every trade — 22,896 -> 22,819
+# on a warm buy, 20,923 -> 20,847 on a partial sale. That is not worth a
+# revision assumption on a chain we have not deployed to yet. Revisit once a
+# deploy has actually landed and the explorer confirms what the chain runs.
 evm_version = "paris"
 remappings = [
   "forge-std/=contracts/lib/forge-std/src/",
@@ -44,19 +51,44 @@ runs = 2_000
 depth = 256
 fail_on_revert = true
 
-# Base Sepolia and nothing else. There is deliberately no mainnet alias in this
-# file — not for Base, not for Ethereum — so `--rpc-url base-sepolia` is the only
-# named network that resolves. The scripts enforce the same rule at runtime by
-# reverting on any chain id other than 84532, so a hand-typed `--rpc-url` cannot
-# route a deploy somewhere real either.
+# Two testnets and nothing else.
+#
+#   base-sepolia       84532   where the live factory is
+#   robinhood-testnet  46630   Robinhood Chain Testnet, the port target
+#
+# Both are chains whose ETH is free, which is the whole reason they are the two
+# that resolve. There is deliberately no mainnet alias in this file — not for
+# Base, not for Robinhood, not for Ethereum — so nothing here names a network
+# where a mistake costs money. The scripts enforce the same rule at runtime:
+# `FolioScript.onlySupportedNetwork` reverts on any chain id without a
+# `NetworkProfile`, so a hand-typed `--rpc-url` cannot route a deploy somewhere
+# real either. Adding a chain means adding it in both places.
+#
+# The alias names match the `deployments/<alias>.json` stems, so `--rpc-url
+# robinhood-testnet` and `deployments/robinhood-testnet.json` cannot drift.
 [rpc_endpoints]
 base-sepolia = "${BASE_SEPOLIA_RPC_URL}"
+robinhood-testnet = "${ROBINHOOD_TESTNET_RPC_URL}"
 
-# `chain = 84532` pins verification to Base Sepolia on Etherscan's v2 API, which
-# is what Basescan now serves. One key covers every v2 chain, so the key itself
-# is not what keeps this on testnet — the chain id is.
+# Verification. The two chains do not use the same kind of explorer, so they do
+# not verify the same way.
+#
+# `chain = 84532` pins Base Sepolia to Etherscan's v2 API, which is what
+# Basescan now serves. One key covers every v2 chain, so the key itself is not
+# what keeps this on testnet — the chain id is.
+#
+# Robinhood Chain's explorer is Blockscout, which is not on Etherscan's v2 API
+# at all: it serves an Etherscan-compatible endpoint at its own `/api`, and the
+# `url` below is what points Foundry there instead. Blockscout does not require
+# an API key for verification, so `BLOCKSCOUT_API_KEY` is normally empty and
+# exists only because Foundry wants the field.
+#
+# This table sets *where* to verify, not *how*. Foundry's default verifier is
+# still Etherscan, so a Robinhood deploy needs `--verifier blockscout` on the
+# command line as well — see DEPLOYMENT.md for the full command.
 [etherscan]
 base-sepolia = { key = "${BASESCAN_API_KEY}", chain = 84532 }
+robinhood-testnet = { key = "${BLOCKSCOUT_API_KEY}", chain = 46630, url = "https://explorer.testnet.chain.robinhood.com/api/" }
 
 [fmt]
 line_length = 100

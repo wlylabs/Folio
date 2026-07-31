@@ -8,23 +8,34 @@ import {FolioFactory} from "../src/FolioFactory.sol";
 import {FolioToken} from "../src/FolioToken.sol";
 
 /**
- * @title BaseSepoliaScript
+ * @title FolioScript
  * @notice Shared ground for every script in this directory: the network guard,
  *         the human confirmation gate, the deployment registry, and the
  *         formatting helpers that make CLI output readable.
  *
  * ## The network guard is the important part
  *
- * Every script here inherits {onlyBaseSepolia}, which reverts unless
- * `block.chainid` is 84532. That check runs inside the EVM, during the local
- * simulation `forge script` always performs first, so a wrong `--rpc-url`
- * fails before a single transaction is signed — let alone broadcast. It is
- * deliberately not a warning: a testnet script pointed at a chain where the
- * addresses hold real money should not be one confirmation away from running.
+ * Every script here inherits {onlySupportedNetwork}, which reverts unless
+ * `block.chainid` is one of the two testnets in {_profile} — 84532 (Base
+ * Sepolia) or 46630 (Robinhood Chain Testnet). That check runs inside the EVM,
+ * during the local simulation `forge script` always performs first, so a wrong
+ * `--rpc-url` fails before a single transaction is signed — let alone
+ * broadcast. It is deliberately not a warning: a testnet script pointed at a
+ * chain where the addresses hold real money should not be one confirmation
+ * away from running.
  *
- * `foundry.toml` reinforces this by naming no mainnet RPC alias at all, but the
- * alias list only covers `--rpc-url base-sepolia`; this guard also covers a URL
- * someone pasted by hand.
+ * The guard is an allowlist, not a denylist. Adding a chain means adding a
+ * {NetworkProfile} for it and nothing else; a chain id with no profile — every
+ * mainnet included — reverts with {WrongNetwork}. `foundry.toml` reinforces
+ * this by naming no mainnet RPC alias at all, but the alias list only covers
+ * `--rpc-url <alias>`; this guard also covers a URL someone pasted by hand.
+ *
+ * ## Everything chain-shaped lives in one place
+ *
+ * The deployment record, the explorer, the banner label and the RPC alias all
+ * differ between the two networks, so they are read from {_profile} rather
+ * than being constants. That is what lets one `DeployFactory` serve both
+ * chains: there is no per-chain script, only a per-chain row.
  *
  * ## Confirmation
  *
@@ -39,21 +50,38 @@ import {FolioToken} from "../src/FolioToken.sol";
  * variable, never from a literal in any file here. `.env` is already gitignored
  * and `.env.example` carries the placeholder.
  */
-abstract contract BaseSepoliaScript is Script {
+abstract contract FolioScript is Script {
     using stdJson for string;
 
-    /// @notice Base Sepolia. The only chain any script in this directory runs on.
+    /// @notice Base Sepolia. The chain the factory at
+    ///         `deployments/base-sepolia.json` lives on.
     uint256 internal constant BASE_SEPOLIA = 84532;
 
-    /// @notice Where the deploy script records what it deployed, and where every
-    ///         other script reads the factory address back from.
-    string internal constant DEPLOYMENTS_PATH = "./deployments/base-sepolia.json";
+    /// @notice Robinhood Chain Testnet — an Arbitrum Orbit L2, EVM-equivalent
+    ///         for everything these contracts do.
+    uint256 internal constant ROBINHOOD_TESTNET = 46630;
 
-    /// @notice Basescan for Base Sepolia. Used only to build clickable links.
-    string internal constant EXPLORER = "https://sepolia.basescan.org";
+    /**
+     * @notice Everything about a network that a script needs to know.
+     * @param name    What the confirmation banner calls it.
+     * @param slug    Doubles as the `foundry.toml` RPC alias and as the
+     *                `deployments/<slug>.json` stem, so the two can never drift
+     *                apart.
+     * @param explorer Explorer origin, no trailing slash. Used only for links.
+     * @param blockscout Whether `explorer` is a Blockscout instance. Blockscout
+     *                and Etherscan agree on `/address/<addr>` and disagree
+     *                about everything else, which is what {tokenLink} needs it
+     *                for.
+     */
+    struct NetworkProfile {
+        string name;
+        string slug;
+        string explorer;
+        bool blockscout;
+    }
 
-    /// @notice The script was pointed at a chain that is not Base Sepolia.
-    error WrongNetwork(uint256 expected, uint256 actual);
+    /// @notice The script was pointed at a chain with no {NetworkProfile}.
+    error WrongNetwork(uint256 actual);
     /// @notice The operator answered the confirmation prompt with something
     ///         other than `yes`.
     error Aborted();
@@ -61,15 +89,74 @@ abstract contract BaseSepoliaScript is Script {
     error NoDeployment();
 
     /**
-     * @dev Refuses to run anywhere but Base Sepolia.
+     * @dev Refuses to run on any chain without a {NetworkProfile}.
      *
      *      Placed on `run()` in every script rather than checked once in a
      *      constructor, because a script's constructor runs before `--rpc-url`
      *      is applied and would therefore see the wrong chain id.
      */
-    modifier onlyBaseSepolia() {
-        if (block.chainid != BASE_SEPOLIA) revert WrongNetwork(BASE_SEPOLIA, block.chainid);
+    modifier onlySupportedNetwork() {
+        _profile(); // Reverts with WrongNetwork if the chain id is not allowed.
         _;
+    }
+
+    // -----------------------------------------------------------------------
+    // Networks
+    // -----------------------------------------------------------------------
+
+    /**
+     * @dev The profile for the chain the script is running against.
+     *
+     *      Two testnets, and deliberately no third. Base Sepolia is where the
+     *      live factory is; Robinhood Chain Testnet is the port. Both are
+     *      testnets whose ETH is free, which is the property that makes an
+     *      accidental run there survivable — and the reason no mainnet, Base's
+     *      or Robinhood's, gets a row here.
+     */
+    function _profile() internal view returns (NetworkProfile memory) {
+        if (block.chainid == BASE_SEPOLIA) {
+            return NetworkProfile({
+                name: "Base Sepolia (testnet)",
+                slug: "base-sepolia",
+                explorer: "https://sepolia.basescan.org",
+                blockscout: false
+            });
+        }
+        if (block.chainid == ROBINHOOD_TESTNET) {
+            return NetworkProfile({
+                name: "Robinhood Chain Testnet",
+                slug: "robinhood-testnet",
+                // Blockscout, not an Etherscan deployment — which is also why
+                // `--verify` needs `--verifier blockscout`. See DEPLOYMENT.md.
+                explorer: "https://explorer.testnet.chain.robinhood.com",
+                blockscout: true
+            });
+        }
+        revert WrongNetwork(block.chainid);
+    }
+
+    /// @dev The name the banner prints, e.g. `Base Sepolia (testnet)`.
+    function networkName() internal view returns (string memory) {
+        return _profile().name;
+    }
+
+    /// @dev The `--rpc-url` alias for this chain, for printed next steps.
+    function networkSlug() internal view returns (string memory) {
+        return _profile().slug;
+    }
+
+    /**
+     * @dev Where the deploy script records what it deployed, and where every
+     *      other script reads the factory address back from.
+     *
+     *      One file per chain, named after the slug. A deploy to Robinhood
+     *      therefore cannot overwrite the Base Sepolia record, and pointing a
+     *      trading script at the wrong chain finds no factory rather than the
+     *      wrong one. `foundry.toml` grants read-write on `./deployments`, so
+     *      every path this returns is already permitted.
+     */
+    function deploymentsPath() internal view returns (string memory) {
+        return string.concat("./deployments/", _profile().slug, ".json");
     }
 
     // -----------------------------------------------------------------------
@@ -86,7 +173,7 @@ abstract contract BaseSepoliaScript is Script {
         console2.log(
             unicode"─────────────────────────────────────────────────────"
         );
-        console2.log("  Network      : Base Sepolia (testnet)");
+        console2.log("  Network      : %s", networkName());
         console2.log("  Chain ID     : %s", vm.toString(block.chainid));
         console2.log("  Deployer     : %s", vm.toString(deployer()));
         console2.log("  Balance      : %s ETH", formatEth(deployer().balance));
@@ -135,8 +222,9 @@ abstract contract BaseSepoliaScript is Script {
      *      scripts pointed at the same contract by construction.
      */
     function loadFactory() internal view returns (FolioFactory) {
-        if (!vm.exists(DEPLOYMENTS_PATH)) revert NoDeployment();
-        string memory json = vm.readFile(DEPLOYMENTS_PATH);
+        string memory path = deploymentsPath();
+        if (!vm.exists(path)) revert NoDeployment();
+        string memory json = vm.readFile(path);
         return FolioFactory(json.readAddress(".factory"));
     }
 
@@ -164,8 +252,9 @@ abstract contract BaseSepoliaScript is Script {
         address fromEnv = vm.envOr("FOLIO_TOKEN", address(0));
         if (fromEnv != address(0)) return (FolioToken(fromEnv), true);
 
-        if (!vm.exists(DEPLOYMENTS_PATH)) return (FolioToken(address(0)), false);
-        string memory json = vm.readFile(DEPLOYMENTS_PATH);
+        string memory path = deploymentsPath();
+        if (!vm.exists(path)) return (FolioToken(address(0)), false);
+        string memory json = vm.readFile(path);
         if (!json.keyExists(".lastToken")) return (FolioToken(address(0)), false);
 
         address last = json.readAddress(".lastToken");
@@ -249,14 +338,27 @@ abstract contract BaseSepoliaScript is Script {
     // Links
     // -----------------------------------------------------------------------
 
-    /// @dev A Basescan address link for `who`.
-    function addressLink(address who) internal pure returns (string memory) {
-        return string.concat(EXPLORER, "/address/", vm.toString(who));
+    /// @dev An explorer address link for `who`. Both explorers use this path.
+    function addressLink(address who) internal view returns (string memory) {
+        return string.concat(_profile().explorer, "/address/", vm.toString(who));
     }
 
-    /// @dev A Basescan token-holdings link for `holder` on `token`.
-    function tokenLink(address token, address holder) internal pure returns (string memory) {
-        return string.concat(EXPLORER, "/token/", vm.toString(token), "?a=", vm.toString(holder));
+    /**
+     * @dev A link to `holder`'s balance of `token`.
+     *
+     *      The two explorers disagree here. Etherscan puts a holder's balance
+     *      on the token page behind `?a=`; Blockscout has no such view, and
+     *      shows a holder's balances on the address page's token tab instead.
+     *      Same destination, two routes — so this picks by profile rather than
+     *      emitting one URL that 404s on half the deployments.
+     */
+    function tokenLink(address token, address holder) internal view returns (string memory) {
+        NetworkProfile memory net = _profile();
+        if (net.blockscout) {
+            return string.concat(net.explorer, "/address/", vm.toString(holder), "?tab=tokens");
+        }
+        return
+            string.concat(net.explorer, "/token/", vm.toString(token), "?a=", vm.toString(holder));
     }
 
     /// @dev The rule for every script's output: one blank line, a titled bar.
