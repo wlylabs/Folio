@@ -225,7 +225,34 @@ abstract contract FolioScript is Script {
         string memory path = deploymentsPath();
         if (!vm.exists(path)) revert NoDeployment();
         string memory json = vm.readFile(path);
-        return FolioFactory(json.readAddress(".factory"));
+        address factory = recordedAddress(json, ".factory");
+        if (factory == address(0)) revert NoDeployment();
+        return FolioFactory(factory);
+    }
+
+    /**
+     * @dev An address field out of a deployment record, or the zero address
+     *      when the record does not carry one yet.
+     *
+     *      A record is committed for a chain before anything is deployed to it,
+     *      with every address field an empty string — that is what makes the
+     *      file's shape reviewable in a diff before the first deploy. Empty is
+     *      therefore a normal state, not a corrupt one, but `readAddress` does
+     *      not see it that way: it hands `""` to the address parser and the
+     *      script dies with a parser error, several layers below anything that
+     *      could explain itself. Reading the field as the string it is and
+     *      converting only a non-empty one keeps "nothing recorded yet" a value
+     *      the callers above can act on.
+     */
+    function recordedAddress(string memory json, string memory key)
+        internal
+        view
+        returns (address)
+    {
+        if (!json.keyExists(key)) return address(0);
+        string memory raw = json.readString(key);
+        if (bytes(raw).length == 0) return address(0);
+        return vm.parseAddress(raw);
     }
 
     /**
@@ -255,9 +282,8 @@ abstract contract FolioScript is Script {
         string memory path = deploymentsPath();
         if (!vm.exists(path)) return (FolioToken(address(0)), false);
         string memory json = vm.readFile(path);
-        if (!json.keyExists(".lastToken")) return (FolioToken(address(0)), false);
 
-        address last = json.readAddress(".lastToken");
+        address last = recordedAddress(json, ".lastToken");
         if (last == address(0)) return (FolioToken(address(0)), false);
         return (FolioToken(last), true);
     }

@@ -2,7 +2,6 @@
 pragma solidity 0.8.26;
 
 import {console2} from "forge-std/console2.sol";
-import {stdJson} from "forge-std/StdJson.sol";
 import {FolioScript} from "./FolioScript.sol";
 import {FolioFactory} from "../src/FolioFactory.sol";
 import {CurveConfig} from "../src/types/CurveConfig.sol";
@@ -47,8 +46,6 @@ import {CurveConfig} from "../src/types/CurveConfig.sol";
  * afterwards for future launches without redeploying.
  */
 contract DeployFactory is FolioScript {
-    using stdJson for string;
-
     function run() external onlySupportedNetwork returns (FolioFactory factory) {
         CurveConfig memory config = _configFromEnv();
         address owner = vm.envOr("FACTORY_OWNER", deployer());
@@ -61,11 +58,17 @@ contract DeployFactory is FolioScript {
         console2.log("  feeBps                 : %s", formatBps(config.feeBps));
         console2.log("  priceMoveAlertBps      : %s", formatBps(config.priceMoveAlertBps));
 
+        // Only when a factory was actually recorded. Every chain gets its
+        // record committed before its first deploy, with the addresses left
+        // empty, so "the file exists" and "there is an address to lose" are
+        // different questions — and it is the second one this warning answers.
         if (vm.exists(deploymentsPath())) {
-            string memory existing = vm.readFile(deploymentsPath());
-            console2.log("");
-            console2.log("  NOTE: a deployment record already exists and will be overwritten:");
-            console2.log("        %s", vm.toString(existing.readAddress(".factory")));
+            address recorded = recordedAddress(vm.readFile(deploymentsPath()), ".factory");
+            if (recorded != address(0)) {
+                console2.log("");
+                console2.log("  NOTE: a deployment record already exists and will be overwritten:");
+                console2.log("        %s", vm.toString(recorded));
+            }
         }
 
         confirm(string.concat("deploy a new FolioFactory to ", networkName()));
