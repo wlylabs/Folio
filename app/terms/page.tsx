@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import LegalDocumentPage from "@/components/LegalDocument";
 import { loadLegalDocument } from "@/lib/legal";
+import { socialMetadata } from "@/lib/seo";
 
 // Prerendered at build time: the document comes off disk, and a static page is
 // what a crawler (and a reader on a bad connection) should get.
@@ -13,13 +14,12 @@ export const metadata: Metadata = {
   title: doc.metaTitle,
   description: doc.metaDescription,
   alternates: { canonical: "/terms" },
-  openGraph: {
+  ...socialMetadata({
     title: doc.metaTitle,
     description: doc.metaDescription,
-    url: "/terms",
-    type: "article",
-    modifiedTime: doc.lastUpdated ?? undefined,
-  },
+    path: "/terms",
+    article: { modifiedTime: doc.lastUpdated ?? undefined },
+  }),
 };
 
 export default function TermsPage() {

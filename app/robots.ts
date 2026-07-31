@@ -1,6 +1,16 @@
 import type { MetadataRoute } from "next";
 import { siteUrl } from "@/lib/siteUrl";
 
+/**
+ * Everything public is crawlable — the front page, every listing, the launch
+ * form and the legal pages. That is the point: a Folio listing is an article,
+ * and an article that crawlers cannot reach is one nobody finds.
+ *
+ * /profile is not disallowed here on purpose. It is a wallet's own desk and
+ * should not be indexed, but it carries links out to listings that should be,
+ * so it is marked `noindex, follow` in app/profile/layout.tsx instead — a
+ * robots.txt block would stop a crawler reading those links at all.
+ */
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
@@ -10,5 +20,6 @@ export default function robots(): MetadataRoute.Robots {
       disallow: "/api/",
     },
     sitemap: `${siteUrl()}/sitemap.xml`,
+    host: siteUrl(),
   };
 }

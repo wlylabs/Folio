@@ -1,21 +1,89 @@
 import type { MetadataRoute } from "next";
 import { siteUrl } from "@/lib/siteUrl";
+import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { tokenPath } from "@/lib/seo";
 
 /**
- * The static routes, for crawlers. Token pages are deliberately absent: they
- * are database-driven and change constantly, and listing them means a Supabase
- * query on every sitemap fetch. Worth adding when the feed is worth indexing;
- * the legal pages are worth indexing now.
+ * Every public URL on the site, including one per published listing.
+ *
+ * Regenerated hourly rather than per request. Listing the tokens means a
+ * Supabase query, and a sitemap is fetched by crawlers on their own schedule —
+ * a bot that pulls it every few minutes must not turn into a query every few
+ * minutes. An hour is well inside how fast a search engine acts on a new URL
+ * anyway, and a new listing is linked from the front page immediately
+ * regardless of when it lands here.
  */
-export default function sitemap(): MetadataRoute.Sitemap {
-  const base = siteUrl();
-  const now = new Date();
+export const revalidate = 3600;
 
-  return [
-    { url: `${base}/`, lastModified: now, changeFrequency: "daily", priority: 1 },
-    { url: `${base}/create`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
-    { url: `${base}/about`, lastModified: now, changeFrequency: "monthly", priority: 0.5 },
-    { url: `${base}/terms`, lastModified: now, changeFrequency: "yearly", priority: 0.3 },
-    { url: `${base}/privacy`, lastModified: now, changeFrequency: "yearly", priority: 0.3 },
+/**
+ * The protocol's ceiling is 50,000 URLs per sitemap file. This sits well under
+ * it; passing that number means splitting into a sitemap index, which is a
+ * different shape and worth doing deliberately rather than by accident.
+ */
+const MAX_TOKEN_URLS = 5_000;
+
+type TokenRow = { contract_address: string; created_at: string };
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const base = siteUrl();
+  const tokens = await getPublishedTokens();
+
+  // The front page is a feed, so it is as fresh as its newest listing.
+  const frontPageModified = parseDate(tokens[0]?.created_at) ?? new Date();
+  const buildTime = new Date();
+
+  const statics: MetadataRoute.Sitemap = [
+    { url: `${base}/`, lastModified: frontPageModified, changeFrequency: "daily", priority: 1 },
+    { url: `${base}/create`, lastModified: buildTime, changeFrequency: "monthly", priority: 0.6 },
+    { url: `${base}/about`, lastModified: buildTime, changeFrequency: "monthly", priority: 0.5 },
+    { url: `${base}/terms`, lastModified: buildTime, changeFrequency: "yearly", priority: 0.3 },
+    { url: `${base}/privacy`, lastModified: buildTime, changeFrequency: "yearly", priority: 0.3 },
   ];
+
+  const listings: MetadataRoute.Sitemap = tokens.map((token) => ({
+    url: `${base}${tokenPath(token)}`,
+    // created_at is the real lastModified, not an approximation of one: the RLS
+    // policy on `tokens` allows insert and select but neither update nor
+    // delete, so a published article is never edited after the fact.
+    lastModified: parseDate(token.created_at) ?? buildTime,
+    // The article does not change; the curve figures beside it do, with every
+    // trade on the page.
+    changeFrequency: "daily",
+    priority: 0.8,
+  }));
+
+  return [...statics, ...listings];
+}
+
+/**
+ * The published listings, newest first.
+ *
+ * Delisted launches need no filtering here — a delisting deletes the row and
+ * leaves a tombstone in `delisted_tokens`, so a removed article is already
+ * absent from this query.
+ *
+ * A failure returns nothing rather than throwing. A sitemap that is missing its
+ * token URLs for an hour is a small loss; one that returns a 500 tells Search
+ * Console the whole file is broken.
+ */
+async function getPublishedTokens(): Promise<TokenRow[]> {
+  if (!isSupabaseConfigured) return [];
+
+  const { data, error } = await supabase
+    .from("tokens")
+    .select("contract_address, created_at")
+    .order("created_at", { ascending: false })
+    .limit(MAX_TOKEN_URLS);
+
+  if (error) {
+    console.error("Failed to list tokens for the sitemap:", error);
+    return [];
+  }
+  return (data as TokenRow[]) ?? [];
+}
+
+function parseDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import LegalDocumentPage from "@/components/LegalDocument";
 import { loadLegalDocument } from "@/lib/legal";
+import { socialMetadata } from "@/lib/seo";
 
 // See app/terms/page.tsx — same reasoning.
 export const dynamic = "force-static";
@@ -11,13 +12,12 @@ export const metadata: Metadata = {
   title: doc.metaTitle,
   description: doc.metaDescription,
   alternates: { canonical: "/privacy" },
-  openGraph: {
+  ...socialMetadata({
     title: doc.metaTitle,
     description: doc.metaDescription,
-    url: "/privacy",
-    type: "article",
-    modifiedTime: doc.lastUpdated ?? undefined,
-  },
+    path: "/privacy",
+    article: { modifiedTime: doc.lastUpdated ?? undefined },
+  }),
 };
 
 export default function PrivacyPage() {

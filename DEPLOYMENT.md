@@ -639,6 +639,7 @@ None are required. All five are optional and documented in `.env.example`:
 
 | Variable | Why you'd set it |
 | --- | --- |
+| `NEXT_PUBLIC_SITE_URL` | The public origin. Set it on the production deploy — canonical URLs, `sitemap.xml` and every `og:image` are built from it, and the `VERCEL_URL` fallback changes on every deploy. |
 | `NEXT_PUBLIC_FACTORY_ADDRESS` | Point a preview build at a different factory without editing the repo. Overrides the JSON. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Let the indexer write as the service role. Server-only — it bypasses row level security. |
 | `INDEXER_SECRET` | Require `Authorization: Bearer <secret>` on `/api/indexer`. Set it on anything public. |
@@ -670,6 +671,53 @@ On Vercel, the same endpoint fits a cron:
 Hobby projects are capped at one cron run a day; a Pro project can run it every
 few minutes. Either way, pages themselves never scan the chain for the feed —
 they read the table.
+
+---
+
+## 8. Search indexing
+
+A Folio listing is an article, which is the one thing this launchpad has that a
+chart with a buy button does not: substantive text a search engine can index.
+The plumbing for that is already in the app, but two of the pieces only work on
+a real domain.
+
+### Before the first production deploy
+
+- [ ] **Set `NEXT_PUBLIC_SITE_URL`** to the real origin, with no trailing slash.
+      Without it the app falls back to `VERCEL_URL`, which changes on every
+      deploy — so canonical URLs point at a host that will not exist next week,
+      and `sitemap.xml` advertises the same. This is the single setting that
+      matters most here.
+- [ ] Fetch `/robots.txt` and confirm the `Sitemap:` line names that origin.
+- [ ] Fetch `/sitemap.xml` and confirm published listings appear in it. It is
+      regenerated hourly (`revalidate` in `app/sitemap.ts`), so a launch made in
+      the last few minutes may not be in it yet — it is linked from the front
+      page either way.
+- [ ] Open `view-source:` on a listing and confirm the article text is in the
+      HTML, not fetched afterwards. Token pages are server components and this
+      should never regress; if it ever does, nothing else in this section
+      matters, because a crawler reads what the server sent.
+- [ ] Paste a listing URL into <https://cards-dev.twitter.com/validator> and
+      into a Telegram chat, and confirm the preview card renders. Both read the
+      same `og:` tags.
+- [ ] Run a listing through <https://search.google.com/test/rich-results> and
+      confirm the `Article` block is detected with no errors.
+
+### Then
+
+Register the domain in Google Search Console and submit `/sitemap.xml` once.
+Nothing needs resubmitting after that — new listings enter the sitemap on their
+own within the hour.
+
+### Where each piece lives
+
+| Piece | File |
+| --- | --- |
+| Titles, descriptions, Open Graph, Twitter cards | `lib/seo.ts`, spread into each route's `metadata` |
+| `Article` and `WebSite` structured data | `lib/seo.ts` → `components/JsonLd.tsx` |
+| The share card used when a token has no avatar | `app/og.png/route.tsx` (prerendered at build) |
+| `sitemap.xml` | `app/sitemap.ts` |
+| `robots.txt` | `app/robots.ts` |
 
 ---
 
