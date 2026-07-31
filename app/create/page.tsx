@@ -122,9 +122,12 @@ export default function CreatePage() {
   const [stage, setStage] = useState<Stage>("idle");
   const [txHash, setTxHash] = useState<string | null>(null);
 
+  // Starts empty on purpose. Prefilled body text has to be selected and deleted
+  // before you can write, and whatever survives that gets published; the prompt
+  // belongs in a placeholder that disappears on its own.
   const editor = useEditor({
     extensions: [StarterKit],
-    content: "<p>Tell the story behind your token...</p>",
+    content: "",
     // Required in the App Router: rendering the editor during SSR causes a
     // hydration mismatch.
     immediatelyRender: false,
@@ -281,7 +284,9 @@ export default function CreatePage() {
         starting_price: openingPriceEth(wholeSupply, curve),
         creator_wallet: address.toLowerCase(),
         article_title: form.articleTitle.trim(),
-        article_body: editor?.getHTML() || "",
+        // An untouched editor still serialises to "<p></p>"; store nothing
+        // rather than an empty paragraph.
+        article_body: editor && !editor.isEmpty ? editor.getHTML() : "",
         avatar_url: avatarUrl,
         deploy_tx: hash,
       });
@@ -475,7 +480,10 @@ export default function CreatePage() {
           </Field>
 
           <Field label="Article body" hint="This is what readers see on the listing" wide>
-            <div className="editor">
+            <div
+              className={`editor${editor?.isEmpty ? " editor--empty" : ""}`}
+              data-placeholder="Tell the story behind your token..."
+            >
               <EditorContent editor={editor} />
             </div>
           </Field>
