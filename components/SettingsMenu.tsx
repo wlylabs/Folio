@@ -7,6 +7,7 @@ import { useAccount } from "wagmi";
 import WalletButton from "@/components/WalletButton";
 import CurrencySelector from "@/components/CurrencySelector";
 import { DEFAULT_CHAIN_SLUG, chainLabel } from "@/lib/chains";
+import { FACTORY_DEPLOYMENTS } from "@/lib/contracts/deployment";
 import { hasWalletConnectProjectId } from "@/lib/wagmiConfig";
 import { CONSENT_EVENT, readConsent, writeConsent, type ConsentChoice } from "@/lib/consent";
 import { CONTACT_EMAIL } from "@/lib/contact";
@@ -137,7 +138,10 @@ export default function SettingsMenu() {
               <a href={`mailto:${CONTACT_EMAIL}`}>Contact</a>
             </nav>
             <p className="settings__meta">
-              Testnet edition · {chainLabel(DEFAULT_CHAIN_SLUG)}
+              Testnet edition ·{" "}
+              {FACTORY_DEPLOYMENTS.length > 1
+                ? FACTORY_DEPLOYMENTS.map((d) => chainLabel(d.chain)).join(" · ")
+                : chainLabel(FACTORY_DEPLOYMENTS[0]?.chain ?? DEFAULT_CHAIN_SLUG)}
             </p>
           </section>
         </div>

@@ -13,8 +13,15 @@ import { FaucetLinks, FaucetNotice } from "@/components/Faucet";
 import { useGasBalance } from "@/components/useGasBalance";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { FOLIO_FACTORY_ABI } from "@/lib/contracts/folioFactory";
-import { FACTORY_DEPLOYMENT, openingPriceEth } from "@/lib/contracts/deployment";
-import { chainBySlug, explorerTxUrl } from "@/lib/chains";
+import {
+  FACTORY_DEPLOYMENT,
+  FACTORY_DEPLOYMENTS,
+  deploymentFor,
+  hasMultipleLaunchChains,
+  openingPriceEth,
+  type CurveConfig,
+} from "@/lib/contracts/deployment";
+import { DEFAULT_CHAIN_SLUG, chainBySlug, explorerTxUrl } from "@/lib/chains";
 import { classifyTxError } from "@/lib/txErrors";
 import { ensureWalletReady } from "@/lib/walletReady";
 import { formatBps, formatEth } from "@/lib/types";
@@ -49,9 +56,14 @@ type FormState = {
 
 type Errors = Partial<Record<keyof FormState | "avatar" | "form", string>>;
 
-function validate(form: FormState, avatar: File | null): Errors {
+/**
+ * @param config the curve terms of the chain being launched on. Passed in
+ *        rather than read from a module constant: the caps differ per factory,
+ *        and validating a Robinhood launch against Base Sepolia's ceiling would
+ *        reject a legal supply or accept an illegal one.
+ */
+function validate(form: FormState, avatar: File | null, config: CurveConfig | undefined): Errors {
   const errors: Errors = {};
-  const config = FACTORY_DEPLOYMENT?.defaultConfig;
 
   const name = form.name.trim();
   if (!name) errors.name = "Give your token a name.";
@@ -125,6 +137,13 @@ export default function CreatePage() {
   const [stage, setStage] = useState<Stage>("idle");
   const [txHash, setTxHash] = useState<string | null>(null);
 
+  // Which chain this launch lands on. Every factory is a separate deployment
+  // with its own address, its own curve terms and its own faucet, so this is
+  // not a display preference — it decides what gets signed.
+  const [chainSlug, setChainSlug] = useState<string>(
+    FACTORY_DEPLOYMENT?.chain ?? DEFAULT_CHAIN_SLUG
+  );
+
   // Starts empty on purpose. Prefilled body text has to be selected and deleted
   // before you can write, and whatever survives that gets published; the prompt
   // belongs in a placeholder that disappears on its own.
@@ -137,9 +156,12 @@ export default function CreatePage() {
   });
 
   const busy = stage !== "idle";
-  const deployment = FACTORY_DEPLOYMENT;
+  const deployment = deploymentFor(chainSlug);
   const chainEntry = chainBySlug(deployment?.chain ?? "");
   const curve = deployment?.defaultConfig;
+  // For the copy and the faucet links, which have something to say even before
+  // a chain is picked or when none has a factory.
+  const faucetChain = deployment?.chain ?? DEFAULT_CHAIN_SLUG;
 
   // Launching costs gas, and a wallet that has never touched this testnet has
   // none. Read the balance up front so the form can point at a faucet instead
@@ -185,7 +207,9 @@ export default function CreatePage() {
     }
     if (!deployment || !curve) {
       setErrors({
-        form: "No factory is configured. Deploy one with contracts/script/DeployFactory.s.sol and commit deployments/base-sepolia.json.",
+        form: `No factory is configured on ${
+          chainBySlug(chainSlug)?.chain.name ?? chainSlug
+        }. Deploy one with contracts/script/DeployFactory.s.sol and commit the deployments/${chainSlug}.json it writes.`,
       });
       return;
     }
@@ -200,7 +224,7 @@ export default function CreatePage() {
       return;
     }
 
-    const found = validate(form, avatar);
+    const found = validate(form, avatar, curve);
     if (Object.keys(found).length > 0) {
       setErrors(found);
       return;
@@ -332,20 +356,62 @@ export default function CreatePage() {
           Launch a token
         </h1>
         <p style={{ color: "var(--ink-soft)", maxWidth: "var(--measure)" }}>
-          Creates a token on the Folio factory on {chainEntry?.chain.name ?? "Base Sepolia"}. You
-          pay only gas — the whole supply starts on a bonding curve, so anyone can buy from it or
-          sell back to it at a price the curve sets, and you earn{" "}
+          Creates a token on the Folio factory on{" "}
+          {chainEntry?.chain.name ?? chainBySlug(DEFAULT_CHAIN_SLUG)?.chain.name ?? "a testnet"}.
+          You pay only gas — the whole supply starts on a bonding curve, so anyone can buy from it
+          or sell back to it at a price the curve sets, and you earn{" "}
           {curve ? formatBps(curve.feeBps) : "a"} fee on every trade in either direction.
         </p>
       </header>
 
-      {!deployment && (
+      {FACTORY_DEPLOYMENTS.length === 0 && (
         <div className="notice notice--alert" role="alert" style={{ marginBottom: "var(--sp-5)" }}>
           <p className="notice__title">No factory configured</p>
           <p>
             Deploy one with <code>contracts/script/DeployFactory.s.sol</code> and commit the{" "}
-            <code>deployments/base-sepolia.json</code> it writes, or set{" "}
+            <code>deployments/&lt;chain&gt;.json</code> it writes, or set{" "}
             <code>NEXT_PUBLIC_FACTORY_ADDRESS</code>.
+          </p>
+        </div>
+      )}
+
+      {/*
+        The network picker, shown only when there is a choice. A launch is
+        permanent and lives on exactly one chain: its buyers need gas there, its
+        curve terms come from that factory, and nothing later can move it. So
+        this sits above the form rather than inside it, and it names the chain
+        again on the button you press to sign.
+      */}
+      {hasMultipleLaunchChains && (
+        <div style={{ marginBottom: "var(--sp-5)" }}>
+          <span className="field__label">Launch network</span>
+          <div
+            className="chip-row"
+            role="group"
+            aria-label="Launch network"
+            style={{ marginTop: "var(--sp-2)" }}
+          >
+            {FACTORY_DEPLOYMENTS.map((option) => (
+              <button
+                key={option.chain}
+                type="button"
+                className="chip"
+                aria-pressed={option.chain === chainSlug}
+                disabled={busy}
+                onClick={() => {
+                  setChainSlug(option.chain);
+                  // The old chain's caps produced these, so they no longer
+                  // describe anything. Re-validating happens on submit.
+                  setErrors({});
+                }}
+              >
+                {chainBySlug(option.chain)?.chain.name ?? option.chain}
+              </button>
+            ))}
+          </div>
+          <p className="field__hint" style={{ marginTop: "var(--sp-2)" }}>
+            Each network has its own factory, its own curve terms and its own faucet. A token
+            launched here cannot be moved to another one.
           </p>
         </div>
       )}
@@ -387,7 +453,7 @@ export default function CreatePage() {
       {isConnected && noGas && (
         <div style={{ marginTop: "var(--sp-4)" }}>
           <FaucetNotice
-            chain={deployment?.chain ?? "base-sepolia"}
+            chain={faucetChain}
             heading={`No ${chainEntry?.chain.nativeCurrency.symbol ?? "test ETH"} to pay gas with`}
             onRecheck={() => void refetchBalance()}
             checking={checkingGas}
@@ -567,9 +633,9 @@ export default function CreatePage() {
             {txHash && (
               <>
                 {" "}
-                {explorerTxUrl(deployment?.chain ?? "base-sepolia", txHash) ? (
+                {explorerTxUrl(faucetChain, txHash) ? (
                   <a
-                    href={explorerTxUrl(deployment?.chain ?? "base-sepolia", txHash) as string}
+                    href={explorerTxUrl(faucetChain, txHash) as string}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -590,11 +656,16 @@ export default function CreatePage() {
             disabled={!isConnected || busy || !deployment}
             className="btn btn--primary btn--block"
           >
-            {busy ? "Working..." : "Publish & launch"}
+            {busy
+              ? "Working..."
+              : hasMultipleLaunchChains && chainEntry
+                ? `Publish & launch on ${chainEntry.chain.name}`
+                : "Publish & launch"}
           </button>
 
           <p className="field__hint" style={{ marginTop: "var(--sp-3)" }}>
-            Need test ETH? <FaucetLinks chain={deployment?.chain ?? "base-sepolia"} />
+            Need test ETH on {chainEntry?.chain.name ?? "this network"}?{" "}
+            <FaucetLinks chain={faucetChain} />
           </p>
         </div>
       </div>

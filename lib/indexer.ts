@@ -1,10 +1,20 @@
 import { formatUnits, parseAbiItem } from "viem";
 import { publicClientFor } from "@/lib/chains";
-import { FACTORY_DEPLOYMENT, openingPriceEth } from "@/lib/contracts/deployment";
+import {
+  FACTORY_DEPLOYMENTS,
+  deploymentFor,
+  openingPriceEth,
+  type FactoryDeployment,
+} from "@/lib/contracts/deployment";
 import { serverSupabase } from "@/lib/supabaseAdmin";
 
 /**
- * Backfills the listings table from the factory's `TokenCreated` log.
+ * Backfills the listings table from every factory's `TokenCreated` log.
+ *
+ * One scan per configured chain, each with its own cursor: a launch on
+ * Robinhood Chain and a launch on Base Sepolia are two logs on two networks,
+ * and a run that only ever read one of them would leave the other's listings
+ * invisible forever.
  *
  * The chain is where launches actually happen. The create page writes its own
  * row the moment it sees the event, which covers the common case, but it is not
@@ -40,7 +50,10 @@ const TOKEN_CREATED = parseAbiItem(
  */
 const CHUNK = 9_000;
 
-export type IndexResult = {
+/** What one chain's scan did. */
+export type ChainIndexResult = {
+  /** The chain slug, i.e. which `deployments/<slug>.json` this came from. */
+  chain: string;
   /** Launches seen in the log over the scanned range. */
   found: number;
   /** Rows written, i.e. launches that had no listing. */
@@ -52,26 +65,121 @@ export type IndexResult = {
   error?: string;
 };
 
+export type IndexResult = {
+  /** Launches seen across every chain scanned. */
+  found: number;
+  /** Rows written across every chain scanned. */
+  inserted: number;
+  /** The range scanned on the first chain. Block numbers only mean something
+   *  within one chain, so the per-chain breakdown is the real answer. Kept at
+   *  the top level because callers — scripts/watch-launches.mjs, a curl — were
+   *  reading it before there was more than one chain. */
+  fromBlock: string;
+  toBlock: string;
+  /** Every chain's failure, joined. Absent when they all succeeded. */
+  error?: string;
+  /** One entry per chain scanned, in SUPPORTED_CHAINS order. */
+  chains: ChainIndexResult[];
+};
+
 /**
- * Where the last scan stopped, per process.
+ * Where the last scan stopped, per chain, per process.
  *
- * A serverless instance starts cold with this empty and re-scans from the
+ * A serverless instance starts cold with these empty and re-scans from each
  * factory's deploy block, which is correct but not free. Setting
  * `deployedAtBlock` in the deployment record (DeployFactory.s.sol writes it) or
  * `INDEXER_FROM_BLOCK` keeps that first scan short.
+ *
+ * Keyed by chain because block numbers on different chains have nothing to do
+ * with each other — one shared cursor would have each chain skipping whatever
+ * the other had already passed.
  */
-let cursor: bigint | null = null;
-let resolvedStart: bigint | null = null;
+const cursors = new Map<string, bigint>();
+const resolvedStarts = new Map<string, bigint>();
 
-export async function syncLaunches(options: { fromBlock?: bigint } = {}): Promise<IndexResult> {
-  const deployment = FACTORY_DEPLOYMENT;
-  if (!deployment) {
-    return { found: 0, inserted: 0, fromBlock: "0", toBlock: "0", error: "No factory configured." };
+/**
+ * Scans every configured factory, or just one when `chain` names it.
+ *
+ * A chain that fails does not stop the others: each gets its own entry in
+ * `chains`, and the top-level `error` is set only so a caller that never looked
+ * at the breakdown still sees that something went wrong.
+ */
+export async function syncLaunches(
+  options: { fromBlock?: bigint; chain?: string } = {}
+): Promise<IndexResult> {
+  const targets = options.chain
+    ? [deploymentFor(options.chain)].filter((d): d is FactoryDeployment => d !== null)
+    : FACTORY_DEPLOYMENTS;
+
+  if (targets.length === 0) {
+    return {
+      found: 0,
+      inserted: 0,
+      fromBlock: "0",
+      toBlock: "0",
+      error: options.chain
+        ? `No factory configured on ${options.chain}.`
+        : "No factory configured.",
+      chains: [],
+    };
   }
 
+  // A block number belongs to one chain. Applying it to several would rescan
+  // one from the right place and the others from a height that means nothing
+  // there — silently, and looking like a successful run. Refuse instead.
+  if (options.fromBlock !== undefined && targets.length > 1) {
+    return {
+      found: 0,
+      inserted: 0,
+      fromBlock: options.fromBlock.toString(),
+      toBlock: "0",
+      error: `A start block only means something on one chain. Name one: ?chain=${targets
+        .map((t) => t.chain)
+        .join(" | ")}`,
+      chains: [],
+    };
+  }
+
+  const db = serverSupabase();
+  if (!db) {
+    return {
+      found: 0,
+      inserted: 0,
+      fromBlock: "0",
+      toBlock: "0",
+      error: "Supabase is not configured.",
+      chains: [],
+    };
+  }
+
+  const chains: ChainIndexResult[] = [];
+  for (const deployment of targets) {
+    chains.push(await syncChain(db, deployment, options.fromBlock));
+  }
+
+  const errors = chains
+    .filter((c) => c.error)
+    .map((c) => `${c.chain}: ${c.error}`);
+
+  return {
+    found: chains.reduce((sum, c) => sum + c.found, 0),
+    inserted: chains.reduce((sum, c) => sum + c.inserted, 0),
+    fromBlock: chains[0].fromBlock,
+    toBlock: chains[0].toBlock,
+    error: errors.length > 0 ? errors.join("; ") : undefined,
+    chains,
+  };
+}
+
+async function syncChain(
+  db: NonNullable<ReturnType<typeof serverSupabase>>,
+  deployment: FactoryDeployment,
+  fromBlock?: bigint
+): Promise<ChainIndexResult> {
   const client = publicClientFor(deployment.chain);
   if (!client) {
     return {
+      chain: deployment.chain,
       found: 0,
       inserted: 0,
       fromBlock: "0",
@@ -80,13 +188,25 @@ export async function syncLaunches(options: { fromBlock?: bigint } = {}): Promis
     };
   }
 
-  const db = serverSupabase();
-  if (!db) {
-    return { found: 0, inserted: 0, fromBlock: "0", toBlock: "0", error: "Supabase is not configured." };
+  // Before the scan proper, and inside its own guard: an RPC that cannot answer
+  // `eth_blockNumber` must fail this chain, not the whole run. The other chains
+  // are on other providers and have nothing to do with it.
+  let head: bigint;
+  let start: bigint;
+  try {
+    head = await client.getBlockNumber();
+    start =
+      fromBlock ?? cursors.get(deployment.chain) ?? (await resolveStartBlock(client, deployment));
+  } catch (err) {
+    return {
+      chain: deployment.chain,
+      found: 0,
+      inserted: 0,
+      fromBlock: "0",
+      toBlock: "0",
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
-
-  const head = await client.getBlockNumber();
-  const start = options.fromBlock ?? cursor ?? (await resolveStartBlock(client, deployment.factory));
 
   const launches: LaunchLog[] = [];
   let scanned = start;
@@ -124,8 +244,9 @@ export async function syncLaunches(options: { fromBlock?: bigint } = {}): Promis
     // A partial scan is still progress: whatever was found before the failure
     // gets written, and the cursor stays where it was so the next run retries
     // the range that failed.
-    const inserted = await insertMissing(db, deployment.chain, launches);
+    const inserted = await insertMissing(db, deployment.chain, launches).catch(() => 0);
     return {
+      chain: deployment.chain,
       found: launches.length,
       inserted,
       fromBlock: start.toString(),
@@ -134,17 +255,31 @@ export async function syncLaunches(options: { fromBlock?: bigint } = {}): Promis
     };
   }
 
-  const inserted = await insertMissing(db, deployment.chain, launches);
+  try {
+    const inserted = await insertMissing(db, deployment.chain, launches);
 
-  // Only advance on a clean run, and only to the head we actually reached.
-  cursor = head + 1n;
+    // Only advance on a clean run, and only to the head we actually reached.
+    cursors.set(deployment.chain, head + 1n);
 
-  return {
-    found: launches.length,
-    inserted,
-    fromBlock: start.toString(),
-    toBlock: head.toString(),
-  };
+    return {
+      chain: deployment.chain,
+      found: launches.length,
+      inserted,
+      fromBlock: start.toString(),
+      toBlock: head.toString(),
+    };
+  } catch (err) {
+    // A write failure leaves the cursor alone, so the next run re-reads this
+    // range and tries the insert again.
+    return {
+      chain: deployment.chain,
+      found: launches.length,
+      inserted: 0,
+      fromBlock: start.toString(),
+      toBlock: head.toString(),
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 type LaunchArgs = {
@@ -270,19 +405,26 @@ async function readDelisted(
  */
 async function resolveStartBlock(
   client: NonNullable<ReturnType<typeof publicClientFor>>,
-  factory: `0x${string}`
+  deployment: FactoryDeployment
 ): Promise<bigint> {
-  if (resolvedStart !== null) return resolvedStart;
+  const cached = resolvedStarts.get(deployment.chain);
+  if (cached !== undefined) return cached;
 
-  const configured = process.env.INDEXER_FROM_BLOCK
-    ? BigInt(process.env.INDEXER_FROM_BLOCK)
-    : FACTORY_DEPLOYMENT?.deployedAtBlock ?? 0n;
+  // INDEXER_FROM_BLOCK is one number for every chain, so it only makes sense
+  // when one chain is configured. With more than one it is ignored in favour of
+  // each record's own deploy block — a block height from another chain is not a
+  // hint, it is a wrong answer that looks like a right one.
+  const configured =
+    process.env.INDEXER_FROM_BLOCK && FACTORY_DEPLOYMENTS.length === 1
+      ? BigInt(process.env.INDEXER_FROM_BLOCK)
+      : deployment.deployedAtBlock;
 
   if (configured > 0n) {
-    resolvedStart = configured;
+    resolvedStarts.set(deployment.chain, configured);
     return configured;
   }
 
+  const factory = deployment.factory;
   let low = 0n;
   let high = await client.getBlockNumber();
 
@@ -291,7 +433,7 @@ async function resolveStartBlock(
   // scanning from zero would be a long way to discover that.
   const atHead = await client.getCode({ address: factory, blockNumber: high });
   if (!atHead || atHead === "0x") {
-    resolvedStart = high;
+    resolvedStarts.set(deployment.chain, high);
     return high;
   }
 
@@ -302,7 +444,7 @@ async function resolveStartBlock(
     else low = mid;
   }
 
-  resolvedStart = high;
+  resolvedStarts.set(deployment.chain, high);
   return high;
 }
 

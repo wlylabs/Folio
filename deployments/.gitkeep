@@ -1,3 +1,9 @@
-`base-sepolia.json` is written here by DeployFactory.s.sol on the first deploy,
-and updated by CreateToken.s.sol with the most recent launch. Commit it once it
-exists, so the frontend and the interaction scripts read the same address.
+One record per chain, named after the `--rpc-url` alias: `base-sepolia.json`,
+`robinhood-testnet.json`. DeployFactory.s.sol writes the one for the chain it
+ran on and CreateToken.s.sol updates it with the most recent launch. Commit it
+once it exists, so the frontend and the interaction scripts read the same
+address.
+
+A record with an empty `factory` is a placeholder for a chain nothing has been
+deployed to yet: `lib/contracts/deployment.ts` reads it as "no factory here"
+and the site drops that chain from the launch picker. Deploying fills it in.

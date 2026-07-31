@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { chainLabel, DEFAULT_CHAIN_SLUG, explorerAddressUrl } from "@/lib/chains";
-import { FACTORY_DEPLOYMENT } from "@/lib/contracts/deployment";
+import { chainLabel, explorerAddressUrl } from "@/lib/chains";
+import { FACTORY_DEPLOYMENTS } from "@/lib/contracts/deployment";
 import { CONTACT_EMAIL } from "@/lib/contact";
 import { formatBps, shortAddress } from "@/lib/types";
 import { socialMetadata } from "@/lib/seo";
@@ -27,10 +27,7 @@ export const metadata: Metadata = {
 };
 
 export default function AboutPage() {
-  const deployment = FACTORY_DEPLOYMENT;
-  const factoryUrl = deployment
-    ? explorerAddressUrl(deployment.chain, deployment.factory)
-    : null;
+  const deployments = FACTORY_DEPLOYMENTS;
 
   return (
     <main id="main" className="shell shell--measure page">
@@ -98,39 +95,56 @@ export default function AboutPage() {
           </p>
         </div>
 
+        {/*
+          One block per chain with a factory. Folio runs the same contracts on
+          more than one network, and a reader who wants to check the factory
+          their token came from needs the address for *their* chain — a single
+          "this deployment" row would name whichever one happened to be the
+          default and quietly mislead everyone else.
+        */}
         <div className="factbox" style={{ marginTop: "var(--sp-7)" }}>
           <div className="factbox__head">
-            <span>This deployment</span>
+            <span>{deployments.length > 1 ? "Deployments" : "This deployment"}</span>
           </div>
 
-          <div className="factbox__row">
-            <span>Network</span>
-            <span>{chainLabel(deployment?.chain ?? DEFAULT_CHAIN_SLUG)}</span>
-          </div>
-
-          <div className="factbox__row">
-            <span>Factory</span>
-            <span className="mono">
-              {!deployment ? (
-                "Not configured"
-              ) : factoryUrl ? (
-                <a href={factoryUrl} target="_blank" rel="noopener noreferrer">
-                  {shortAddress(deployment.factory)}
-                </a>
-              ) : (
-                shortAddress(deployment.factory)
-              )}
-            </span>
-          </div>
-
-          {deployment && (
+          {deployments.length === 0 && (
             <div className="factbox__row">
-              <span>Creator fee</span>
-              <span className="nums">
-                {formatBps(deployment.defaultConfig.feeBps)} per leg
-              </span>
+              <span>Factory</span>
+              <span className="mono">Not configured</span>
             </div>
           )}
+
+          {deployments.map((deployment) => {
+            const factoryUrl = explorerAddressUrl(deployment.chain, deployment.factory);
+            return (
+              <div key={deployment.chain}>
+                <div className="factbox__row">
+                  <span>Network</span>
+                  <span>{chainLabel(deployment.chain)}</span>
+                </div>
+
+                <div className="factbox__row">
+                  <span>Factory</span>
+                  <span className="mono">
+                    {factoryUrl ? (
+                      <a href={factoryUrl} target="_blank" rel="noopener noreferrer">
+                        {shortAddress(deployment.factory)}
+                      </a>
+                    ) : (
+                      shortAddress(deployment.factory)
+                    )}
+                  </span>
+                </div>
+
+                <div className="factbox__row">
+                  <span>Creator fee</span>
+                  <span className="nums">
+                    {formatBps(deployment.defaultConfig.feeBps)} per leg
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <p style={{ marginTop: "var(--sp-6)" }}>

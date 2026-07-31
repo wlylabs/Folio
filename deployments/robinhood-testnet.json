@@ -1,0 +1,19 @@
+{
+  "network": "robinhood-testnet",
+  "chainId": 46630,
+  "factory": "",
+  "implementation": "",
+  "owner": "",
+  "deployer": "",
+  "deployedAtBlock": 0,
+  "deployedAtTimestamp": 0,
+  "explorer": "https://explorer.testnet.chain.robinhood.com",
+  "lastToken": "",
+  "defaultConfig": {
+    "virtualEthReserve": "2000000000000000000",
+    "maxReserveCap": "5000000000000000000",
+    "graduationThreshold": "4000000000000000000",
+    "feeBps": 100,
+    "priceMoveAlertBps": 10000
+  }
+}

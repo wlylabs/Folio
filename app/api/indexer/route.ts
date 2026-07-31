@@ -8,9 +8,11 @@ export const runtime = "nodejs";
 /**
  * The launch indexer, as an endpoint.
  *
- * `GET /api/indexer` scans the factory's `TokenCreated` log and writes a listing
- * for anything the table is missing. It is idempotent, so it is safe to call on
- * a schedule, from a deploy hook, or by hand.
+ * `GET /api/indexer` scans every configured factory's `TokenCreated` log — one
+ * per chain — and writes a listing for anything the table is missing. It is
+ * idempotent, so it is safe to call on a schedule, from a deploy hook, or by
+ * hand. The response carries a per-chain breakdown under `chains`; a chain
+ * whose RPC is down reports itself there without stopping the others.
  *
  * Wire it to whichever of these you have:
  *
@@ -30,7 +32,9 @@ export const runtime = "nodejs";
  * makes dozens of RPC calls is a free way to burn someone else's rate limit.
  *
  * `?from=<block>` forces a rescan from a given block, for when a row was deleted
- * by hand and needs to come back.
+ * by hand and needs to come back. `?chain=<slug>` limits the run to one chain —
+ * which is what makes `from` usable with more than one configured, since a
+ * block number only means anything on the chain it came from.
  */
 export async function GET(request: Request) {
   const secret = process.env.INDEXER_SECRET;
@@ -41,12 +45,15 @@ export async function GET(request: Request) {
     }
   }
 
-  const from = new URL(request.url).searchParams.get("from");
+  const params = new URL(request.url).searchParams;
+  const from = params.get("from");
+  const chain = params.get("chain");
 
   try {
-    const result = await syncLaunches(
-      from && /^\d+$/.test(from) ? { fromBlock: BigInt(from) } : {}
-    );
+    const result = await syncLaunches({
+      ...(from && /^\d+$/.test(from) ? { fromBlock: BigInt(from) } : {}),
+      ...(chain ? { chain } : {}),
+    });
 
     return NextResponse.json(
       { ...result, serviceRole: hasServiceRole },
