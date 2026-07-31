@@ -50,7 +50,10 @@ third-party request does happen before the reader has answered the banner.
    ```
 4. Fill `.env.local` (see `.env.example` for every variable):
    - Supabase: create a free project at supabase.com → Project Settings → API → copy URL + anon key
-   - WalletConnect: create a free project at cloud.walletconnect.com → copy Project ID
+   - WalletConnect: create a free project at cloud.walletconnect.com → copy Project ID.
+     Required for phone wallets — they reach the site over WalletConnect's relay,
+     which rejects an unknown project ID. Without it the settings panel says so,
+     and only browser-extension wallets can connect.
 5. Run `lib/schema.sql` in Supabase's SQL editor. It creates the `tokens` table,
    the avatar storage bucket, and the row-level security policies.
 6. `npm run dev` → Codespaces gives you a forwarded URL to preview in browser.
