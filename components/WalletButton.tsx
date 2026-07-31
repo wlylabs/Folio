@@ -1,7 +1,10 @@
 "use client";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useEffect, useState } from "react";
+import { useAccount } from "wagmi";
 import { shortAddress } from "@/lib/types";
+import { hasStoredWalletConnectSession } from "@/lib/walletSession";
 
 type Variant = "menu" | "block";
 
@@ -26,6 +29,8 @@ export default function WalletButton({
   variant?: Variant;
   onOpenModal?: () => void;
 }) {
+  const pending = useHandoffPending();
+
   return (
     <ConnectButton.Custom>
       {({ account, chain, openAccountModal, openChainModal, openConnectModal, mounted }) => {
@@ -48,13 +53,20 @@ export default function WalletButton({
           <div className="wallet-mount" aria-hidden={!ready}>
             {(() => {
               if (!connected) {
+                // A wallet the page is still picking up gets the busy
+                // treatment rather than a Connect button that lies about the
+                // state — see useHandoffPending. It stays pressable, because a
+                // handoff that never lands has to be escapable without a
+                // reload.
                 return (
                   <button
                     type="button"
                     onClick={open(openConnectModal)}
                     className="btn btn--block btn--outline"
+                    data-busy={pending ? "true" : undefined}
+                    aria-busy={pending || undefined}
                   >
-                    Connect wallet
+                    {pending ? "Connecting…" : "Connect wallet"}
                   </button>
                 );
               }
@@ -117,4 +129,39 @@ export default function WalletButton({
       }}
     </ConnectButton.Custom>
   );
+}
+
+/**
+ * Is a connection being picked up right now, with nothing on screen to show for
+ * it yet?
+ *
+ * The case this exists for is the walk back from a phone wallet. The approval
+ * happened in another app, so wagmi has no connection of its own to replay —
+ * only a WalletConnect session sitting in storage, which WalletSessionSync is
+ * in the middle of adopting. Between the two, `account` is empty and the honest
+ * label is not "Connect wallet": the reader just connected, and being asked to
+ * do it again reads as a site that lost their approval.
+ *
+ * Two conditions, and both matter:
+ *
+ *  - "connecting" is always the reader's own press, so it always counts.
+ *  - "reconnecting" is the status every page load starts in, including for
+ *    somebody who has never owned a wallet. Showing them a spinning Connecting…
+ *    on arrival would be a lie in the other direction, so it only counts when
+ *    there is a stored session behind it.
+ *
+ * The storage read is deferred to an effect: it cannot run during SSR, and a
+ * first client render that disagreed with the server's markup would be a
+ * hydration mismatch. It re-runs on each status change, which is when a session
+ * appears.
+ */
+function useHandoffPending(): boolean {
+  const { status } = useAccount();
+  const [stored, setStored] = useState(false);
+
+  useEffect(() => {
+    setStored(hasStoredWalletConnectSession());
+  }, [status]);
+
+  return status === "connecting" || (status === "reconnecting" && stored);
 }

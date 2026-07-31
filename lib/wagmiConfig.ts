@@ -1,6 +1,7 @@
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { http, type Chain, type Transport } from "viem";
 import { SUPPORTED_CHAINS } from "./chains";
+import { walletConnectMetadata } from "./walletMetadata";
 
 const PLACEHOLDER_PROJECT_ID = "00000000000000000000000000000000";
 
@@ -54,11 +55,21 @@ const transports = Object.fromEntries(
 
 export const wagmiConfig = getDefaultConfig({
   appName: "Folio",
+  // Coinbase Wallet's own connector shows this rather than reading the
+  // WalletConnect metadata below, so it is set in both places.
+  appIcon: walletConnectMetadata.icons[0],
   projectId: projectId || PLACEHOLDER_PROJECT_ID,
   chains,
   transports,
   ssr: true,
   walletConnectParameters: {
+    // RainbowKit builds metadata of its own from `appName`/`appIcon` and passes
+    // it here first, so anything set in this object replaces it wholesale. That
+    // is the point: its version has no `redirect`, which is the field that
+    // sends a phone wallet back to this page after it approves. See
+    // lib/walletMetadata.ts.
+    metadata: walletConnectMetadata,
+
     // Do not treat a session as stale just because it was opened before the
     // page knew every chain in SUPPORTED_CHAINS.
     //
