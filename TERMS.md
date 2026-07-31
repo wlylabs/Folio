@@ -66,7 +66,11 @@ We may update these Terms of Service from time to time. Changes will be communic
 
 ## 8. Governing Law
 
-[TO BE DETERMINED WITH LEGAL COUNSEL — typically set based on the operator's jurisdiction of domicile]
+These Terms of Service are governed by and construed in accordance with the laws of the Republic of Indonesia, without regard to conflict of law principles.
+
+Any dispute arising out of or in connection with these Terms or the use of the Platform shall first be pursued in good faith through negotiation between the parties. Any dispute not resolved that way shall be submitted to the competent courts of the Republic of Indonesia.
+
+Nothing in this section deprives a User of the protection of mandatory consumer or data protection provisions that apply to them under the law of their own country of residence.
 
 ## 9. Contact
 
