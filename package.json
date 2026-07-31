@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "compile:contracts": "node scripts/compile-contracts.mjs",
     "watch:launches": "node scripts/watch-launches.mjs",
+    "token:list": "node scripts/delete-token.mjs --list",
+    "token:delete": "node scripts/delete-token.mjs",
     "test": "node contracts/test/folioSale.test.mjs",
     "forge:build": "forge build",
     "forge:test": "forge test",

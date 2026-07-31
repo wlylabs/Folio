@@ -819,6 +819,20 @@ p {
   margin-top: var(--sp-3);
 }
 
+/*
+ * One sentence saying what the site is, under the tagline. The tagline is a
+ * slogan and a slogan explains nothing; a reader who has never seen this before
+ * needs the mechanism in plain words before the first card.
+ */
+.masthead__lede {
+  max-width: var(--measure);
+  margin: var(--sp-4) auto 0;
+  font-size: var(--fs-lead);
+  line-height: 1.6;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
 .masthead__actions {
   display: flex;
   flex-wrap: wrap;
@@ -954,6 +968,67 @@ p {
   padding: var(--sp-7) var(--sp-5);
   text-align: center;
   border: 1px dashed var(--rule-strong);
+  color: var(--ink-soft);
+}
+
+/*
+ * The sections under the feed: how a launch works, the curve terms, the
+ * caveats. They are not conditional on the feed being empty — an edition with
+ * one listing needs the explanation as much as an edition with none — so they
+ * sit in the normal flow, separated by a full section of space.
+ */
+.pitch {
+  margin-top: var(--sp-8);
+}
+
+.pitch__note {
+  max-width: var(--measure);
+  margin-top: var(--sp-4);
+  font-size: var(--fs-small);
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 48rem) {
+  .steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-6);
+  }
+}
+
+.step {
+  border-top: 2px solid var(--ink);
+  padding-top: var(--sp-3);
+}
+
+.step__num {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--ink-muted);
+  margin-bottom: var(--sp-2);
+}
+
+.step__title {
+  font-size: var(--fs-h3);
+  line-height: 1.25;
+  margin-bottom: var(--sp-2);
+}
+
+.step__body {
+  font-size: var(--fs-small);
+  line-height: 1.65;
   color: var(--ink-soft);
 }
 
