@@ -1,10 +1,47 @@
-import { createPublicClient, http, type PublicClient } from "viem";
+import { createPublicClient, defineChain, http, type PublicClient } from "viem";
 import { baseSepolia, sepolia } from "viem/chains";
+
+/**
+ * Robinhood Chain Testnet — an Arbitrum Orbit L2, EVM-equivalent, ETH for gas.
+ *
+ * Defined here rather than imported from `viem/chains`, which does not ship it.
+ * The values match `contracts/script/FolioScript.sol`'s NetworkProfile for
+ * 46630, and DEPLOYMENT.md section 4 is where they came from.
+ *
+ * No `contracts.multicall3` entry: whether Multicall3 sits at the canonical
+ * address here has not been confirmed on chain, and claiming it would send
+ * every read down a path the RPC may reject. `lib/tokenStats.ts` falls back to
+ * individual reads when a multicall is refused, so the only cost of leaving
+ * this out is one round trip per read on a chain that does support it — which
+ * is the right way round for a fact we haven't verified.
+ *
+ * Some chain registries list the public RPC with a trailing `/rpc`. If reads
+ * here fail, set NEXT_PUBLIC_RPC_ROBINHOOD_TESTNET to that form; the same note
+ * is in .env.example for the Foundry side.
+ */
+export const robinhoodTestnet = defineChain({
+  id: 46630,
+  name: "Robinhood Chain Testnet",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: { default: { http: ["https://rpc.testnet.chain.robinhood.com"] } },
+  blockExplorers: {
+    default: {
+      name: "Blockscout",
+      url: "https://explorer.testnet.chain.robinhood.com",
+      apiUrl: "https://explorer.testnet.chain.robinhood.com/api",
+    },
+  },
+  testnet: true,
+});
 
 /**
  * The chains Folio supports. `slug` is what gets stored in tokens.chain, so a
  * token page can reconnect to the network it was actually deployed on instead
  * of assuming one.
+ *
+ * A chain being here means the app can *read* it and a wallet can be asked to
+ * switch to it. Whether you can *launch* on it is a separate question, answered
+ * by `deployments/<slug>.json` — see lib/contracts/deployment.ts.
  */
 export const SUPPORTED_CHAINS = [
   {
@@ -28,6 +65,20 @@ export const SUPPORTED_CHAINS = [
       },
       { label: "Alchemy faucet", url: "https://www.alchemy.com/faucets/ethereum-sepolia" },
       { label: "PoW faucet", url: "https://sepolia-faucet.pk910.de" },
+    ],
+  },
+  {
+    slug: "robinhood-testnet",
+    chain: robinhoodTestnet,
+    rpcEnv: process.env.NEXT_PUBLIC_RPC_ROBINHOOD_TESTNET,
+    // One faucet, where Base Sepolia has three. That is worth knowing rather
+    // than discovering: on this chain a faucet outage is a site outage, since
+    // nobody can pay for gas without it.
+    faucets: [
+      {
+        label: "Robinhood Chain faucet",
+        url: "https://faucet.testnet.chain.robinhood.com",
+      },
     ],
   },
 ] as const;

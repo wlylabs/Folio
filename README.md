@@ -9,10 +9,16 @@ clones a `FolioToken` — an ERC20 that is also its own bonding-curve market mak
 — and the article page prices every trade off that curve live. Holders buy from
 and sell back to the curve; there is no external liquidity pool involved.
 
-The factory is deployed once per network and its address lives in
-`deployments/base-sepolia.json`, written by `contracts/script/DeployFactory.s.sol`.
-`lib/contracts/deployment.ts` is the only module that reads it, so re-deploying
-is a one-file change.
+The factory is deployed once per network, and each network's address lives in
+its own `deployments/<chain>.json`, written by
+`contracts/script/DeployFactory.s.sol`. `lib/contracts/deployment.ts` is the
+only module that reads them, so re-deploying is a one-file change and adding a
+network is one record plus an entry in `SUPPORTED_CHAINS` (`lib/chains.ts`).
+
+Folio runs on more than one testnet at a time. Every listing stores the chain it
+was launched on, so a token page reads, prices and trades against the network it
+actually lives on rather than a global default; the create form asks which
+network to launch on when more than one has a factory.
 
 Still a testnet project, and one thing is worth knowing before you rely on it:
 `creator_wallet` is a **claim, not a proof**. The browser talks to Supabase with
@@ -57,7 +63,8 @@ third-party request does happen before the reader has answered the banner.
 5. Run `lib/schema.sql` in Supabase's SQL editor. It creates the `tokens` table,
    the avatar storage bucket, and the row-level security policies.
 6. `npm run dev` → Codespaces gives you a forwarded URL to preview in browser.
-7. Get testnet ETH from a Base Sepolia faucet — deploying costs gas.
+7. Get testnet ETH from a faucet for the network you're launching on —
+   deploying costs gas. The faucet links for each chain are in `lib/chains.ts`.
 
 The app boots without `.env.local` and shows a setup notice instead of crashing,
 so you can check the UI before wiring up Supabase.
@@ -82,7 +89,7 @@ with "insufficient funds". The links live in `SUPPORTED_CHAINS` in
 1. **Validate** the form client-side (name, symbol, supply, optional reserve
    cap, headline), and check the wallet actually has gas on the target chain.
 2. **Upload** the optional avatar to Supabase Storage.
-3. **Switch** the wallet to the factory's chain, then call
+3. **Switch** the wallet to the chosen network's factory chain, then call
    `factory.createToken(name, symbol, supply, maxReserveCap)`.
 4. **Wait** for the receipt and read the new token's address out of the
    `TokenCreated` event — never computed, never assumed.
@@ -254,7 +261,7 @@ compiler — only edits to a `.sol` file do.
 - **Addresses are stored lowercased** so URL lookups are case-insensitive.
 - **The front page explains itself below the feed.** How a launch works, the
   curve terms the factory would hand the next one (read from
-  `deployments/base-sepolia.json`, never written into the copy), and what a
+  `deployments/<chain>.json`, never written into the copy), and what a
   testnet edition does and doesn't promise. Those sections are not conditional
   on the feed being empty — an edition with one listing needs them as much as an
   edition with none.

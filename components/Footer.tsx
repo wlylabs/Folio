@@ -1,13 +1,23 @@
 import Link from "next/link";
 import { DEFAULT_CHAIN_SLUG, chainBySlug } from "@/lib/chains";
+import { FACTORY_DEPLOYMENTS } from "@/lib/contracts/deployment";
 import { CONTACT_EMAIL } from "@/lib/contact";
 
 /**
  * The colophon. Small, but it answers the question a launchpad has to answer
  * before anyone signs anything — which network is this, and is the money real.
+ *
+ * With more than one network live it names the count rather than one of them:
+ * "Base Sepolia" on a page showing a Robinhood token would be a wrong answer to
+ * exactly the question this line exists to answer. The token page names its own
+ * chain, and /about lists them all.
  */
 export default function Footer() {
-  const chain = chainBySlug(DEFAULT_CHAIN_SLUG)?.chain.name ?? DEFAULT_CHAIN_SLUG;
+  const chain =
+    FACTORY_DEPLOYMENTS.length > 1
+      ? `${FACTORY_DEPLOYMENTS.length} networks`
+      : chainBySlug(FACTORY_DEPLOYMENTS[0]?.chain ?? DEFAULT_CHAIN_SLUG)?.chain.name ??
+        DEFAULT_CHAIN_SLUG;
 
   return (
     <footer

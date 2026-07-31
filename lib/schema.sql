@@ -26,7 +26,8 @@
 create table if not exists tokens (
   id uuid primary key default gen_random_uuid(),
   contract_address text unique not null,
-  chain text not null,                 -- 'base-sepolia' | 'sepolia'
+  chain text not null,                 -- a slug from SUPPORTED_CHAINS in lib/chains.ts,
+                                       -- e.g. 'base-sepolia' | 'robinhood-testnet'
   name text not null,
   symbol text not null,
   supply numeric not null,
