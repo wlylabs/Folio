@@ -655,6 +655,9 @@ export default function CreatePage() {
             onClick={handleSubmit}
             disabled={!isConnected || busy || !deployment}
             className="btn btn--primary btn--block"
+            // A launch is an upload, a deploy and a receipt; the sweep is the
+            // only sign the sequence is still running. See globals.css.
+            data-busy={busy || undefined}
           >
             {busy
               ? "Working..."

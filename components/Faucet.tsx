@@ -68,6 +68,7 @@ export function FaucetNotice({
             className="btn btn--outline btn--sm"
             onClick={onRecheck}
             disabled={checking}
+            data-busy={checking || undefined}
           >
             {checking ? "Checking..." : "Check balance again"}
           </button>

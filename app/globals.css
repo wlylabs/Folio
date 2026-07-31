@@ -70,7 +70,18 @@
   --nav-h: 3.25rem;
 
   --shadow-press: 4px 4px 0 rgba(20, 18, 14, 0.09);
+  --shadow-press-sm: 2px 2px 0 rgba(20, 18, 14, 0.09);
+
+  /*
+   * Three durations and one curve, so every control in the interface accelerates
+   * the same way. The curve leaves fast and settles slow — a press should answer
+   * immediately and come to rest without bouncing, which is what a physical key
+   * does and what a linear ease conspicuously does not.
+   */
+  --dur-fast: 90ms; /* press feedback: below this a click reads as unregistered */
   --dur: 160ms;
+  --dur-slow: 240ms; /* things entering the page rather than reacting in place */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
 
   /*
    * Fallback height of the docked trade bar. TradeBar measures itself and
@@ -87,6 +98,16 @@
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  /*
+   * The rule above collapses every animation to nothing, which for a looping
+   * one means iterating it thousands of times a second rather than stopping it.
+   * The busy sweep is the only loop in the interface, so it is stopped by hand
+   * and left drawn — the state it reports still needs reporting.
+   */
+  .btn[data-busy="true"]::after {
+    animation: none !important;
   }
 }
 
@@ -141,6 +162,39 @@ textarea {
   color: inherit;
 }
 
+/*
+ * Two defaults every touch browser gets wrong on a control this square.
+ *
+ * The tap highlight is a rounded translucent slab the OS paints over whatever
+ * you press, for roughly 300ms, in a colour and radius nothing here uses — on a
+ * hairline-and-right-angles interface it reads as a rendering fault rather than
+ * as feedback. It goes, and `:active` below replaces it with a press this
+ * design system actually owns.
+ *
+ * `touch-action: manipulation` drops the double-tap-to-zoom gesture on controls,
+ * and with it the delay the browser holds every tap in while it waits to find
+ * out whether a second one is coming.
+ */
+button,
+a,
+label,
+summary,
+[role="button"],
+[role="tab"],
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+summary,
+[role="button"],
+[role="tab"] {
+  touch-action: manipulation;
+}
+
 :focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
@@ -158,6 +212,44 @@ h3 {
 
 p {
   margin: 0;
+}
+
+/* ==========================================================================
+   Motion
+
+   Two entrances, shared by everything that arrives on the page in response to
+   something the reader pressed: a panel or a strip taking its place on an edge,
+   and a line of text appearing inside a box that is already there.
+
+   Both are short and both only ever move a few pixels. The point is not the
+   animation — it is that an element which fades in over four frames reads as
+   having arrived, where the same element switched on between two frames reads
+   as the page having skipped. The reduced-motion block above flattens both to
+   nothing for readers who ask for that.
+   ========================================================================== */
+
+/* For a surface: comes up out of the edge it belongs to. */
+@keyframes surface-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--surface-in-from, -6px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* For a line of copy: rises into place without moving anything around it. */
+@keyframes line-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* Legacy helpers, still handy for one-off spans. */
@@ -364,6 +456,7 @@ p {
    ========================================================================== */
 
 .btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -381,11 +474,21 @@ p {
   border: 1px solid transparent;
   border-radius: 0;
   cursor: pointer;
+  /* A label is a target, not a passage of text. Without this a press that
+     drifts a few pixels — which every press on a phone does — starts a
+     selection and leaves the word highlighted behind the tap. */
+  user-select: none;
+  -webkit-user-select: none;
   transition:
-    background var(--dur) ease,
-    color var(--dur) ease,
-    border-color var(--dur) ease,
-    box-shadow var(--dur) ease;
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    /* Disabling is a state change like any other: without this the button
+       snaps to 45% in a single frame at the same moment its label swaps to
+       "Confirming...", and the pair reads as a flicker. */ opacity var(--dur)
+      var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .btn:disabled,
@@ -400,18 +503,9 @@ p {
   border-color: var(--ink);
 }
 
-.btn--primary:hover:not(:disabled) {
-  box-shadow: var(--shadow-press);
-}
-
 .btn--outline {
   border-color: var(--ink);
   color: var(--ink);
-}
-
-.btn--outline:hover:not(:disabled) {
-  background: var(--ink);
-  color: var(--paper);
 }
 
 .btn--alert {
@@ -419,9 +513,106 @@ p {
   color: var(--alert);
 }
 
-.btn--alert:hover:not(:disabled) {
-  background: var(--alert);
-  color: var(--paper);
+/*
+ * Hover belongs to pointers that can hover.
+ *
+ * A touch browser has no pointer to leave, so it fakes one: it applies :hover on
+ * tap and holds it until you press something else. Ungated, that left an outline
+ * button sitting inverted — solid ink, paper text — long after the tap that
+ * "caused" it, which is exactly the stuck-looking frame this pass is here to
+ * remove. Fine pointers keep the full treatment; touch gets `:active` above and
+ * nothing that outlives the finger.
+ */
+@media (hover: hover) and (pointer: fine) {
+  .btn--primary:hover:not(:disabled):not([aria-disabled="true"]) {
+    box-shadow: var(--shadow-press);
+  }
+
+  .btn--outline:hover:not(:disabled):not([aria-disabled="true"]) {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  .btn--alert:hover:not(:disabled):not([aria-disabled="true"]) {
+    background: var(--alert);
+    color: var(--paper);
+  }
+}
+
+/*
+ * The press.
+ *
+ * Every surface in Folio that can be pressed moves the same 1px into the page
+ * and drops its shadow by half — the card in the feed already did this, and a
+ * button that stayed flat while a card sank was the more obvious inconsistency.
+ * It runs on `:active`, so it answers a touch on the way down rather than
+ * waiting for the click event, which is the whole difference between a control
+ * that feels connected and one that feels late.
+ *
+ * It has to come after the hover block, and it has to name the variants rather
+ * than relying on `.btn` alone: a mouse is by definition hovering whatever it
+ * presses, so `.btn--primary:hover` would otherwise hold the 4px shadow up
+ * through the press and the button would appear to slide sideways instead of
+ * sinking. Same specificity, later in the file, so the press wins while it
+ * lasts.
+ */
+.btn:active:not(:disabled):not([aria-disabled="true"]),
+.btn--primary:active:not(:disabled):not([aria-disabled="true"]),
+.btn--outline:active:not(:disabled):not([aria-disabled="true"]),
+.btn--alert:active:not(:disabled):not([aria-disabled="true"]) {
+  transform: translate(1px, 1px);
+  box-shadow: var(--shadow-press-sm);
+}
+
+/*
+ * Work in progress, in the print language: a rule that draws itself across the
+ * foot of the button and retracts, rather than a spinner borrowed from a
+ * material this interface is not made of.
+ *
+ * It exists because the disabled treatment alone is ambiguous — a button that
+ * says "Confirming..." at 45% opacity looks identical to one that is simply
+ * unavailable, and the whole question the user has during a wallet round trip
+ * is whether anything is still happening. Busy buttons also sit back up at 75%,
+ * because their label is the one that most needs reading.
+ */
+.btn[data-busy="true"] {
+  cursor: progress;
+}
+
+.btn[data-busy="true"]:disabled,
+.btn[data-busy="true"][aria-disabled="true"] {
+  opacity: 0.75;
+}
+
+.btn[data-busy="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: currentColor;
+  opacity: 0.4;
+  animation: btn-sweep 1.15s var(--ease) infinite;
+}
+
+@keyframes btn-sweep {
+  0% {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  50% {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  50.001% {
+    transform: scaleX(1);
+    transform-origin: right;
+  }
+  100% {
+    transform: scaleX(0);
+    transform-origin: right;
+  }
 }
 
 .btn--block {
@@ -487,6 +678,10 @@ p {
   background: var(--paper-raised);
   border: 1px solid var(--ink);
   box-shadow: var(--shadow-press);
+  /* Drops out of the button that opened it, so the two read as one gesture
+     rather than as a press followed by an unrelated panel. */
+  transform-origin: top right;
+  animation: surface-in var(--dur) var(--ease) both;
 }
 
 .settings__group {
@@ -550,6 +745,25 @@ p {
 }
 
 /*
+ * The wallet control's mount.
+ *
+ * Wallet state is client-only, so this renders empty on the server and fills in
+ * on hydration — see WalletButton. Fading rather than switching keeps that from
+ * looking like a button that failed to draw on the first paint and then
+ * corrected itself.
+ */
+.wallet-mount {
+  width: 100%;
+  transition: opacity var(--dur-slow) var(--ease);
+}
+
+.wallet-mount[aria-hidden="true"] {
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+/*
  * The connected wallet inside the panel: network over account, each row its
  * own button onto its own modal. Stacked rather than the hairline-divided pair
  * the masthead used to carry — the panel has the width to label both.
@@ -571,14 +785,22 @@ p {
   border: none;
   text-align: left;
   cursor: pointer;
-  transition: background var(--dur) ease;
+  transition: background var(--dur) var(--ease);
 }
 
 .wallet-row + .wallet-row {
   border-top: 1px solid var(--rule);
 }
 
-.wallet-row:hover {
+@media (hover: hover) and (pointer: fine) {
+  .wallet-row:hover {
+    background: var(--paper-sunk);
+  }
+}
+
+/* Each row opens a modal, and the modal takes a moment to arrive. The tint is
+   the receipt for the tap in the meantime. */
+.wallet-row:active {
   background: var(--paper-sunk);
 }
 
@@ -657,12 +879,14 @@ p {
   /* 16px: anything smaller makes iOS Safari zoom the page on focus. */
   font-size: 1rem;
   transition:
-    border-color var(--dur) ease,
-    box-shadow var(--dur) ease;
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
 }
 
-.input:hover:not(:disabled) {
-  border-color: var(--rule-strong);
+@media (hover: hover) and (pointer: fine) {
+  .input:hover:not(:disabled) {
+    border-color: var(--rule-strong);
+  }
 }
 
 .input:focus {
@@ -703,11 +927,16 @@ p {
   border-radius: 0;
   cursor: pointer;
   transition:
-    background var(--dur) ease,
-    color var(--dur) ease;
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
 }
 
 .file-input::file-selector-button:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.file-input::file-selector-button:active {
   background: var(--ink);
   color: var(--paper);
 }
@@ -1192,19 +1421,22 @@ p {
   color: inherit;
   text-decoration: none;
   transition:
-    border-color var(--dur) ease,
-    box-shadow var(--dur) ease,
-    transform var(--dur) ease;
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
-.card:hover {
-  border-color: var(--ink);
-  box-shadow: var(--shadow-press);
+@media (hover: hover) and (pointer: fine) {
+  .card:hover {
+    border-color: var(--ink);
+    box-shadow: var(--shadow-press);
+  }
 }
 
 .card:active {
+  border-color: var(--ink);
   transform: translate(1px, 1px);
-  box-shadow: 2px 2px 0 rgba(20, 18, 14, 0.09);
+  box-shadow: var(--shadow-press-sm);
 }
 
 .card__meta {
@@ -1558,6 +1790,19 @@ html[data-dock] body {
   gap: var(--sp-3);
 }
 
+/*
+ * The running commentary on a trade — sent, confirming, settled, or rejected —
+ * replaces itself two or three times in the seconds after the button is pressed.
+ * Each message fades up rather than being swapped in place, so a sequence of
+ * them reads as one thing progressing instead of as the panel flickering. The
+ * component re-keys these on the message text, which is what makes the
+ * animation run again on each new one rather than only on the first.
+ */
+.trade-dock .status,
+.trade-dock .notice {
+  animation: line-in var(--dur) var(--ease) both;
+}
+
 @media (min-width: 64rem) {
   .trade-dock {
     position: static;
@@ -1593,13 +1838,24 @@ html[data-dock] body {
   text-transform: uppercase;
   color: var(--ink-muted);
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
   transition:
-    color var(--dur) ease,
-    border-color var(--dur) ease;
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
 }
 
-.tab:hover {
+@media (hover: hover) and (pointer: fine) {
+  .tab:hover {
+    color: var(--ink);
+  }
+}
+
+/* Switching tabs is instant, so the press is what confirms which one you hit —
+   the underline arrives on the same frame either way. */
+.tab:active {
   color: var(--ink);
+  border-bottom-color: var(--rule-strong);
 }
 
 .tab[aria-selected="true"] {
@@ -1630,14 +1886,30 @@ html[data-dock] body {
   font-weight: 600;
   color: var(--ink-muted);
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
   transition:
-    color var(--dur) ease,
-    border-color var(--dur) ease;
+    color var(--dur) var(--ease),
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
-.chip:hover:not(:disabled) {
+@media (hover: hover) and (pointer: fine) {
+  .chip:hover:not(:disabled) {
+    color: var(--ink);
+    border-color: var(--ink-muted);
+  }
+}
+
+/* A chip is too small to move a pixel legibly, so it presses by taking a tint
+   instead — same intent, at a size where a translation would just read as a
+   wobble. */
+.chip:active:not(:disabled) {
+  background: var(--paper-sunk);
+  border-color: var(--ink);
   color: var(--ink);
-  border-color: var(--ink-muted);
 }
 
 .chip[aria-pressed="true"] {
@@ -1690,6 +1962,22 @@ html[data-dock] body {
   text-decoration: underline;
   text-underline-offset: 0.2em;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition:
+    color var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
+}
+
+/* "Max" fills the field beside it. The field visibly changing is the real
+   feedback; this just covers the frame before it does. */
+.link-button:active:not(:disabled) {
+  color: var(--ink-soft);
+}
+
+.link-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 /* ==========================================================================
@@ -1806,10 +2094,19 @@ html[data-dock] body {
   border-top: 1px solid var(--ink);
   box-shadow: 0 -10px 30px rgba(20, 18, 14, 0.1);
   padding-bottom: env(safe-area-inset-bottom);
+  /* It arrives a beat after the page, once the effect has read localStorage.
+     Sliding it up off the edge is what stops that beat from looking like the
+     layout jumped. */
+  --surface-in-from: 100%;
+  animation: surface-in var(--dur-slow) var(--ease) both;
 }
 
 html[data-dock] .consent {
   bottom: var(--dock-h);
+  /* The dock grows a line whenever a trade reports itself, and the banner is
+     stacked on top of it. Without this the strip teleports up by the height of
+     one status line at the exact moment the reader is watching for a result. */
+  transition: bottom var(--dur-slow) var(--ease);
 }
 
 .consent__inner {
