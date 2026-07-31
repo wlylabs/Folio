@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { FOLIO_TOKEN_ABI } from "@/lib/contracts/folioToken";
 import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
 import WalletButton from "@/components/WalletButton";
+import FiatValue from "@/components/FiatValue";
 import { FaucetLinks, FaucetNotice } from "@/components/Faucet";
 import { useDockHeight } from "@/components/useDockHeight";
 import { classifyTxError } from "@/lib/txErrors";
@@ -387,6 +388,10 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
                 onChange={setSpendEth}
                 disabled={pending || paused || curveClosed}
                 step="0.001"
+                // Straight off the field, not the quote: this is what the
+                // typed amount is worth, so it follows every keystroke rather
+                // than waiting on the debounce the RPC round trip needs.
+                hint={<FiatValue eth={spendWei === null ? null : Number(formatEther(spendWei))} />}
                 onMax={
                   headroomWei > 0n
                     ? () => setSpendEth(trimZeros(formatEther(headroomWei)))
@@ -426,7 +431,8 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
             <Slippage bps={slippageBps} onChange={setSlippageBps} disabled={pending} />
 
             <p className="trade-foot">
-              {formatEth(Number(formatEther(priceWei)))} ETH per token now
+              {formatEth(Number(formatEther(priceWei)))} ETH{" "}
+              <FiatValue eth={Number(formatEther(priceWei))} /> per token now
               {tokensOut !== null && tokensOut > 0n && (
                 <>
                   {" · "}you receive ≈ {formatTokens(Number(formatUnits(tokensOut, DECIMALS)))} $
@@ -504,7 +510,8 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
             <p className="trade-foot">
               {ethOut !== null && ethOut > 0n ? (
                 <>
-                  you receive ≈ {formatEth(Number(formatEther(ethOut)))} ETH
+                  you receive ≈ {formatEth(Number(formatEther(ethOut)))} ETH{" "}
+                  <FiatValue eth={Number(formatEther(ethOut))} parens />
                   {minEthOut !== null && (
                     <>
                       {" · "}at least {formatEth(Number(formatEther(minEthOut)))} or it reverts
@@ -532,7 +539,8 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
           button rather than three clicks away on an explorer.
         */}
         <p className="trade-foot">
-          Reserve {formatEth(Number(formatEther(reserveWei)))} ETH
+          Reserve {formatEth(Number(formatEther(reserveWei)))} ETH{" "}
+          <FiatValue eth={Number(formatEther(reserveWei))} />
           {stats.reserveCap > 0 && <> of {formatEth(stats.reserveCap)} ETH cap</>}
           {!curveClosed && headroomWei > 0n && (
             <> · {formatEth(Number(formatEther(headroomWei)))} ETH left before buys close</>
@@ -634,6 +642,7 @@ function Amount({
   disabled,
   step,
   placeholder,
+  hint,
   onMax,
   maxLabel = "Max",
 }: {
@@ -643,6 +652,8 @@ function Amount({
   disabled?: boolean;
   step: string;
   placeholder?: string;
+  /** A line under the field — the typed amount in the reader's currency. */
+  hint?: React.ReactNode;
   onMax?: () => void;
   maxLabel?: string;
 }) {
@@ -667,6 +678,7 @@ function Amount({
         disabled={disabled}
         className="input input--compact"
       />
+      {hint}
     </label>
   );
 }

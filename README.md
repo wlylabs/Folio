@@ -194,6 +194,13 @@ compiler — only edits to a `.sol` file do.
   own row, and `/api/indexer` reconciles anything created outside it — a Foundry
   script, Basescan, or a browser that closed at the wrong moment. Pages read the
   table; they never scan the chain for the feed.
+- **ETH figures carry a fiat estimate.** Every price on the site is quoted in
+  ETH by a contract; a quieter line under it says what that is worth in USD or
+  IDR, at the reader's choice (remembered in `localStorage`, guessed from the
+  browser's locale the first time). The rate comes from `/api/eth-price`, which
+  caches CoinGecko server-side for a minute. It is display only — no trade, no
+  floor and no stored value is ever computed from it — and it disappears
+  entirely when the price feed is unreachable, leaving the ETH untouched.
 - **Article HTML is sanitized on render** (`lib/sanitize.ts`) with an allowlist
   matching Tiptap's output. Stored bodies are untrusted — they arrive through
   the public anon key.

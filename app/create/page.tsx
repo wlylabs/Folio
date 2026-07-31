@@ -8,6 +8,7 @@ import { getAccount, switchChain, waitForTransactionReceipt, writeContract } fro
 import { formatEther, formatUnits, parseEther, parseEventLogs } from "viem";
 import { useRouter } from "next/navigation";
 import WalletButton from "@/components/WalletButton";
+import FiatValue from "@/components/FiatValue";
 import { FaucetLinks, FaucetNotice } from "@/components/Faucet";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { FOLIO_FACTORY_ABI } from "@/lib/contracts/folioFactory";
@@ -22,7 +23,8 @@ const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 /**
  * A billion tokens, the memecoin convention. It is only a default — the field
  * takes anything the factory will accept, and the curve prices whatever supply
- * you choose so that the opening market cap is the same either way.
+ * you choose against the same starting reserve, so a bigger supply is a smaller
+ * opening price and nothing else.
  */
 const DEFAULT_SUPPLY = "1000000000";
 
@@ -497,31 +499,45 @@ export default function CreatePage() {
             </h2>
             {(
               [
-                ["Opening price", `${formatEth(openingPrice)} ETH per token`],
+                ["Opening price", <Eth key="price" value={openingPrice} suffix=" per token" />],
+                /*
+                  Not "opening market cap", which this never was: the figure is
+                  the curve's virtual ETH reserve — the basis its prices are
+                  computed from — and elsewhere "market cap" means price times
+                  supply. Naming it that here invited a comparison with a
+                  different number entirely.
+                */
                 [
-                  "Opening market cap",
-                  `${formatEth(Number(formatEther(curve.virtualEthReserve)))} ETH`,
+                  "Starting reserve",
+                  <Eth key="virtual" value={Number(formatEther(curve.virtualEthReserve))} />,
                 ],
                 [
                   "Buys close at",
-                  curve.graduationThreshold > 0n
-                    ? `${formatEth(Number(formatEther(curve.graduationThreshold)))} ETH in reserve`
-                    : "never",
+                  curve.graduationThreshold > 0n ? (
+                    <Eth
+                      key="threshold"
+                      value={Number(formatEther(curve.graduationThreshold))}
+                      suffix=" in reserve"
+                    />
+                  ) : (
+                    "never"
+                  ),
                 ],
                 [
                   "Reserve ceiling",
-                  `${formatEth(
-                    Number(
+                  <Eth
+                    key="ceiling"
+                    value={Number(
                       formatEther(
                         form.maxReserveCap.trim() && !errors.maxReserveCap
                           ? parseEther(form.maxReserveCap.trim())
                           : curve.maxReserveCap
                       )
-                    )
-                  )} ETH`,
+                    )}
+                  />,
                 ],
                 ["Your fee", `${formatBps(curve.feeBps)} of every buy and sell`],
-              ] as [string, string][]
+              ] as [string, React.ReactNode][]
             ).map(([label, value]) => (
               <div key={label} className="factbox__row">
                 <span className="factbox__label">{label}</span>
@@ -579,6 +595,16 @@ export default function CreatePage() {
         </div>
       </div>
     </main>
+  );
+}
+
+/** An ETH figure with its worth in the reader's currency underneath. */
+function Eth({ value, suffix = "" }: { value: number; suffix?: string }) {
+  return (
+    <>
+      {formatEth(value)} ETH{suffix}
+      <FiatValue eth={value} block />
+    </>
   );
 }
 
