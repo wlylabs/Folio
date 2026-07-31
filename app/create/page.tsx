@@ -10,7 +10,7 @@ import { pageTitle, socialMetadata } from "@/lib/seo";
  * one form. They were never that. The agent's desk moved to /desk behind a
  * password — it publishes free, so it cannot be public — and this page is now
  * about one thing: your article, your token, one transaction. What the desk
- * publishes is read-only to everyone here, at /read.
+ * publishes is read-only to everyone here, in Postfolio.
  *
  * The form is a client component — it holds an editor, a wallet connection and
  * a transaction — and a "use client" module cannot export `metadata`. This page

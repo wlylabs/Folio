@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { publishPost, PublishError } from "@/lib/ai/publish";
 import { deskDenial } from "@/lib/desk";
+import { postfolioPath } from "@/lib/postfolio";
 import { callerKey, rateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
       authorWallet: typeof payload.authorWallet === "string" ? payload.authorWallet : null,
     });
 
-    return NextResponse.json({ ...post, path: `/read/${post.slug}` }, { status: 201 });
+    return NextResponse.json({ ...post, path: postfolioPath(post.slug) }, { status: 201 });
   } catch (err) {
     if (err instanceof PublishError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

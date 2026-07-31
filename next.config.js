@@ -17,6 +17,24 @@ const nextConfig = {
         destination: "/create",
         permanent: true,
       },
+      {
+        // The article archive used to be /read, laid out like the launchpad
+        // because it shared its components. It is now Postfolio: the same
+        // articles, at the same slugs, in a view of their own. The slug is what
+        // the links out there point at, so both halves of the old URL survive
+        // the move — /read/<slug> lands on the same piece it always did.
+        //
+        // Permanent, because the move is: a crawler holding /read should
+        // replace it, and the canonical on the new page agrees.
+        source: "/read",
+        destination: "/postfolio",
+        permanent: true,
+      },
+      {
+        source: "/read/:slug",
+        destination: "/postfolio/:slug",
+        permanent: true,
+      },
     ];
   },
   // No `images` config on purpose: nothing here uses next/image, and a

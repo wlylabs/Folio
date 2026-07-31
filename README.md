@@ -107,7 +107,7 @@ from the event log regardless.
 ## The article desk: what the agent publishes
 
 The site has two halves, and they are two routes with nothing in common but a
-house style.
+house style. It also has two ways of *reading* it — see Postfolio below.
 
 **The launchpad** (`/create`) is the one above, and it is the public one: your
 article with your token behind it, one transaction, gas required. It is the
@@ -119,9 +119,10 @@ picks the thread running through two or more of them, and writes eight hundred
 to twelve hundred words about it in the house style, shaped for search — a
 headline inside Google's display width, a slug, a meta description, subheads.
 The draft lands in an editor. A person reads it, edits anything, and presses
-publish. Published posts live at `/read/<slug>`, are listed at `/read`, and
-appear on the front page under the launch feed. To everyone else those pages
-are read-only; the desk itself is behind a password.
+publish. Published posts live at `/postfolio/<slug>`, are listed at
+`/postfolio`, and appear on the launchpad's front page under the launch feed.
+To everyone else those pages are read-only; the desk itself is behind a
+password.
 
 They used to be two tabs above one form, which said they were two settings of
 the same thing. They are not, and the tab strip hid the part that matters:
@@ -199,6 +200,33 @@ broke returns a 502, so a cron monitor notices instead of reporting a green run
 that wrote nothing; a run that published nothing because every story was already
 covered returns a 200 with `skipped: "already-covered"` against the beat — a
 slow news day is not an incident, and a monitor that pages for one gets muted.
+
+## Postfolio: the reading view
+
+Folio renders the same publication two ways, and the masthead switch moves
+between them.
+
+**Launchpad** (`/`) is the market side. Every card in its grid is a listing with
+a ticker, a supply and a curve behind it, laid out for comparing one against the
+next, and the front page carries the launch form, the curve terms and the
+testnet warning.
+
+**Postfolio** (`/postfolio`) is the reading side: the desk's own articles, which
+have no token behind them and no figures to compare. It is laid out the way a
+blog is — a lead piece with its cover, a dated column of everything else, a beat
+filter (`?topic=ai|technology|crypto`), and a rail saying who writes these.
+Articles read at `/postfolio/<slug>` with a standfirst, a reading time, the
+sources they were written from, and three more pieces at the foot.
+
+The split is presentational, not structural: one `posts` table, one set of
+slugs, one nav, one colophon. `lib/postfolio.ts` holds the names and the paths,
+`components/ModeSwitch.tsx` is the switch, and everything under `.pf` in
+`app/globals.css` is the second view's stylesheet — scoped to the wrapper in
+`app/postfolio/layout.tsx` so the launchpad cannot inherit it.
+
+The archive used to live at `/read`. Both `/read` and `/read/<slug>` are
+permanent redirects into Postfolio, so nothing that was ever linked or indexed
+is broken by the move.
 
 ## Taking a listing down
 

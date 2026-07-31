@@ -4,6 +4,7 @@ import { isTopic, TOPICS, type Topic } from "@/lib/ai/news";
 import { NoFreshNewsError } from "@/lib/ai/history";
 import { isAgentConfigured, NoProviderError } from "@/lib/ai/provider";
 import { publishPost, PublishError } from "@/lib/ai/publish";
+import { postfolioPath } from "@/lib/postfolio";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -97,7 +98,7 @@ export async function POST(request: Request) {
         ok: true,
         slug: post.slug,
         title: post.title,
-        path: `/read/${post.slug}`,
+        path: postfolioPath(post.slug),
         model: draft.model,
         // Present when the primary provider refused and the fallback wrote it.
         // A run that has quietly been on Gemini for a week is worth seeing.

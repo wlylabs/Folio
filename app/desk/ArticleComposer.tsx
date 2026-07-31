@@ -509,7 +509,7 @@ function DeskBar() {
       <span className="desk-bar__label">Staff · article desk</span>
       <span className="desk-bar__links">
         <Link href="/create">Launchpad</Link>
-        <Link href="/read">Published</Link>
+        <Link href="/postfolio">Published</Link>
         <button type="button" className="btn btn--plain" onClick={signOut} disabled={signingOut}>
           {signingOut ? "Signing out..." : "Sign out"}
         </button>

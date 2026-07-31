@@ -159,7 +159,7 @@ create policy "delistings are publicly readable"
 -- ---------------------------------------------------------------------------
 create table if not exists posts (
   id uuid primary key default gen_random_uuid(),
-  slug text unique not null,           -- kebab-case, the /read/<slug> URL
+  slug text unique not null,           -- kebab-case, the /postfolio/<slug> URL
   title text not null,
   excerpt text not null,               -- the meta description, written not derived
   body text not null,                  -- HTML from markdown, sanitized before insert

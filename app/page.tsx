@@ -8,6 +8,7 @@ import Logo from "@/components/Logo";
 import FiatValue from "@/components/FiatValue";
 import { articleExcerpt } from "@/lib/sanitize";
 import { listPosts, postPath, topicLabel, type PostCard } from "@/lib/posts";
+import { POSTFOLIO_NAME, POSTFOLIO_PATH } from "@/lib/postfolio";
 import { chainLabel, DEFAULT_CHAIN_SLUG } from "@/lib/chains";
 import {
   pageTitle,
@@ -93,11 +94,11 @@ export default async function HomePage() {
             {/* The other half of the edition, and it is a read rather than a
                 write: the desk's articles are published by staff, and what a
                 visitor does with them is read them. The offer beside "launch"
-                is therefore the archive, not a second form — the launchpad is
-                the only door onto the site, which is what makes it worth
+                is therefore the other view, not a second form — the launchpad
+                is the only door onto a market, which is what makes it worth
                 putting first. */}
-            <Link href="/read" className="btn btn--outline">
-              Read the desk
+            <Link href={POSTFOLIO_PATH} className="btn btn--outline">
+              Open {POSTFOLIO_NAME}
             </Link>
           </div>
         </div>
@@ -153,14 +154,18 @@ export default async function HomePage() {
           them. They are both articles, but a launch card carries a supply and a
           ticker a reader can act on, and interleaving the two would have made
           every card ambiguous about whether there is a token behind it.
+
+          Six cards, in the launchpad's own grid, as a trailer for the other
+          view rather than a copy of it: read end to end, they live in
+          Postfolio, which is laid out for reading and not for comparing.
         */}
         {posts.length > 0 && (
           <section className="pitch" aria-labelledby="articles">
             <div className="section-head">
               <h2 className="eyebrow" id="articles">
-                From the article desk
+                From {POSTFOLIO_NAME}
               </h2>
-              <Link href="/read" className="eyebrow">
+              <Link href={POSTFOLIO_PATH} className="eyebrow">
                 All articles
               </Link>
             </div>

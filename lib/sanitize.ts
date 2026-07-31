@@ -44,8 +44,8 @@ export function sanitizeArticleHtml(html: string | null | undefined): string {
   return sanitizeHtml(html, OPTIONS);
 }
 
-/** Plain text version of an article body, for previews and meta descriptions. */
-export function articleExcerpt(html: string | null | undefined, maxLength = 160): string {
+/** Plain text version of an article body, tags and entities gone. */
+export function articleText(html: string | null | undefined): string {
   // Stripping the tags outright welds the last word of one block to the first
   // of the next — "...reached temperature.A slow start". Blocks are boundaries
   // between sentences, so they have to leave a space behind.
@@ -54,9 +54,27 @@ export function articleExcerpt(html: string | null | undefined, maxLength = 160)
     " "
   );
 
-  const text = sanitizeHtml(spaced, { allowedTags: [], allowedAttributes: {} })
+  return sanitizeHtml(spaced, { allowedTags: [], allowedAttributes: {} })
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** Plain text version of an article body, for previews and meta descriptions. */
+export function articleExcerpt(html: string | null | undefined, maxLength = 160): string {
+  const text = articleText(html);
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+/**
+ * How long an article takes to read, in minutes.
+ *
+ * 200 words a minute is the conservative end of the range the research puts
+ * adult silent reading at, and rounding up means the figure is never a promise
+ * the piece cannot keep. It is printed beside the byline in Postfolio, where a
+ * reader deciding whether to start is the whole point of the line.
+ */
+export function readingMinutes(html: string | null | undefined): number {
+  const words = articleText(html).split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.ceil(words / 200));
 }

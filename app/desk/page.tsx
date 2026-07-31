@@ -40,9 +40,10 @@ export default function DeskPage() {
         </h1>
         <p style={{ color: "var(--ink-soft)", maxWidth: "var(--measure)" }}>
           Where Folio&apos;s agent drafts from the wires and a person publishes what it wrote.
-          Everything it has published is public at <Link href="/read">/read</Link>. To publish
-          something of your own, the door is the <Link href="/create">launchpad</Link> — an article
-          and the token it describes, in one transaction.
+          Everything it has published is public in <Link href="/postfolio">Postfolio</Link>, the
+          reading side of the site. To publish something of your own, the door is the{" "}
+          <Link href="/create">launchpad</Link> — an article and the token it describes, in one
+          transaction.
         </p>
       </header>
 

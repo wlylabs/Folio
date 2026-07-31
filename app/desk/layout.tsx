@@ -13,7 +13,7 @@ import { pageTitle } from "@/lib/seo";
  * refused to everyone who is not running it.
  *
  * `noindex, nofollow`, and disallowed in robots.txt besides. There is nothing
- * here for a reader — the articles this desk produces are public at /read, and
+ * here for a reader — the articles this desk produces are public in Postfolio, and
  * that is the page a search result should land on.
  */
 export const metadata: Metadata = {

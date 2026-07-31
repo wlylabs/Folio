@@ -3,6 +3,7 @@ import { siteUrl } from "@/lib/siteUrl";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { tokenPath } from "@/lib/seo";
 import { listPosts, postPath } from "@/lib/posts";
+import { POSTFOLIO_PATH } from "@/lib/postfolio";
 
 /**
  * Every public URL on the site, including one per published listing.
@@ -41,7 +42,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const statics: MetadataRoute.Sitemap = [
     { url: `${base}/`, lastModified: frontPageModified, changeFrequency: "daily", priority: 1 },
     {
-      url: `${base}/read`,
+      // Postfolio's front page. It is the article half of the publication, and
+      // it changes exactly when the desk publishes.
+      url: `${base}${POSTFOLIO_PATH}`,
       lastModified: parseDate(posts[0]?.created_at) ?? buildTime,
       changeFrequency: "daily",
       priority: 0.8,
