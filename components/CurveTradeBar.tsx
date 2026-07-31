@@ -1,6 +1,6 @@
 "use client";
 
-import { useAccount, useBalance, useConfig, useReadContract, useReadContracts } from "wagmi";
+import { useAccount, useConfig, useReadContract, useReadContracts } from "wagmi";
 import { getAccount, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { formatEther, formatUnits, parseEther, parseUnits } from "viem";
 import { useEffect, useMemo, useState } from "react";
@@ -11,6 +11,7 @@ import WalletButton from "@/components/WalletButton";
 import FiatValue from "@/components/FiatValue";
 import { FaucetLinks, FaucetNotice } from "@/components/Faucet";
 import { useDockHeight } from "@/components/useDockHeight";
+import { useGasBalance } from "@/components/useGasBalance";
 import { classifyTxError } from "@/lib/txErrors";
 import { ensureWalletReady } from "@/lib/walletReady";
 import { formatBps, formatEth, formatTokens, type CurveStats, type Token } from "@/lib/types";
@@ -79,11 +80,14 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
   const debouncedSpend = useDebounced(spendWei, 300);
   const debouncedSell = useDebounced(sellUnits, 300);
 
-  const { data: ethBalance, refetch: refetchEth } = useBalance({
-    address,
-    chainId: targetChainId,
-    query: { enabled: Boolean(address && targetChainId) },
-  });
+  // Polls itself, so test ETH claimed from a faucet in another tab shows up
+  // here without a reload. See useGasBalance.
+  const {
+    balance: ethBalance,
+    noGas,
+    checking: checkingGas,
+    refetch: refetchEth,
+  } = useGasBalance({ address, chainId: targetChainId });
 
   const { data: tokenBalanceRaw, refetch: refetchTokens } = useReadContract({
     ...contract,
@@ -152,7 +156,6 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
   const ethOut = (sellQuote as bigint | undefined) ?? null;
 
   const tokenBalance = tokenBalanceRaw === undefined ? null : Number(formatUnits(tokenBalanceRaw, DECIMALS));
-  const noGas = ethBalance !== undefined && ethBalance.value === 0n;
   const overSells = sellUnits !== null && tokenBalanceRaw !== undefined && sellUnits > tokenBalanceRaw;
 
   /** The floor that goes on chain: the quote, less the tolerance. */
@@ -376,6 +379,8 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
           <FaucetNotice
             chain={token.chain}
             heading={`No ${chainEntry?.chain.nativeCurrency.symbol ?? "test ETH"} in this wallet`}
+            onRecheck={() => void refetchEth()}
+            checking={checkingGas}
           />
         )}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useAccount, useBalance, useConfig, useReadContract } from "wagmi";
+import { useAccount, useConfig, useReadContract } from "wagmi";
 import { getAccount, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { formatUnits, parseEther, parseUnits } from "viem";
 import { useMemo, useState } from "react";
@@ -11,6 +11,7 @@ import WalletButton from "@/components/WalletButton";
 import FiatValue from "@/components/FiatValue";
 import { FaucetLinks, FaucetNotice } from "@/components/Faucet";
 import { useDockHeight } from "@/components/useDockHeight";
+import { useGasBalance } from "@/components/useGasBalance";
 import { classifyTxError } from "@/lib/txErrors";
 import { ensureWalletReady } from "@/lib/walletReady";
 import {
@@ -65,11 +66,14 @@ export default function LegacySaleBar({
   const soldOut = stats.onChain && stats.sold >= stats.supply && stats.supply > 0;
   const buyback = stats.kind === "legacy" ? stats.buyback : null;
 
-  const { data: ethBalance, refetch: refetchEth } = useBalance({
-    address,
-    chainId: targetChainId,
-    query: { enabled: Boolean(address && targetChainId) },
-  });
+  // Polls itself, so test ETH claimed from a faucet in another tab shows up
+  // here without a reload. See useGasBalance.
+  const {
+    balance: ethBalance,
+    noGas,
+    checking: checkingGas,
+    refetch: refetchEth,
+  } = useGasBalance({ address, chainId: targetChainId });
 
   const { data: tokenBalanceRaw, refetch: refetchTokens } = useReadContract({
     address: token.contract_address as `0x${string}`,
@@ -81,7 +85,6 @@ export default function LegacySaleBar({
   });
 
   const tokenBalance = tokenBalanceRaw === undefined ? null : Number(formatUnits(tokenBalanceRaw, DECIMALS));
-  const noGas = ethBalance !== undefined && ethBalance.value === 0n;
 
   const spendWei = useMemo(() => toWei(spendEth), [spendEth]);
   const sellUnits = useMemo(() => toUnits(sellTokens), [sellTokens]);
@@ -273,6 +276,8 @@ export default function LegacySaleBar({
           <FaucetNotice
             chain={token.chain}
             heading={`No ${chainEntry?.chain.nativeCurrency.symbol ?? "test ETH"} in this wallet`}
+            onRecheck={() => void refetchEth()}
+            checking={checkingGas}
           />
         )}
 
