@@ -179,6 +179,11 @@ type LaunchLog = {
  * article — the point is that the token is *visible* rather than invisible until
  * someone notices. A creator who later publishes through the site gets a real
  * one; the row is keyed by contract address either way.
+ *
+ * Two things stop a write: a listing that already exists, and a tombstone in
+ * `delisted_tokens`. The second matters because deleting a row cannot on its own
+ * remove a launch — the log it was read from is permanent, so without the
+ * tombstone this function would faithfully put every deleted listing back.
  */
 async function insertMissing(
   db: NonNullable<ReturnType<typeof serverSupabase>>,
@@ -197,7 +202,8 @@ async function insertMissing(
   if (error) throw new Error(`Reading existing listings failed: ${error.message}`);
 
   const known = new Set((existing ?? []).map((row) => String(row.contract_address).toLowerCase()));
-  const missing = launches.filter((l) => !known.has(l.token));
+  const delisted = await readDelisted(db, addresses);
+  const missing = launches.filter((l) => !known.has(l.token) && !delisted.has(l.token));
   if (missing.length === 0) return 0;
 
   const rows = missing.map((l) => {
@@ -226,6 +232,32 @@ async function insertMissing(
 
   if (insertError) throw new Error(`Writing listings failed: ${insertError.message}`);
   return count ?? rows.length;
+}
+
+/**
+ * The addresses among `addresses` that have been delisted by hand.
+ *
+ * A database that predates the table (schema.sql not re-run) answers with
+ * Postgres' 42P01 — undefined_table — and that is treated as "nothing has been
+ * delisted", which is true of every such database. Any other failure throws:
+ * guessing "nothing" on a transient read error is how a deleted listing comes
+ * back.
+ */
+async function readDelisted(
+  db: NonNullable<ReturnType<typeof serverSupabase>>,
+  addresses: string[]
+): Promise<Set<string>> {
+  const { data, error } = await db
+    .from("delisted_tokens")
+    .select("contract_address")
+    .in("contract_address", addresses);
+
+  if (error) {
+    if (error.code === "42P01") return new Set();
+    throw new Error(`Reading delisted launches failed: ${error.message}`);
+  }
+
+  return new Set((data ?? []).map((row) => String(row.contract_address).toLowerCase()));
 }
 
 /**

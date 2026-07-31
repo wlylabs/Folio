@@ -84,6 +84,40 @@ create policy "anyone may publish a token"
   );
 
 -- ---------------------------------------------------------------------------
+-- Delisted launches
+--
+-- Deleting a listing is not enough on its own to make it stay gone. The token
+-- still exists on chain, so the next indexer run reads its TokenCreated log and
+-- writes the row straight back (lib/indexer.ts). This table is the tombstone
+-- that makes a deletion stick: the indexer skips every address in it.
+--
+-- It is deliberately separate from `tokens` rather than a `delisted_at` column,
+-- because a delisted launch should leave nothing behind — the article, the
+-- title and the creator's address all go with the row. What stays is an
+-- address and a reason.
+--
+-- Reads are public and writes are not. Public reads look generous for an
+-- operator's list, but the indexer falls back to the anon key when no service
+-- role is configured (lib/supabaseAdmin.ts), and a tombstone it cannot read is
+-- a tombstone that silently stops working — the deleted listing would reappear
+-- on the next run. The addresses are on chain already; `reason` is the only
+-- thing here that isn't, so keep it a short note rather than an accusation.
+-- ---------------------------------------------------------------------------
+create table if not exists delisted_tokens (
+  contract_address text primary key,
+  chain text,
+  reason text,
+  delisted_at timestamptz not null default now()
+);
+
+alter table delisted_tokens enable row level security;
+
+drop policy if exists "delistings are publicly readable" on delisted_tokens;
+create policy "delistings are publicly readable"
+  on delisted_tokens for select
+  using (true);
+
+-- ---------------------------------------------------------------------------
 -- Storage bucket for token avatars.
 -- ---------------------------------------------------------------------------
 insert into storage.buckets (id, name, public)

@@ -93,6 +93,37 @@ If the token is created but the database insert fails, the error message
 includes the address so the launch isn't lost — and `/api/indexer` will list it
 from the event log regardless.
 
+## Taking a listing down
+
+A launch is two things: a contract on chain and a listing in Postgres. Only the
+second can be removed, and `scripts/delete-token.mjs` is what removes it.
+
+```
+npm run token:list                                   # what is published
+npm run token:delete -- 0xabc… --reason "test launch"
+npm run token:delete -- 0xabc… --restore             # undo the delisting
+```
+
+It deletes the row — article, headline, byline, and the avatar in Storage — and
+leaves the token itself untouched. The curve keeps quoting and holders can still
+sell back through the contract; what goes is the article, the card in the feed
+and the `/token/<address>` page.
+
+Deleting the row is not enough on its own. `/api/indexer` rebuilds listings from
+the factory's `TokenCreated` log, and that log is permanent, so a plain `delete
+from tokens` reappears on the next run. Every deletion therefore writes a
+tombstone into `delisted_tokens`, which the indexer reads and skips — so
+**re-run `lib/schema.sql`** before deleting anything, or the script will refuse
+rather than delete something that would come straight back.
+
+The script needs `SUPABASE_SERVICE_ROLE_KEY`, because the public policies allow
+reads and inserts and nothing else: a delete the anon key could perform is a
+delete anyone on the internet could perform.
+
+`--restore` only drops the tombstone. The row is gone for good — the article
+went with it — and the next indexer run relists the launch from its event log
+with a placeholder article.
+
 ## How trading works
 
 The trade bar on an article page has a buy leg and a sell leg, both settling
@@ -167,6 +198,12 @@ compiler — only edits to a `.sol` file do.
   matching Tiptap's output. Stored bodies are untrusted — they arrive through
   the public anon key.
 - **Addresses are stored lowercased** so URL lookups are case-insensitive.
+- **The front page explains itself below the feed.** How a launch works, the
+  curve terms the factory would hand the next one (read from
+  `deployments/base-sepolia.json`, never written into the copy), and what a
+  testnet edition does and doesn't promise. Those sections are not conditional
+  on the feed being empty — an edition with one listing needs them as much as an
+  edition with none.
 
 ## Possible next steps
 
