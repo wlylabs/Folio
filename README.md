@@ -161,6 +161,50 @@ Launches from the retired fixed-price design still work. `lib/tokenStats.ts`
 discovers which contract is at an address by reading it, and the page renders the
 panel that describes it honestly rather than one that would revert.
 
+## The price history
+
+Every `TokensBought` and `TokensSold` carries the marginal price the trade left
+behind, so a launch's whole price history is already on chain and nothing has to
+be recorded to draw it. `lib/tradeHistory.ts` reads it back — walking the log
+backwards from the head of the chain, because the interesting end of a price
+history is the recent end — and the panel under the article plots it.
+
+The chart **steps rather than slopes**. A constant-product curve only moves when
+somebody trades against it, so between two trades the price is a flat line, and
+sloping between points would invent a drift that never happened. The last price
+runs out to the right edge for the same reason: it is still the price.
+
+Two things about how it is wired matter more than they look:
+
+- **It is not part of the page's server render.** A scan is a dozen
+  `eth_getLogs` calls plus a block header per trade; the article, the fact box
+  and the trade panel are the page and none of them should wait on it. The panel
+  mounts empty and fills in from `/api/token/<address>/trades`, which caches each
+  scan for twenty seconds and shares one walk between concurrent readers.
+- **The axis labels are HTML, not SVG text.** Anything inside a scaled `viewBox`
+  scales with it, which turns a 9px label into a 5px one on a phone. The high,
+  the low and the price now are printed around the plot instead — to four
+  significant figures, because `formatEth`'s six decimal places cannot tell two
+  curve prices apart down where testnet launches live.
+
+Under the chart is the trade tape: side, size, trader and how long ago, each row
+linking to the transaction. It doubles as the chart's table view, and hovering a
+point on the chart highlights its row.
+
+## Claiming creator fees
+
+The creator's share of every leg accrues in `feesAccrued` and comes out with
+`claimFees()`. The article page shows the balance and the button to the creator
+and to nobody else — and it decides who that is from `creator()` on the contract,
+never from `creator_wallet` in the database, because that column is a claim
+rather than a proof and this one moves money.
+
+Fees live outside `ethReserve`, so claiming them cannot touch the ETH backing
+anyone's ability to sell, and the platform emergency stop deliberately does not
+block the call: a halt freezes trading, not the creator's balance. The panel says
+both, because a button that moves money out of a contract should explain what it
+cannot take with it.
+
 ## The contracts
 
 `contracts/src/FolioFactory.sol` deploys launches as EIP-1167 minimal proxies —
@@ -218,10 +262,9 @@ compiler — only edits to a `.sol` file do.
 ## Possible next steps
 
 - [ ] Sign-In With Ethereum so `creator_wallet` is verified rather than claimed
-- [ ] A creator-side fee claim button — `claimFees()` is live on the token but
-      has no UI, so fees have to be claimed from Basescan for now
-- [ ] A price chart from the `TokensBought` / `TokensSold` log, which is the
-      thing a curve most obviously wants and the event stream already supports
+- [ ] Persisting the trade log, so a chart doesn't cost a fresh scan — the scan
+      window is bounded (about six days of Base blocks), which is why the panel
+      says "the last N trades" rather than claiming to show every one
 - [ ] Graduation handling beyond closing the curve — the contract emits
       `Graduated` and stops there on purpose; migrating that liquidity to a DEX
       is an off-chain decision nobody has made yet
