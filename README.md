@@ -22,9 +22,13 @@ signature-based auth (Sign-In With Ethereum minting a Supabase JWT), which isn't
 implemented here. Row-level security in `lib/schema.sql` blocks client-side
 updates and deletes, so existing listings can't be tampered with.
 
-`TERMS.md` holds a draft Terms of Service covering the testnet stage. It is an
-unreviewed draft — a lawyer has to look at it before this runs against real
-value, and two sections (governing law, contact) are still placeholders.
+`TERMS.md` and `PRIVACY.md` hold draft policies covering the testnet stage.
+Both are unreviewed drafts — a lawyer has to look at them before this runs
+against real value or real users, and each still has placeholders (governing
+law and contact in the terms, contact in the privacy policy). The privacy
+policy also describes a cookie consent banner and analytics that this codebase
+does not currently have; either build them or cut those sentences before the
+policy is published anywhere users can read it.
 
 ## Setup (from your phone, via GitHub Codespaces)
 
