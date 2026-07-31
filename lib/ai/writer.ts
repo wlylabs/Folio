@@ -3,6 +3,7 @@ import { sanitizeArticleHtml, articleExcerpt } from "@/lib/sanitize";
 import { META_DESCRIPTION_LENGTH } from "@/lib/seo";
 import { complete, type ProviderName } from "./provider";
 import { readNews, urlKey, TOPIC_LABEL, type NewsItem, type Topic } from "./news";
+import { coveredSourceKeys, MIN_FRESH_ITEMS, NoFreshNewsError } from "./history";
 
 /**
  * The article agent: headlines in, a finished post out.
@@ -32,6 +33,14 @@ import { readNews, urlKey, TOPIC_LABEL, type NewsItem, type Topic } from "./news
  * anything if the piece is thin, so the prompt asks for eight hundred to twelve
  * hundred words of actual synthesis, and {MIN_BODY_WORDS} is the floor below
  * which the draft is thrown away rather than published.
+ *
+ * ## Nothing is written about twice
+ *
+ * A feed still carries this morning's story tomorrow, so the model has to be
+ * told what the desk already published — otherwise a second run produces the
+ * same piece under a different headline. Every story cited by a recent post is
+ * subtracted from the feed before the prompt is built (lib/ai/history.ts), and
+ * a beat with nothing left refuses rather than repeats.
  */
 
 /** Below this the piece is a summary wearing an article's clothes. */
@@ -100,6 +109,11 @@ export type DraftOptions = {
   angle?: string;
   /** How many feed items to hand the model. */
   itemCount?: number;
+  /**
+   * Skip the check against what the desk already published. Only for a caller
+   * that has decided a repeat is what it wants; the default is to refuse one.
+   */
+  allowCovered?: boolean;
 };
 
 /**
@@ -110,15 +124,25 @@ export type DraftOptions = {
  * fixes in the environment.
  */
 export async function draftArticle(options: DraftOptions): Promise<ArticleDraft> {
-  const items = await readNews(options.topic, options.itemCount ?? 12);
+  const itemCount = options.itemCount ?? 12;
+
+  // Twice what the model is handed, because the covered ones are about to be
+  // taken out of it. Asking for exactly twelve and dropping eight leaves four,
+  // where asking for twenty-four and dropping eight leaves a full prompt.
+  const items = await readNews(options.topic, itemCount * 2);
+  const fresh = options.allowCovered ? items : await withoutCovered(items, options.topic);
+  // What the model is actually shown, and therefore the only list a citation
+  // may resolve against: matching against anything wider would let a draft cite
+  // a headline it was never given.
+  const prompted = fresh.slice(0, itemCount);
 
   const completion = await complete({
     system: SYSTEM_PROMPT,
-    prompt: buildPrompt(options, items),
+    prompt: buildPrompt(options, prompted),
   });
 
   const parsed = parseJson(completion.text);
-  const draft = buildDraft(parsed, options.topic, items);
+  const draft = buildDraft(parsed, options.topic, prompted);
 
   return {
     ...draft,
@@ -126,6 +150,28 @@ export async function draftArticle(options: DraftOptions): Promise<ArticleDraft>
     provider: completion.provider,
     fallbacks: completion.attempts,
   };
+}
+
+/**
+ * The feed, minus every story a recent post already cited.
+ *
+ * Throws rather than writing when fewer than {MIN_FRESH_ITEMS} survive. A beat
+ * with one new headline in twenty-four is a quiet news day, and the right
+ * article to publish on a quiet news day is none — the alternative is a piece
+ * that pads that one headline into eight hundred words, which is how a desk
+ * that publishes on a schedule turns into a content farm.
+ */
+async function withoutCovered(items: NewsItem[], topic: Topic): Promise<NewsItem[]> {
+  const covered = await coveredSourceKeys();
+  if (covered.size === 0) return items;
+
+  const fresh = items.filter((item) => !covered.has(urlKey(item.url)));
+  if (fresh.length < MIN_FRESH_ITEMS) {
+    throw new NoFreshNewsError(
+      `Every ${TOPIC_LABEL[topic]} story in today's feeds has already been covered by a recent article. Nothing new to write yet — try again once the wires move.`
+    );
+  }
+  return fresh;
 }
 
 function buildPrompt(options: DraftOptions, items: NewsItem[]): string {

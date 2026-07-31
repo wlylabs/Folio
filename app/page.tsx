@@ -90,11 +90,14 @@ export default async function HomePage() {
             <Link href="/create" className="btn btn--primary">
               Launch a token
             </Link>
-            {/* The other half of the edition. A launch needs a wallet, a
-                faucet and a signature; an article needs none of the three,
-                which makes it the offer worth putting beside the first one. */}
-            <Link href="/create/article" className="btn btn--outline">
-              Write an article
+            {/* The other half of the edition, and it is a read rather than a
+                write: the desk's articles are published by staff, and what a
+                visitor does with them is read them. The offer beside "launch"
+                is therefore the archive, not a second form — the launchpad is
+                the only door onto the site, which is what makes it worth
+                putting first. */}
+            <Link href="/read" className="btn btn--outline">
+              Read the desk
             </Link>
           </div>
         </div>

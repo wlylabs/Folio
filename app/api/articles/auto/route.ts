@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { draftArticle } from "@/lib/ai/writer";
 import { isTopic, TOPICS, type Topic } from "@/lib/ai/news";
+import { NoFreshNewsError } from "@/lib/ai/history";
 import { isAgentConfigured, NoProviderError } from "@/lib/ai/provider";
 import { publishPost, PublishError } from "@/lib/ai/publish";
 
@@ -103,10 +104,16 @@ export async function POST(request: Request) {
         ...(draft.fallbacks.length ? { fallbacks: draft.fallbacks } : {}),
       });
     } catch (err) {
-      console.error(`Unattended article run failed for ${topic}:`, err);
+      // A beat whose stories the desk has already covered is a quiet day, not a
+      // fault: nothing is broken and nothing needs fixing, so it is not logged
+      // as an error and it does not colour the run's status below.
+      const quiet = err instanceof NoFreshNewsError;
+      if (!quiet) console.error(`Unattended article run failed for ${topic}:`, err);
+
       results.push({
         topic,
         ok: false,
+        ...(quiet ? { skipped: "already-covered" } : {}),
         error: err instanceof Error ? err.message : String(err),
         ...(err instanceof NoProviderError ? { attempts: err.attempts } : {}),
         ...(err instanceof PublishError ? { status: err.status } : {}),
@@ -115,11 +122,14 @@ export async function POST(request: Request) {
   }
 
   const published = results.filter((result) => result.ok).length;
+  const failed = results.filter((result) => !result.ok && !result.skipped).length;
   return NextResponse.json(
     { published, attempted: results.length, results },
-    // Nothing published is a failure worth a non-2xx, so a cron monitor alerts
-    // instead of reporting a green run that wrote nothing.
-    { status: published > 0 ? 200 : 502 }
+    // Nothing published because something broke is worth a non-2xx, so a cron
+    // monitor alerts instead of reporting a green run that wrote nothing.
+    // Nothing published because there was nothing new is a 200: waking a person
+    // for a slow news day is how a monitor gets muted.
+    { status: published > 0 || failed === 0 ? 200 : 502 }
   );
 }
 

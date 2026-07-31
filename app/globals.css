@@ -2156,57 +2156,57 @@ html[data-dock] .consent {
 }
 
 /* ==========================================================================
-   Publishing modes & sources
+   The staff desk & sources
    ========================================================================== */
 
 /*
-  The switch between article mode and launchpad mode, above both forms.
+  The strip above the article composer.
 
-  A rule under a row of links, with the current one sitting on the ink — the
-  printed way of showing which section of a paper you are in. They are real
-  links to real routes, so the pressed state is `aria-current="page"` rather
-  than `aria-pressed`: this navigates, it does not toggle.
+  What used to be here was a tab switch between article mode and launchpad
+  mode, which said the two were settings of one form. They are not: the
+  launchpad is the public offer and this is the staff desk, on its own route
+  behind a password. So this says which desk you are at and offers the way out,
+  set small and quiet — a masthead slug line, not navigation.
 */
-.modes {
-  margin-bottom: var(--sp-5);
-}
-
-.modes__row {
+.desk-bar {
   display: flex;
-  gap: var(--sp-5);
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--sp-5);
+  padding-bottom: var(--sp-3);
   border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
 }
 
-.modes__tab {
-  padding: var(--sp-2) 0 var(--sp-3);
-  margin-bottom: -1px;
-  border-bottom: 2px solid transparent;
-  font-family: var(--font-ui);
-  font-size: var(--fs-ui);
+.desk-bar__label {
   font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--ink-muted);
+}
+
+.desk-bar__links {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: baseline;
+}
+
+.desk-bar__links a,
+.desk-bar__links .btn--plain {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--ink-soft);
   text-decoration: none;
-  transition:
-    color var(--dur) var(--ease),
-    border-color var(--dur) var(--ease);
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .modes__tab:hover {
+  .desk-bar__links a:hover,
+  .desk-bar__links .btn--plain:hover:not(:disabled) {
     color: var(--ink);
   }
-}
-
-.modes__tab[aria-current="page"] {
-  color: var(--ink);
-  border-bottom-color: var(--ink);
-}
-
-.modes__hint {
-  margin-top: var(--sp-3);
-  font-family: var(--font-ui);
-  font-size: var(--fs-micro);
-  color: var(--ink-soft);
 }
 
 /*

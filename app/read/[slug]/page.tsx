@@ -134,7 +134,7 @@ export default async function ReadPage({ params }: { params: { slug: string } })
       <p className="field__hint" style={{ marginTop: "var(--sp-6)" }}>
         Written by Folio&apos;s article desk from syndicated headlines, and checked by whoever
         published it. Nothing here is financial advice. <Link href="/read">More articles</Link> ·{" "}
-        <Link href="/create/article">Write one</Link>
+        <Link href="/create">Launch your own</Link>
       </p>
     </main>
   );
