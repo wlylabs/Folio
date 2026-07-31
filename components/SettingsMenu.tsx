@@ -7,6 +7,7 @@ import { useAccount } from "wagmi";
 import WalletButton from "@/components/WalletButton";
 import CurrencySelector from "@/components/CurrencySelector";
 import { DEFAULT_CHAIN_SLUG, chainLabel } from "@/lib/chains";
+import { hasWalletConnectProjectId } from "@/lib/wagmiConfig";
 import { CONSENT_EVENT, readConsent, writeConsent, type ConsentChoice } from "@/lib/consent";
 import { CONTACT_EMAIL } from "@/lib/contact";
 
@@ -95,6 +96,17 @@ export default function SettingsMenu() {
               <p className="settings__note">
                 Reading needs no wallet. Connect one to publish a launch or to
                 trade from an article.
+              </p>
+            )}
+            {!isConnected && !hasWalletConnectProjectId && (
+              // Without a project ID there is no relay, so a phone wallet can
+              // show the approval and still never reach this page. Say that
+              // here rather than leaving it as a silent failure that looks like
+              // a broken site.
+              <p className="settings__note">
+                This deployment has no WalletConnect project ID, so phone
+                wallets can&apos;t connect — use a browser-extension wallet, or
+                set <code>NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID</code>.
               </p>
             )}
           </section>
