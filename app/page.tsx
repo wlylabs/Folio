@@ -7,6 +7,7 @@ import Mark from "@/components/Mark";
 import Logo from "@/components/Logo";
 import FiatValue from "@/components/FiatValue";
 import { articleExcerpt } from "@/lib/sanitize";
+import { listPosts, postPath, topicLabel, type PostCard } from "@/lib/posts";
 import { chainLabel, DEFAULT_CHAIN_SLUG } from "@/lib/chains";
 import {
   pageTitle,
@@ -63,7 +64,10 @@ async function getTokens(): Promise<Token[]> {
 export default async function HomePage() {
   if (!isSupabaseConfigured) return <SetupNotice />;
 
-  const tokens = await getTokens();
+  // Two feeds, read together. Neither can fail the page — both helpers swallow
+  // their errors — so a deployment that has not created the `posts` table yet
+  // renders the launch feed exactly as it did before.
+  const [tokens, posts] = await Promise.all([getTokens(), listPosts(6)]);
 
   return (
     <main id="main">
@@ -86,8 +90,11 @@ export default async function HomePage() {
             <Link href="/create" className="btn btn--primary">
               Launch a token
             </Link>
-            <Link href="/profile" className="btn btn--outline">
-              Your desk
+            {/* The other half of the edition. A launch needs a wallet, a
+                faucet and a signature; an article needs none of the three,
+                which makes it the offer worth putting beside the first one. */}
+            <Link href="/create/article" className="btn btn--outline">
+              Write an article
             </Link>
           </div>
         </div>
@@ -136,6 +143,31 @@ export default async function HomePage() {
               <FeedCard key={t.id} token={t} lead={i === 0} />
             ))}
           </div>
+        )}
+
+        {/*
+          The desk's own writing, below the listings rather than mixed into
+          them. They are both articles, but a launch card carries a supply and a
+          ticker a reader can act on, and interleaving the two would have made
+          every card ambiguous about whether there is a token behind it.
+        */}
+        {posts.length > 0 && (
+          <section className="pitch" aria-labelledby="articles">
+            <div className="section-head">
+              <h2 className="eyebrow" id="articles">
+                From the article desk
+              </h2>
+              <Link href="/read" className="eyebrow">
+                All articles
+              </Link>
+            </div>
+
+            <div className="feed">
+              {posts.map((post) => (
+                <PostCardLink key={post.id} post={post} />
+              ))}
+            </div>
+          </section>
         )}
 
         <section className="pitch" aria-labelledby="how">
@@ -281,6 +313,30 @@ function CurveTerms() {
         these are the ones the factory would hand out today.
       </p>
     </section>
+  );
+}
+
+/**
+ * An article card. Deliberately the same shape as a listing card and never the
+ * lead — the front page leads with a launch, and an article that borrowed the
+ * lead treatment would read as one.
+ */
+function PostCardLink({ post }: { post: PostCard }) {
+  return (
+    <Link href={postPath(post)} className="card">
+      <div className="card__meta">
+        <span className="card__kicker">{topicLabel(post.topic)} · Article</span>
+      </div>
+
+      <h3 className="card__title">{post.title}</h3>
+
+      {post.excerpt && <p className="card__excerpt">{post.excerpt}</p>}
+
+      <div className="card__foot">
+        <span>No token</span>
+        <span className="nums">{formatDateShort(post.created_at)}</span>
+      </div>
+    </Link>
   );
 }
 

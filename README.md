@@ -1,6 +1,7 @@
 # Folio — Testnet Token Launchpad
 
-Every token launch is published as an article. Built with Next.js, wagmi/RainbowKit, Supabase.
+Every token launch is published as an article — and the desk writes articles
+that are not launches. Built with Next.js, wagmi/RainbowKit, Supabase.
 
 ## Status
 
@@ -102,6 +103,68 @@ the opening market cap is `virtualEthReserve` whatever supply you pick.
 If the token is created but the database insert fails, the error message
 includes the address so the launch isn't lost — and `/api/indexer` will list it
 from the event log regardless.
+
+## The other mode: articles without a token
+
+`/create` has two modes, and they are two routes.
+
+**Launchpad** (`/create`) is the one above: an article with a token behind it,
+one transaction, gas required.
+
+**Article** (`/create/article`) publishes a piece of writing and nothing else —
+no contract, no curve, no wallet, no gas. It is written by an agent
+(`lib/ai/`): the agent reads what AI, technology and crypto outlets syndicated
+today off their public RSS feeds, picks the thread running through two or more
+of them, and writes eight hundred to twelve hundred words about it in the house
+style, shaped for search — a headline inside Google's display width, a slug, a
+meta description, subheads. The draft lands in an editor. A person reads it,
+edits anything, and presses publish. Published posts live at `/read/<slug>`,
+are listed at `/read`, and appear on the front page under the launch feed.
+
+Two design decisions are worth knowing before you turn it on, because they are
+what separates this from a content farm:
+
+**It writes from headlines and summaries, never from the article behind them.**
+Nothing follows a feed item's link. A feed's own `<description>` is what the
+publisher chose to syndicate, and handing a model a paragraph and asking for
+eight hundred words forces it to write something new about a development rather
+than reword somebody's copy and take the byline. Scraping the full text would
+produce a better-informed article and a page that is a duplicate in every sense
+a search engine cares about.
+
+**Sources are matched, not trusted.** The model is asked which of the supplied
+items it drew on and answers with their URLs; those URLs are then looked up in
+the list that was sent, and a URL that is not in it is dropped. A draft that
+ends up citing nothing is thrown away rather than published. Every post renders
+its sources as a list of links at its foot, and the byline names the model, not
+a person.
+
+### Turning it on
+
+Set `GROQ_API_KEY` and/or `GEMINI_API_KEY` — Groq answers first, Gemini writes
+the piece when Groq is rate limited — plus `SUPABASE_SERVICE_ROLE_KEY`, which
+publishing requires. The `posts` table deliberately has no insert policy for
+the anon key: unlike a launch, publishing here costs nothing, so an open policy
+would let anyone holding the public key fill the feed for free. Run the `posts`
+half of `lib/schema.sql` in the Supabase SQL editor. Details and the optional
+knobs — model overrides, rate limits, replacement feeds — are in `.env.example`.
+
+### Running it unattended
+
+`POST /api/articles/auto` drafts and publishes in one call with nobody reading
+it in between, which is why it is behind `ARTICLE_AGENT_SECRET` rather than a
+rate limit and refuses every request until that is set. Point a scheduler at it:
+
+```json
+{ "crons": [{ "path": "/api/articles/auto?topic=rotate&key=<secret>",
+              "schedule": "0 7 * * *" }] }
+```
+
+`?topic=rotate` is the default — one beat per day, cycled by day of year, so a
+daily schedule covers AI, technology and crypto evenly. `?topic=all` writes one
+of each in a single run. The response reports per beat, and a run that published
+nothing returns a 502 so a cron monitor notices instead of reporting a green run
+that wrote nothing.
 
 ## Taking a listing down
 
