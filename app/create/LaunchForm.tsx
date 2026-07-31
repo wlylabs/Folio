@@ -7,7 +7,6 @@ import { useAccount, useConfig } from "wagmi";
 import { getAccount, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { formatEther, formatUnits, parseEther, parseEventLogs } from "viem";
 import { useRouter } from "next/navigation";
-import ModeSwitch from "./ModeSwitch";
 import WalletButton from "@/components/WalletButton";
 import FiatValue from "@/components/FiatValue";
 import { FaucetLinks, FaucetNotice } from "@/components/Faucet";
@@ -345,8 +344,6 @@ export default function LaunchForm() {
 
   return (
     <main id="main" className="shell shell--form page">
-      <ModeSwitch current="launchpad" />
-
       <header style={{ marginBottom: "var(--sp-5)" }}>
         <p className="eyebrow">New listing</p>
         <h1
@@ -359,10 +356,11 @@ export default function LaunchForm() {
           Launch a token
         </h1>
         <p style={{ color: "var(--ink-soft)", maxWidth: "var(--measure)" }}>
-          Creates a token on the Folio factory on{" "}
-          {chainEntry?.chain.name ?? chainBySlug(DEFAULT_CHAIN_SLUG)?.chain.name ?? "a testnet"}.
-          You pay only gas — the whole supply starts on a bonding curve, so anyone can buy from it
-          or sell back to it at a price the curve sets, and you earn{" "}
+          Write the piece and mint the token it describes, in one transaction, on the Folio factory
+          on {chainEntry?.chain.name ?? chainBySlug(DEFAULT_CHAIN_SLUG)?.chain.name ?? "a testnet"}.
+          The article is yours and it is the listing — this is the way to publish on Folio under
+          your own name. You pay only gas: the whole supply starts on a bonding curve, so anyone
+          can buy from it or sell back to it at a price the curve sets, and you earn{" "}
           {curve ? formatBps(curve.feeBps) : "a"} fee on every trade in either direction.
         </p>
       </header>

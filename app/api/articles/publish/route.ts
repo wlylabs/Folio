@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { publishPost, PublishError } from "@/lib/ai/publish";
+import { deskDenial } from "@/lib/desk";
 import { callerKey, rateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,13 @@ export const runtime = "nodejs";
  * one:
  *
  *   { title, slug?, excerpt?, body, topic, tags?, sources?, model?, authorWallet? }
+ *
+ * Desk only, and this is the endpoint that most needs to be: it puts HTML on
+ * the front page for free, with no signature and no gas to price the abuse. A
+ * rate limit alone was never authorisation — it decided how fast a stranger
+ * could fill the feed, not whether they could. An unlocked desk session
+ * (lib/desk.ts) is now the answer, and the launchpad is the door for everyone
+ * else: a listing there costs a transaction, which is the whole point.
  *
  * The write needs the service role, because `posts` has no insert policy for
  * the public key — publishing here costs no gas and no signature, so an open
@@ -27,6 +35,11 @@ const LIMIT = Number(process.env.ARTICLE_PUBLISH_RATE_LIMIT || 12);
 const WINDOW_MS = 60 * 60_000;
 
 export async function POST(request: Request) {
+  const denial = deskDenial(request);
+  if (denial) {
+    return NextResponse.json({ error: denial.error }, { status: denial.status });
+  }
+
   const limit = rateLimit(`publish:${callerKey(request)}`, LIMIT, WINDOW_MS);
   if (!limit.ok) {
     return NextResponse.json(

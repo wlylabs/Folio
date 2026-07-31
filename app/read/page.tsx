@@ -59,14 +59,21 @@ export default async function ReadIndexPage() {
       {posts.length === 0 ? (
         <div className="empty">
           <p style={{ marginBottom: "var(--sp-2)" }}>The desk hasn&apos;t run anything yet.</p>
+          {/*
+            No "write the first one" here any more. The desk is staff, and this
+            page is read by everyone — offering a button that answers "not you"
+            is worse than offering nothing. The offer a visitor can actually
+            take is the launchpad, so that is the one made.
+          */}
           <p
             className="font-ui"
             style={{ fontSize: "var(--fs-small)", marginBottom: "var(--sp-5)" }}
           >
-            An article takes one press and about a minute. No wallet, no gas.
+            Articles here are written by Folio&apos;s agent and published by the desk. To publish
+            one of your own, launch it with a token.
           </p>
-          <Link href="/create/article" className="btn btn--primary">
-            Write the first one
+          <Link href="/create" className="btn btn--primary">
+            Launch a token
           </Link>
         </div>
       ) : (

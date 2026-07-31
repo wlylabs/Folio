@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { draftArticle } from "@/lib/ai/writer";
 import { isTopic, NoFeedError } from "@/lib/ai/news";
+import { NoFreshNewsError } from "@/lib/ai/history";
 import { isAgentConfigured, NoProviderError } from "@/lib/ai/provider";
+import { deskDenial } from "@/lib/desk";
 import { callerKey, rateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +19,10 @@ export const runtime = "nodejs";
  * into an editor so a person reads it before it becomes a page, and
  * /api/articles/publish is the step that writes.
  *
+ * Desk only. Every call spends a model quota on somebody else's key, so an
+ * unlocked session (lib/desk.ts) is checked before anything else — ahead of the
+ * rate limit, which exists to catch a loop rather than a stranger.
+ *
  * The generation runs to a minute on a slow fallback, which is inside Vercel's
  * default function timeout on a Pro plan and outside the ten seconds a Hobby
  * plan allows — a Hobby deployment should set `maxDuration` or expect the
@@ -29,6 +35,11 @@ const LIMIT = Number(process.env.ARTICLE_AGENT_RATE_LIMIT || 8);
 const WINDOW_MS = 60 * 60_000;
 
 export async function POST(request: Request) {
+  const denial = deskDenial(request);
+  if (denial) {
+    return NextResponse.json({ error: denial.error }, { status: denial.status });
+  }
+
   if (!isAgentConfigured()) {
     return NextResponse.json(
       {
@@ -68,6 +79,13 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ draft, remaining: limit.remaining });
   } catch (err) {
+    // A beat with nothing new in it is not an error in the server, so it is not
+    // logged as one. 409: the request was fine and the state of the world is
+    // what refused it.
+    if (err instanceof NoFreshNewsError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
+
     console.error("Article draft failed:", err);
 
     // Every provider refusing, or every feed refusing, is something upstream

@@ -121,13 +121,13 @@ create policy "delistings are publicly readable"
 -- ---------------------------------------------------------------------------
 -- Articles that are not launches
 --
--- Folio has two publishing modes. A launch writes to `tokens`: an article with
--- a contract behind it. Article mode writes here: a piece of writing with
--- nothing behind it but its sources — no contract, no curve, no transaction,
--- no gas. The two share a front page and a house style and nothing else, which
--- is why this is a separate table rather than a nullable contract_address on
--- `tokens`. Every column over there describes a token; none of them would ever
--- be filled in for a post.
+-- Folio publishes two things. A launch writes to `tokens`: an article with a
+-- contract behind it, written by whoever pays the gas. The staff article desk
+-- writes here: a piece of writing with nothing behind it but its sources — no
+-- contract, no curve, no transaction, no gas. The two share a front page and a
+-- house style and nothing else, which is why this is a separate table rather
+-- than a nullable contract_address on `tokens`. Every column over there
+-- describes a token; none of them would ever be filled in for a post.
 --
 -- The rows are written by the article agent (lib/ai/writer.ts) from headlines
 -- it reads off public RSS feeds, so two columns carry the provenance that makes
@@ -144,13 +144,18 @@ create policy "delistings are publicly readable"
 -- Writes are server-side only
 --
 -- Unlike a launch, publishing here costs nothing — no gas, no signature, no
--- transaction to wait on. That is the whole point of article mode and also its
--- only real risk: anyone holding the public anon key could fill the feed at no
--- cost. So there is no insert policy for the anon role. Posts are written by
--- the route handlers in app/api/articles/ using SUPABASE_SERVICE_ROLE_KEY,
--- which bypasses RLS, and a deployment without that key can read posts but
--- cannot publish one. /api/articles/publish says so plainly rather than
--- failing with a policy error.
+-- transaction to wait on. That is the whole point of the desk and also its only
+-- real risk: anyone holding the public anon key could fill the feed at no cost.
+-- So there is no insert policy for the anon role. Posts are written by the
+-- route handlers in app/api/articles/ using SUPABASE_SERVICE_ROLE_KEY, which
+-- bypasses RLS, and a deployment without that key can read posts but cannot
+-- publish one. /api/articles/publish says so plainly rather than failing with a
+-- policy error.
+--
+-- The same reasoning runs one layer up: the route itself is behind the desk
+-- password (lib/desk.ts), because a rate limit decided how fast a stranger
+-- could fill the feed and never whether they could. The public way onto Folio
+-- is the launchpad, where the chain does the pricing.
 -- ---------------------------------------------------------------------------
 create table if not exists posts (
   id uuid primary key default gen_random_uuid(),

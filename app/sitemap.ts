@@ -46,13 +46,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily",
       priority: 0.8,
     },
+    // /create is the only form a visitor can use. The article desk is staff and
+    // lives at /desk, which is noindex and disallowed — a sitemap entry for a
+    // page that answers with a password box is a crawl budget spent on a door.
     { url: `${base}/create`, lastModified: buildTime, changeFrequency: "monthly", priority: 0.6 },
-    {
-      url: `${base}/create/article`,
-      lastModified: buildTime,
-      changeFrequency: "monthly",
-      priority: 0.6,
-    },
     { url: `${base}/about`, lastModified: buildTime, changeFrequency: "monthly", priority: 0.5 },
     { url: `${base}/terms`, lastModified: buildTime, changeFrequency: "yearly", priority: 0.3 },
     { url: `${base}/privacy`, lastModified: buildTime, changeFrequency: "yearly", priority: 0.3 },
