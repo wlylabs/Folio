@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAccount } from "wagmi";
 import SettingsMenu from "@/components/SettingsMenu";
-import ModeSwitch from "@/components/ModeSwitch";
 import Logo from "@/components/Logo";
 import {
   LAUNCHPAD_PATH,
@@ -57,12 +56,13 @@ export default function Nav() {
             the feed — and the colophon carries it on every other page. A third
             copy in the masthead was the one nobody was reading.
 
-            The switch is the exception, and it is not navigation to a page so
-            much as to a side of the site: the launchpad and Postfolio are two
-            readings of the same publication, and either one is a dead end
-            without it.
+            The view switch is not here either: it moved into the settings
+            panel. It is thrown once and then left alone for a whole session,
+            which is not enough traffic to hold a permanent frame in a bar this
+            narrow — and standing next to the wordmark it read as navigation to
+            two more pages rather than as the one control that decides which
+            side of the site you are on.
           */}
-          <ModeSwitch />
           {isConnected && (
             <Link
               href="/profile"

@@ -203,8 +203,8 @@ slow news day is not an incident, and a monitor that pages for one gets muted.
 
 ## Postfolio: the reading view
 
-Folio renders the same publication two ways, and the masthead switch moves
-between them.
+Folio renders the same publication two ways, and the switch under **View** in
+the masthead's settings panel moves between them.
 
 **Launchpad** (`/`) is the market side. Every card in its grid is a listing with
 a ticker, a supply and a curve behind it, laid out for comparing one against the
