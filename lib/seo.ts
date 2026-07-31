@@ -2,15 +2,6 @@ import type { Metadata } from "next";
 import { siteUrl } from "./siteUrl";
 import { articleExcerpt } from "./sanitize";
 import { shortAddress, type Token } from "./types";
-// Type-only: this module is imported by the article agent, and a value import
-// here would drag the Supabase client into it for nothing.
-import type { Post, PostCard, PostSource } from "./posts";
-import {
-  POSTFOLIO_DESCRIPTION,
-  POSTFOLIO_NAME,
-  POSTFOLIO_PATH,
-  postfolioPath,
-} from "./postfolio";
 
 /**
  * One place for the strings and shapes that end up in <head>.
@@ -36,7 +27,7 @@ export const SITE_TAGLINE = "Every token, told as a story";
 /**
  * The site-level description. It says what the thing is and that it settles in
  * testnet ETH; it promises nothing about price or return, which is the same
- * line the terms and the article agent's system prompt hold.
+ * line the terms hold.
  */
 export const SITE_DESCRIPTION =
   "A testnet token launchpad where every listing is an article. Write the piece, publish it, and the token it describes is minted onto a bonding curve that quotes both sides of the trade from the page itself.";
@@ -95,8 +86,7 @@ export function tokenDescription(
 }
 
 /**
- * Only http(s) URLs are allowed through to og:image — and, in Postfolio, to
- * the `src` of a rendered cover.
+ * Only http(s) URLs are allowed through to og:image.
  *
  * avatar_url arrives from a table anyone holding the public anon key may
  * insert into, and the insert policy does not constrain it. A relative or
@@ -263,91 +253,6 @@ export function tokenArticleJsonLd(
     },
     publisher: PUBLISHER,
     isAccessibleForFree: true,
-  };
-}
-
-/**
- * schema.org/BlogPosting for an article-mode post.
- *
- * `Article` for a token feature, `BlogPosting` for a post: the two are siblings
- * in the vocabulary and the narrower one is the accurate one here.
- *
- * The author is the model, named. Google's guidance on AI-generated content is
- * that it is judged like any other content and that the byline should not
- * mislead about who wrote it, so this does not put a person's name — or a
- * wallet's — in the author slot. `citation` carries the sources the page lists
- * at its foot, which is the machine-readable half of the same claim: this was
- * written from these, and here they are.
- */
-export function postJsonLd(
-  post: Post,
-  sources: PostSource[] = []
-): Record<string, unknown> {
-  const url = absoluteUrl(postfolioPath(post.slug));
-  const image = socialImage(post.cover_url, post.title);
-  const published = toIsoDate(post.created_at);
-
-  return {
-    "@context": "https://schema.org",
-    "@type": "BlogPosting",
-    mainEntityOfPage: { "@type": "WebPage", "@id": url },
-    url,
-    headline: post.title.slice(0, 110),
-    description: post.excerpt,
-    image: [image.url.startsWith("/") ? absoluteUrl(image.url) : image.url],
-    ...(published ? { datePublished: published, dateModified: published } : {}),
-    ...(Array.isArray(post.tags) && post.tags.length ? { keywords: post.tags.join(", ") } : {}),
-    author: {
-      "@type": "Organization",
-      name: `${SITE_NAME} article desk`,
-      ...(post.model ? { description: `Written by ${post.model}.` } : {}),
-    },
-    publisher: PUBLISHER,
-    isAccessibleForFree: true,
-    ...(sources.length
-      ? {
-          citation: sources.map((source) => ({
-            "@type": "CreativeWork",
-            name: source.title,
-            url: source.url,
-            ...(source.publisher
-              ? { publisher: { "@type": "Organization", name: source.publisher } }
-              : {}),
-          })),
-        }
-      : {}),
-  };
-}
-
-/**
- * schema.org/Blog for the Postfolio index.
- *
- * The launchpad's front page is a WebSite and this is a Blog, which is the
- * distinction the two views are built on: one is the publication, the other is
- * the part of it that is only writing. `blogPost` lists what is on the page and
- * nothing more — every headline in it is one a reader can see without
- * scrolling past the feed.
- */
-export function blogJsonLd(posts: PostCard[]): Record<string, unknown> {
-  return {
-    "@context": "https://schema.org",
-    "@type": "Blog",
-    name: `${POSTFOLIO_NAME} — ${SITE_NAME}`,
-    url: absoluteUrl(POSTFOLIO_PATH),
-    description: POSTFOLIO_DESCRIPTION,
-    publisher: PUBLISHER,
-    inLanguage: "en",
-    ...(posts.length
-      ? {
-          blogPost: posts.map((post) => ({
-            "@type": "BlogPosting",
-            headline: post.title.slice(0, 110),
-            description: post.excerpt,
-            url: absoluteUrl(postfolioPath(post.slug)),
-            ...(toIsoDate(post.created_at) ? { datePublished: toIsoDate(post.created_at) } : {}),
-          })),
-        }
-      : {}),
   };
 }
 

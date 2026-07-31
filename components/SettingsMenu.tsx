@@ -6,7 +6,6 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAccount } from "wagmi";
 import WalletButton from "@/components/WalletButton";
 import CurrencySelector from "@/components/CurrencySelector";
-import ModeSwitch from "@/components/ModeSwitch";
 import { DEFAULT_CHAIN_SLUG, chainLabel } from "@/lib/chains";
 import { FACTORY_DEPLOYMENTS } from "@/lib/contracts/deployment";
 import { hasWalletConnectProjectId } from "@/lib/wagmiConfig";
@@ -21,13 +20,6 @@ import { CONTACT_EMAIL } from "@/lib/contact";
  * that formats a second line under a price — at the same weight as the
  * navigation. They are both settings, so they live in the settings panel, and
  * the masthead is left with the wordmark and the reader's own page.
- *
- * The view switch followed them in. Launchpad or Postfolio is a choice a reader
- * makes once and then reads under for the rest of the session, so it was paying
- * for a permanent frame in the masthead out of a budget the wordmark needed —
- * and it sat close enough to the nav links to be mistaken for two more of them.
- * It goes first in the panel because it is the widest thing any of these
- * settings changes.
  *
  * The panel closes on Escape, on a click outside it, and on a navigation, and
  * hands focus back to the trigger when Escape closed it. It also closes on the
@@ -98,11 +90,6 @@ export default function SettingsMenu() {
           role="dialog"
           aria-label="Settings"
         >
-          <section className="settings__group">
-            <h2 className="eyebrow">View</h2>
-            <ModeSwitch />
-          </section>
-
           <section className="settings__group">
             <h2 className="eyebrow">Wallet</h2>
             <WalletButton variant="menu" onOpenModal={close} />

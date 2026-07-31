@@ -1,7 +1,7 @@
 # Folio — Testnet Token Launchpad
 
-Every token launch is published as an article — and the desk writes articles
-that are not launches. Built with Next.js, wagmi/RainbowKit, Supabase.
+Every token launch is published as an article. Built with Next.js,
+wagmi/RainbowKit, Supabase.
 
 ## Status
 
@@ -103,130 +103,6 @@ the opening market cap is `virtualEthReserve` whatever supply you pick.
 If the token is created but the database insert fails, the error message
 includes the address so the launch isn't lost — and `/api/indexer` will list it
 from the event log regardless.
-
-## The article desk: what the agent publishes
-
-The site has two halves, and they are two routes with nothing in common but a
-house style. It also has two ways of *reading* it — see Postfolio below.
-
-**The launchpad** (`/create`) is the one above, and it is the public one: your
-article with your token behind it, one transaction, gas required. It is the
-only way onto Folio for anyone who is not running the desk.
-
-**The article desk** (`/desk`) is staff. An agent (`lib/ai/`) reads what AI,
-technology and crypto outlets syndicated today off their public RSS feeds,
-picks the thread running through two or more of them, and writes eight hundred
-to twelve hundred words about it in the house style, shaped for search — a
-headline inside Google's display width, a slug, a meta description, subheads.
-The draft lands in an editor. A person reads it, edits anything, and presses
-publish. Published posts live at `/postfolio/<slug>`, are listed at
-`/postfolio`, and appear on the launchpad's front page under the launch feed.
-To everyone else those pages are read-only; the desk itself is behind a
-password.
-
-They used to be two tabs above one form, which said they were two settings of
-the same thing. They are not, and the tab strip hid the part that matters:
-publishing from the desk costs nothing — no signature, no gas, nothing pricing
-the abuse — so it cannot be a public button. The launchpad can, because the
-chain charges for it.
-
-Three design decisions are worth knowing before you turn it on, because they
-are what separates this from a content farm:
-
-**It writes from headlines and summaries, never from the article behind them.**
-Nothing follows a feed item's link. A feed's own `<description>` is what the
-publisher chose to syndicate, and handing a model a paragraph and asking for
-eight hundred words forces it to write something new about a development rather
-than reword somebody's copy and take the byline. Scraping the full text would
-produce a better-informed article and a page that is a duplicate in every sense
-a search engine cares about.
-
-**Sources are matched, not trusted.** The model is asked which of the supplied
-items it drew on and answers with their URLs; those URLs are then looked up in
-the list that was sent, and a URL that is not in it is dropped. A draft that
-ends up citing nothing is thrown away rather than published. Every post renders
-its sources as a list of links at its foot, and the byline names the model, not
-a person.
-
-**Nothing is written about twice.** A feed still carries this morning's story
-tomorrow, so a second run would otherwise produce the same piece under a
-different headline, with a `-2` on its slug and the same links at its foot.
-Every story cited by a post from the last fortnight is subtracted from the feed
-before the prompt is built (`lib/ai/history.ts`), and a beat with fewer than two
-fresh headlines left refuses rather than pads — a quiet news day is a day the
-desk publishes nothing.
-
-### Turning it on
-
-Set `ARTICLE_DESK_PASSWORD` (at least 8 characters) — without it the desk stays
-locked and both of its API routes answer 401, which is the deliberate failure
-mode: an unset password locks the door rather than removing it. Unlocking mints
-a signed, httpOnly cookie good for twelve hours; the password is never stored in
-it, and rotating the password signs everyone out. The cookie is `Secure` in
-production, so the deployment needs https.
-
-Then set `GROQ_API_KEY` and/or `GEMINI_API_KEY` — Groq answers first, Gemini
-writes the piece when Groq is rate limited — plus `SUPABASE_SERVICE_ROLE_KEY`,
-which publishing requires. The `posts` table deliberately has no insert policy
-for the anon key: unlike a launch, publishing here costs nothing, so an open
-policy would let anyone holding the public key fill the feed for free. Run the
-`posts` half of `lib/schema.sql` in the Supabase SQL editor. Details and the
-optional knobs — model overrides, rate limits, replacement feeds — are in
-`.env.example`.
-
-The composer autosaves to `localStorage` as you edit and restores the draft on
-the way back in, so a refresh, a closed tab or an expired session costs nothing.
-It is the only place an unpublished draft is ever written, and "discard and
-write another" asks before it takes one.
-
-### Running it unattended
-
-`POST /api/articles/auto` drafts and publishes in one call with nobody reading
-it in between, which is why it is behind `ARTICLE_AGENT_SECRET` rather than a
-rate limit and refuses every request until that is set. Point a scheduler at it:
-
-```json
-{ "crons": [{ "path": "/api/articles/auto?topic=rotate&key=<secret>",
-              "schedule": "0 7 * * *" }] }
-```
-
-`?topic=rotate` is the default — one beat per day, cycled by day of year, so a
-daily schedule covers AI, technology and crypto evenly. `?topic=all` writes one
-of each in a single run. It carries its own secret and does not use the desk
-password, because a scheduler has no session to hold.
-
-The response reports per beat. A run that published nothing because something
-broke returns a 502, so a cron monitor notices instead of reporting a green run
-that wrote nothing; a run that published nothing because every story was already
-covered returns a 200 with `skipped: "already-covered"` against the beat — a
-slow news day is not an incident, and a monitor that pages for one gets muted.
-
-## Postfolio: the reading view
-
-Folio renders the same publication two ways, and the switch under **View** in
-the masthead's settings panel moves between them.
-
-**Launchpad** (`/`) is the market side. Every card in its grid is a listing with
-a ticker, a supply and a curve behind it, laid out for comparing one against the
-next, and the front page carries the launch form, the curve terms and the
-testnet warning.
-
-**Postfolio** (`/postfolio`) is the reading side: the desk's own articles, which
-have no token behind them and no figures to compare. It is laid out the way a
-blog is — a lead piece with its cover, a dated column of everything else, a beat
-filter (`?topic=ai|technology|crypto`), and a rail saying who writes these.
-Articles read at `/postfolio/<slug>` with a standfirst, a reading time, the
-sources they were written from, and three more pieces at the foot.
-
-The split is presentational, not structural: one `posts` table, one set of
-slugs, one nav, one colophon. `lib/postfolio.ts` holds the names and the paths,
-`components/ModeSwitch.tsx` is the switch, and everything under `.pf` in
-`app/globals.css` is the second view's stylesheet — scoped to the wrapper in
-`app/postfolio/layout.tsx` so the launchpad cannot inherit it.
-
-The archive used to live at `/read`. Both `/read` and `/read/<slug>` are
-permanent redirects into Postfolio, so nothing that was ever linked or indexed
-is broken by the move.
 
 ## Taking a listing down
 

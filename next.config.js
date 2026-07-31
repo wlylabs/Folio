@@ -5,34 +5,42 @@ const nextConfig = {
     return [
       {
         // Article mode used to be a tab above the launch form, on a public URL
-        // that was in the sitemap. It is now the staff desk at /desk, behind a
-        // password, so the old URL cannot simply point at it — the thing it
-        // advertised is not the thing that is there. It goes to the launchpad
-        // instead, which is what a member of the public arriving on it wanted:
-        // the way to publish something of their own.
+        // that was in the sitemap. It is gone, and the launch form is all that
+        // is left here — which is what a member of the public arriving on the
+        // old URL wanted anyway: the way to publish something of their own.
         //
-        // Permanent, because the move is. A crawler that has /create/article
+        // Permanent, because the removal is. A crawler that has /create/article
         // indexed should drop it and keep /create.
         source: "/create/article",
         destination: "/create",
         permanent: true,
       },
       {
-        // The article archive used to be /read, laid out like the launchpad
-        // because it shared its components. It is now Postfolio: the same
-        // articles, at the same slugs, in a view of their own. The slug is what
-        // the links out there point at, so both halves of the old URL survive
-        // the move — /read/<slug> lands on the same piece it always did.
+        // The desk's own articles are gone, and with them the two URLs that
+        // ever carried one: /read first, then /postfolio. There is nothing left
+        // to point either of them at except the launchpad, which is now the
+        // whole site — so both halves of both URLs land there rather than on a
+        // 404 that tells a reader nothing about what happened.
         //
-        // Permanent, because the move is: a crawler holding /read should
-        // replace it, and the canonical on the new page agrees.
+        // Permanent, because the removal is: a crawler holding any of these
+        // should drop it.
         source: "/read",
-        destination: "/postfolio",
+        destination: "/",
         permanent: true,
       },
       {
         source: "/read/:slug",
-        destination: "/postfolio/:slug",
+        destination: "/",
+        permanent: true,
+      },
+      {
+        source: "/postfolio",
+        destination: "/",
+        permanent: true,
+      },
+      {
+        source: "/postfolio/:slug",
+        destination: "/",
         permanent: true,
       },
     ];

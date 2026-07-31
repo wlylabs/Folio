@@ -65,16 +65,3 @@ export function articleExcerpt(html: string | null | undefined, maxLength = 160)
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength - 1).trimEnd()}…`;
 }
-
-/**
- * How long an article takes to read, in minutes.
- *
- * 200 words a minute is the conservative end of the range the research puts
- * adult silent reading at, and rounding up means the figure is never a promise
- * the piece cannot keep. It is printed beside the byline in Postfolio, where a
- * reader deciding whether to start is the whole point of the line.
- */
-export function readingMinutes(html: string | null | undefined): number {
-  const words = articleText(html).split(/\s+/).filter(Boolean).length;
-  return Math.max(1, Math.ceil(words / 200));
-}
