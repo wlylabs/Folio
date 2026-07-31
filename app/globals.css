@@ -273,7 +273,9 @@ p {
 .navbar {
   position: sticky;
   top: 0;
-  z-index: 40;
+  /* Above the consent strip (z-index 40): the settings panel drops out of the
+     masthead and can reach the bottom of a short window, where the banner is. */
+  z-index: 45;
   background: rgba(247, 246, 242, 0.88);
   backdrop-filter: saturate(180%) blur(10px);
   -webkit-backdrop-filter: saturate(180%) blur(10px);
@@ -421,52 +423,173 @@ p {
   letter-spacing: 0.01em;
 }
 
-/* The connected wallet chip: network and account, hairline-divided. */
-.chip-group {
+/* ==========================================================================
+   Settings menu
+
+   One button in the masthead, one panel under it, holding everything the
+   reader can set: the wallet, the display currency, the cookie answer, and
+   the links that say what this place is.
+   ========================================================================== */
+
+.settings {
+  position: relative;
+}
+
+/*
+ * Connection state, at the size the masthead can spare: a filled square when a
+ * wallet is attached, a hairline outline when none is. The address itself is
+ * one click away inside the panel, which is where it can be read without
+ * being abbreviated to six characters.
+ */
+.settings__dot {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  flex-shrink: 0;
+  border: 1px solid currentColor;
+}
+
+.settings__dot--on {
+  background: currentColor;
+}
+
+.settings__panel {
+  position: absolute;
+  top: calc(100% + var(--sp-3));
+  right: 0;
+  z-index: 50;
+  width: min(21rem, calc(100vw - var(--gutter) * 2));
+  /* Never taller than the window below the masthead — the panel scrolls
+     rather than running off the bottom of a phone. */
+  max-height: calc(100dvh - var(--nav-h) - var(--sp-5));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--sp-4);
   display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  background: var(--paper-raised);
+  border: 1px solid var(--ink);
+  box-shadow: var(--shadow-press);
+}
+
+.settings__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+/* Hairline between groups, not around them: the panel is one card, not four. */
+.settings__group + .settings__group {
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--rule);
+}
+
+/* Open reads as pressed: the panel it controls is the rest of the button. */
+.settings .btn[aria-expanded="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* The toggle chips are borrowed from the trade dock, where they sit in a dense
+   row of numbers. Here they are the control itself, so they get a thumb. */
+.settings__group .chip {
+  min-height: 2rem;
+  padding-inline: 0.75rem;
+}
+
+.settings__note {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.settings__links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
+}
+
+.settings__links a {
+  color: var(--ink);
+  text-decoration: none;
+  width: fit-content;
+  border-bottom: 1px solid var(--rule-strong);
+  padding-bottom: 1px;
+}
+
+.settings__links a:hover {
+  border-bottom-color: var(--ink);
+}
+
+.settings__meta {
+  font-family: var(--font-ui);
+  font-size: var(--fs-eyebrow);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+/*
+ * The connected wallet inside the panel: network over account, each row its
+ * own button onto its own modal. Stacked rather than the hairline-divided pair
+ * the masthead used to carry — the panel has the width to label both.
+ */
+.wallet-rows {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--ink);
 }
 
-.chip-half {
-  min-height: 2.25rem;
-  padding: 0.4rem 0.7rem;
-  max-width: 9rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.wallet-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: 0.55rem 0.75rem;
   background: transparent;
-  color: var(--ink);
   border: none;
-  font-family: var(--font-ui);
-  font-size: var(--fs-eyebrow);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  line-height: 1.2;
+  text-align: left;
   cursor: pointer;
   transition: background var(--dur) ease;
 }
 
-.chip-half:hover {
+.wallet-row + .wallet-row {
+  border-top: 1px solid var(--rule);
+}
+
+.wallet-row:hover {
   background: var(--paper-sunk);
 }
 
-.chip-half--divided {
-  border-left: 1px solid var(--rule);
-}
-
-.chip-half--caps {
+.wallet-row__label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+  color: var(--ink-muted);
 }
 
-/* The network half is the least useful on a phone; keep the address. */
-@media (max-width: 26rem) {
-  .chip-half--optional {
-    display: none;
-  }
+.wallet-row__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--ink);
+}
 
-  .chip-half--divided {
-    border-left: none;
-  }
+/* An address is not a label, so it keeps its own casing and spacing. */
+.wallet-row__value--plain {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: -0.01em;
 }
 
 /* ==========================================================================
@@ -786,11 +909,13 @@ p {
   margin-top: 0.15em;
 }
 
-/* The USD/IDR pair in the nav. */
-.currency-toggle {
+/* A row of toggle chips: the USD/IDR pair and the cookie answer, both in the
+   settings panel. */
+.chip-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
 }
 
 /* A small square identity mark: the avatar, or its initials as a fallback. */

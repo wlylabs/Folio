@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAccount } from "wagmi";
-import WalletButton from "@/components/WalletButton";
-import CurrencySelector from "@/components/CurrencySelector";
+import SettingsMenu from "@/components/SettingsMenu";
 
 export default function Nav() {
   const { isConnected } = useAccount();
@@ -25,16 +24,13 @@ export default function Nav() {
         )}
 
         <div className="navbar__links">
-          <Link
-            href="/create"
-            className="nav-link"
-            aria-current={pathname === "/create" ? "page" : undefined}
-          >
-            Launch
-          </Link>
+          {/*
+            No "Launch" link here. The front page already makes that offer
+            twice — the masthead button and, on an empty edition, the one in
+            the feed — and the colophon carries it on every other page. A third
+            copy in the masthead was the one nobody was reading.
+          */}
           {isConnected && (
-            // The wallet chip carries the address now, so this links by name
-            // instead of repeating it.
             <Link
               href="/profile"
               className="nav-link"
@@ -43,10 +39,9 @@ export default function Nav() {
               Staff
             </Link>
           )}
-          {/* Sits with the wallet chip rather than beside a price: it governs
-              every conversion on the page, not the nearest one. */}
-          <CurrencySelector />
-          <WalletButton variant="nav" />
+          {/* The wallet and the currency both live in here: they are settings,
+              not navigation, and the masthead was treating them as both. */}
+          <SettingsMenu />
         </div>
       </nav>
     </header>

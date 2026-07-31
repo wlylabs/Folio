@@ -30,7 +30,8 @@ export default function Footer() {
       >
         <p className="eyebrow">Folio · Testnet edition · {chain}</p>
 
-        <nav className="footer__links" aria-label="Legal">
+        <nav className="footer__links" aria-label="Site">
+          <Link href="/about">About</Link>
           <Link href="/terms">Terms</Link>
           <Link href="/privacy">Privacy</Link>
           {/* Plain <a>: next/link is for routes, and this leaves the site. */}
