@@ -4,6 +4,13 @@ import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import CookieBanner from "@/components/CookieBanner";
 import { siteUrl } from "@/lib/siteUrl";
+import {
+  pageTitle,
+  socialMetadata,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_TAGLINE,
+} from "@/lib/seo";
 
 import { Inter, PT_Serif, Playfair_Display } from "next/font/google";
 import type { Metadata, Viewport } from "next";
@@ -39,11 +46,21 @@ export const metadata: Metadata = {
   // Canonical and og:url on child routes are written relative ("/terms"), so
   // they need an origin to resolve against.
   metadataBase: new URL(siteUrl()),
-  // No `template` here on purpose: the legal routes set their own complete
-  // titles, and a template would suffix "— Folio" onto strings that already
-  // end in it.
-  title: "Folio — Every token, told as a story",
-  description: "A testnet token launchpad where every token is an article.",
+  // No `template` here on purpose: the routes below set their own complete
+  // titles through pageTitle(), and a template would suffix "— Folio" onto
+  // strings that already end in it.
+  title: pageTitle(SITE_TAGLINE),
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  // These are the defaults a route inherits when it declares no openGraph of
+  // its own. A route that declares one replaces this wholesale — Next does not
+  // merge the two — which is why every page below builds its block with
+  // socialMetadata() rather than setting one or two keys.
+  ...socialMetadata({
+    title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+    description: SITE_DESCRIPTION,
+    path: "/",
+  }),
 };
 
 export const viewport: Viewport = {

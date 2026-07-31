@@ -5,9 +5,18 @@ import TradeBar from "@/components/TradeBar";
 import SetupNotice from "@/components/SetupNotice";
 import Mark from "@/components/Mark";
 import FiatValue from "@/components/FiatValue";
-import { sanitizeArticleHtml, articleExcerpt } from "@/lib/sanitize";
+import JsonLd from "@/components/JsonLd";
+import { sanitizeArticleHtml } from "@/lib/sanitize";
 import { fetchTokenStats } from "@/lib/tokenStats";
 import { chainLabel, explorerAddressUrl } from "@/lib/chains";
+import {
+  pageTitle,
+  socialMetadata,
+  tokenArticleJsonLd,
+  tokenDescription,
+  tokenHeadline,
+  tokenPath,
+} from "@/lib/seo";
 import {
   formatAmount,
   formatBps,
@@ -47,11 +56,37 @@ export async function generateMetadata({
   params: { address: string };
 }): Promise<Metadata> {
   const token = await getToken(params.address);
-  if (!token) return { title: "Token not found — Folio" };
+  // An address with no listing behind it. The page itself calls notFound(), and
+  // Next renders not-found with a 404 and its own noindex — so this is the
+  // belt-and-braces copy for anything that reads metadata without following
+  // that path. What it must not do is claim a canonical or a share card.
+  if (!token) {
+    return { title: pageTitle("Token not found"), robots: { index: false, follow: true } };
+  }
+
+  const headline = tokenHeadline(token);
+  const description = tokenDescription(token);
+  const path = tokenPath(token);
 
   return {
-    title: `${token.article_title} — Folio`,
-    description: articleExcerpt(token.article_body),
+    title: pageTitle(headline),
+    description,
+    // Addresses are stored lowercased but a link may carry checksum casing, so
+    // two URLs can serve the same listing. The canonical names one of them.
+    alternates: { canonical: path },
+    authors: [{ name: shortAddress(token.creator_wallet) }],
+    ...socialMetadata({
+      title: headline,
+      description,
+      path,
+      // The token's own avatar when it has one; the Folio card otherwise.
+      image: token.avatar_url,
+      imageAlt: `${token.name} avatar`,
+      article: {
+        publishedTime: token.created_at,
+        authors: [shortAddress(token.creator_wallet)],
+      },
+    }),
   };
 }
 
@@ -70,6 +105,18 @@ export default async function TokenPage({
 
   return (
     <main id="main" className="shell page article">
+      {/*
+        Server-rendered, like everything else on this page: the listing is a
+        piece of writing with a date and a byline, and this is the machine-
+        readable statement of that. It is what lets a token page compete as an
+        article rather than as one more address.
+      */}
+      <JsonLd
+        data={tokenArticleJsonLd(token, {
+          authorUrl: explorerAddressUrl(token.chain, token.creator_wallet),
+        })}
+      />
+
       <div className="article__head">
         <p className="eyebrow">{chainLabel(token.chain)} · Token feature</p>
 

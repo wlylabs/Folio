@@ -4,6 +4,7 @@ import { chainLabel, DEFAULT_CHAIN_SLUG, explorerAddressUrl } from "@/lib/chains
 import { FACTORY_DEPLOYMENT } from "@/lib/contracts/deployment";
 import { CONTACT_EMAIL } from "@/lib/contact";
 import { formatBps, shortAddress } from "@/lib/types";
+import { socialMetadata } from "@/lib/seo";
 
 // Nothing here is read from the database, so it prerenders. The one dynamic
 // fact — which factory the app points at — is a committed file, baked in at
@@ -17,12 +18,12 @@ export const metadata: Metadata = {
   title: "About Folio",
   description: DESCRIPTION,
   alternates: { canonical: "/about" },
-  openGraph: {
+  ...socialMetadata({
     title: "About Folio",
     description: DESCRIPTION,
-    url: "/about",
-    type: "article",
-  },
+    path: "/about",
+    article: {},
+  }),
 };
 
 export default function AboutPage() {

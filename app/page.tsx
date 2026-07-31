@@ -1,10 +1,20 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import SetupNotice from "@/components/SetupNotice";
+import JsonLd from "@/components/JsonLd";
 import Mark from "@/components/Mark";
 import FiatValue from "@/components/FiatValue";
 import { articleExcerpt } from "@/lib/sanitize";
 import { chainLabel, DEFAULT_CHAIN_SLUG } from "@/lib/chains";
+import {
+  pageTitle,
+  siteJsonLd,
+  socialMetadata,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_TAGLINE,
+} from "@/lib/seo";
 import { FACTORY_DEPLOYMENT } from "@/lib/contracts/deployment";
 import {
   formatAmount,
@@ -15,6 +25,23 @@ import {
 } from "@/lib/types";
 
 export const revalidate = 0;
+
+/**
+ * The front page states the value proposition rather than the product
+ * category: what makes a Folio listing different is that it is written, and a
+ * search result that leads with "launchpad" says nothing a hundred others
+ * don't. No claim here touches price or return.
+ */
+export const metadata: Metadata = {
+  title: pageTitle(SITE_TAGLINE),
+  description: SITE_DESCRIPTION,
+  alternates: { canonical: "/" },
+  ...socialMetadata({
+    title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+    description: SITE_DESCRIPTION,
+    path: "/",
+  }),
+};
 
 async function getTokens(): Promise<Token[]> {
   if (!isSupabaseConfigured) return [];
@@ -39,6 +66,8 @@ export default async function HomePage() {
 
   return (
     <main id="main">
+      <JsonLd data={siteJsonLd()} />
+
       <header className="shell">
         <div className="masthead">
           <h1 className="masthead__wordmark">FOLIO</h1>
