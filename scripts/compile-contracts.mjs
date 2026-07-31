@@ -1,72 +1,147 @@
 /**
- * Compiles contracts/FolioSale.sol into lib/contracts/folioSale.ts.
+ * Compiles the Solidity the frontend talks to into typed ABI modules under
+ * lib/contracts/.
  *
- * The generated artifact is committed, so `npm run build` and deploys never
- * need a Solidity compiler — only someone editing the .sol file runs this.
+ * The generated files are committed, so `npm run build` and Vercel deploys never
+ * need a Solidity compiler — only someone who edited a .sol file runs this:
  *
  *   npm run compile:contracts
+ *
+ * Foundry is the source of truth for the contracts themselves (see foundry.toml);
+ * this script exists because `forge build` needs to download a solc binary, which
+ * a CI box or a locked-down network may not be able to do. It pins the same
+ * compiler version, optimizer settings and EVM version foundry.toml uses, so the
+ * ABIs it produces are the ones the deployed bytecode answers to.
+ *
+ * Only ABIs are emitted for the factory and the token. Neither is ever deployed
+ * from the browser any more: the factory is deployed once by
+ * contracts/script/DeployFactory.s.sol, and each launch is a minimal proxy the
+ * factory clones. FolioSale is the retired one-contract-per-launch design, kept
+ * because listings created under it are still live and still readable.
  */
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import solc from "solc";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SOURCE = "FolioSale.sol";
-const CONTRACT = "FolioSale";
 
-const source = readFileSync(join(root, "contracts", SOURCE), "utf8");
-
-const input = {
-  language: "Solidity",
-  sources: { [SOURCE]: { content: source } },
-  settings: {
-    optimizer: { enabled: true, runs: 200 },
-    evmVersion: "paris",
-    outputSelection: {
-      "*": { "*": ["abi", "evm.bytecode.object"] },
-    },
+/** What to compile, and what to call it on the way out. */
+const TARGETS = [
+  {
+    source: "contracts/src/FolioFactory.sol",
+    contract: "FolioFactory",
+    out: "folioFactory.ts",
+    exportName: "FOLIO_FACTORY_ABI",
+    bytecode: false,
   },
-};
+  {
+    source: "contracts/src/FolioToken.sol",
+    contract: "FolioToken",
+    out: "folioToken.ts",
+    exportName: "FOLIO_TOKEN_ABI",
+    bytecode: false,
+  },
+  {
+    source: "contracts/FolioSale.sol",
+    // Compiled under its bare filename, the source-unit name it had when the
+    // committed artifact was generated. Solidity hashes the unit name into the
+    // metadata it appends to the bytecode, so renaming it here would change
+    // every byte of the tail for a contract nobody deploys any more.
+    unit: "FolioSale.sol",
+    contract: "FolioSale",
+    out: "folioSale.ts",
+    exportName: "FOLIO_SALE_ABI",
+    // Retired, but the bytecode stays generated so the file remains
+    // reproducible rather than becoming hand-maintained.
+    bytecode: true,
+  },
+];
 
-const output = JSON.parse(solc.compile(JSON.stringify(input)));
-
-const errors = (output.errors ?? []).filter((e) => e.severity === "error");
-if (errors.length > 0) {
-  for (const e of errors) console.error(e.formattedMessage ?? e.message);
-  process.exit(1);
+/**
+ * Resolves an import to a file on disk.
+ *
+ * solc normalises relative imports against the importing unit's own path before
+ * asking, so by the time a path arrives here it is either repo-relative
+ * ("contracts/src/FolioToken.sol") or a package specifier
+ * ("@openzeppelin/contracts/utils/math/Math.sol"). Trying the repo first and
+ * node_modules second covers both without a remappings file.
+ */
+function resolveImport(path) {
+  for (const candidate of [join(root, path), join(root, "node_modules", path)]) {
+    if (existsSync(candidate)) {
+      return { contents: readFileSync(candidate, "utf8") };
+    }
+  }
+  return { error: `Could not find ${path}` };
 }
-for (const w of output.errors ?? []) {
-  console.warn(w.formattedMessage ?? w.message);
+
+function compile({ source, unit = source, contract, bytecode }) {
+  const input = {
+    language: "Solidity",
+    sources: { [unit]: { content: readFileSync(join(root, source), "utf8") } },
+    settings: {
+      // Mirrors foundry.toml: paris (no PUSH0), optimizer on, 200 runs.
+      optimizer: { enabled: true, runs: 200 },
+      evmVersion: "paris",
+      outputSelection: { "*": { "*": ["abi", "evm.bytecode.object"] } },
+    },
+  };
+
+  const output = JSON.parse(
+    solc.compile(JSON.stringify(input), { import: resolveImport })
+  );
+
+  const errors = (output.errors ?? []).filter((e) => e.severity === "error");
+  if (errors.length > 0) {
+    for (const e of errors) console.error(e.formattedMessage ?? e.message);
+    process.exit(1);
+  }
+  for (const w of output.errors ?? []) {
+    console.warn(w.formattedMessage ?? w.message);
+  }
+
+  const compiled = output.contracts?.[unit]?.[contract];
+  if (!compiled) {
+    console.error(`${contract} not found in compiler output for ${source}`);
+    process.exit(1);
+  }
+
+  const object = bytecode ? `0x${compiled.evm.bytecode.object}` : null;
+  if (bytecode && (object === null || object.length <= 2)) {
+    console.error(`Compiler produced empty bytecode for ${contract}`);
+    process.exit(1);
+  }
+
+  return { abi: compiled.abi, bytecode: object };
 }
 
-const compiled = output.contracts?.[SOURCE]?.[CONTRACT];
-if (!compiled) {
-  console.error(`${CONTRACT} not found in compiler output`);
-  process.exit(1);
-}
+const outDir = join(root, "lib", "contracts");
+mkdirSync(outDir, { recursive: true });
 
-const bytecode = `0x${compiled.evm.bytecode.object}`;
-if (bytecode.length <= 2) {
-  console.error("Compiler produced empty bytecode");
-  process.exit(1);
-}
+for (const target of TARGETS) {
+  const { abi, bytecode } = compile(target);
 
-const banner = `// Generated by scripts/compile-contracts.mjs from contracts/${SOURCE}.
+  const banner = `// Generated by scripts/compile-contracts.mjs from ${target.source}.
 // Do not edit by hand — run \`npm run compile:contracts\` instead.
 // solc ${solc.version()}
 `;
 
-const file = `${banner}
-export const FOLIO_SALE_ABI = ${JSON.stringify(compiled.abi, null, 2)} as const;
-
-export const FOLIO_SALE_BYTECODE =
-  "${bytecode}" as \`0x\${string}\`;
+  let file = `${banner}
+export const ${target.exportName} = ${JSON.stringify(abi, null, 2)} as const;
 `;
 
-const outDir = join(root, "lib", "contracts");
-mkdirSync(outDir, { recursive: true });
-writeFileSync(join(outDir, "folioSale.ts"), file);
+  if (bytecode) {
+    const bytecodeName = target.exportName.replace(/_ABI$/, "_BYTECODE");
+    file += `
+export const ${bytecodeName} =
+  "${bytecode}" as \`0x\${string}\`;
+`;
+  }
 
-const kb = (bytecode.length / 2 / 1024).toFixed(1);
-console.log(`Wrote lib/contracts/folioSale.ts (${kb} kB of bytecode)`);
+  writeFileSync(join(outDir, target.out), file);
+  console.log(
+    `Wrote lib/contracts/${target.out} (${abi.length} ABI entries` +
+      (bytecode ? `, ${(bytecode.length / 2 / 1024).toFixed(1)} kB bytecode)` : ")")
+  );
+}

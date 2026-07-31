@@ -16,22 +16,81 @@ export type Token = {
   created_at: string;
 };
 
-/** Live sale figures, read from the contract when it responds. */
-export type SaleStats = {
-  /** Whole tokens sold. */
-  sold: number;
-  /** Whole tokens minted. */
+/**
+ * Live figures for a listing, read from its contract.
+ *
+ * Three shapes, because three kinds of listing exist and the page has to be
+ * honest about which it is looking at:
+ *
+ * - `curve`   — a FolioToken launched by the current factory. Bonding curve,
+ *               live two-way pricing, a reserve you can audit.
+ * - `legacy`  — a FolioSale from the one-contract-per-launch design. Fixed
+ *               price, fixed buyback, no curve. Still live, still tradable.
+ * - `offline` — nothing readable at that address: an unreachable RPC, or a row
+ *               whose contract_address never had a contract behind it.
+ */
+export type TokenStats = CurveStats | LegacyStats | OfflineStats;
+
+export type CurveStats = {
+  kind: "curve";
+  onChain: true;
+  /** Whole tokens the curve may ever issue. */
   supply: number;
+  /** Whole tokens issued so far. */
+  sold: number;
   /** Percentage of supply sold, 0–100. */
   percentSold: number;
-  /** True when the numbers came from the chain rather than the database. */
-  onChain: boolean;
+  /** Marginal price of one whole token, in ETH. Moves with every trade. */
+  price: number;
+  /** Fully diluted value at the marginal price, in ETH. */
+  marketCap: number;
+  /** Real ETH backing the curve. This is what sellers are paid out of. */
+  reserve: number;
+  /** Ceiling on that reserve — this launch's blast radius, in ETH. */
+  reserveCap: number;
+  /** Reserve at which buys close, in ETH. Zero means graduation is disabled. */
+  graduationThreshold: number;
+  /** ETH the curve can still take in before the binding ceiling stops it. */
+  headroom: number;
+  /** Reserve over what it owes sellers, in basis points. 10000 = exactly covered. */
+  reserveHealthBps: number;
+  /** Creator fee per leg, in basis points. */
+  feeBps: number;
+  /** True once the curve closed itself to buys at its threshold. */
+  graduated: boolean;
+  /** True while the platform emergency stop is engaged. Blocks buy and sell. */
+  paused: boolean;
+  /** Fee recipient, as the contract reports it. */
+  creator: string;
+  /**
+   * True when the configured factory vouches for this token
+   * (`factory.isFolioToken`). False means it answers to the FolioToken ABI but
+   * was not launched here — a clone somebody made of the implementation, or a
+   * launch from an older factory.
+   */
+  verified: boolean;
+};
+
+export type LegacyStats = {
+  kind: "legacy";
+  onChain: true;
+  sold: number;
+  supply: number;
+  percentSold: number;
   /**
    * Buyback terms, or null for a contract that has none — launches deployed
    * before `sell()` existed have no `sellPrice()` to read, and their holders
    * genuinely cannot sell back.
    */
   buyback: Buyback | null;
+};
+
+export type OfflineStats = {
+  kind: "offline";
+  onChain: false;
+  sold: number;
+  supply: number;
+  percentSold: number;
 };
 
 export type Buyback = {
@@ -90,6 +149,13 @@ export function formatDateShort(value: string | null | undefined): string {
   return Number.isNaN(date.getTime())
     ? "—"
     : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/** Basis points as a percentage: 100 -> "1%", 25 -> "0.25%". */
+export function formatBps(bps: number | null | undefined): string {
+  const n = Number(bps ?? 0);
+  if (!Number.isFinite(n)) return "0%";
+  return `${(n / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
 }
 
 /** A token figure, trimmed the same way. */

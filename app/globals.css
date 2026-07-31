@@ -1188,6 +1188,40 @@ html[data-dock] body {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+  Slippage presets. Toggle buttons rather than tabs: each one sets a value, it
+  does not switch a panel — so they carry aria-pressed and are styled from it.
+*/
+.chip {
+  padding: 0.15rem 0.55rem;
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition:
+    color var(--dur) ease,
+    border-color var(--dur) ease;
+}
+
+.chip:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--ink-muted);
+}
+
+.chip[aria-pressed="true"] {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .trade-row {
   display: flex;
   align-items: flex-end;
