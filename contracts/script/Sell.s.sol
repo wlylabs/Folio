@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {console2} from "forge-std/console2.sol";
-import {BaseSepoliaScript} from "./BaseSepoliaScript.sol";
+import {FolioScript} from "./FolioScript.sol";
 import {FolioToken} from "../src/FolioToken.sol";
 
 /**
@@ -29,18 +29,18 @@ import {FolioToken} from "../src/FolioToken.sol";
  * the difference between them is the entire reason a sell can look like it lost
  * money.
  */
-contract Sell is BaseSepoliaScript {
+contract Sell is FolioScript {
     /// @notice `SELL_BPS` above 100%.
     error InvalidSellFraction();
     /// @notice The wallet holds nothing to sell.
     error NothingToSell();
 
-    function run() external onlyBaseSepolia {
+    function run() external onlySupportedNetwork {
         FolioToken token = loadToken();
         address seller = deployer();
         uint256 balance = token.balanceOf(seller);
 
-        header("Sell - Base Sepolia");
+        header(string.concat("Sell - ", networkName()));
         console2.log("  Token   : %s (%s)", token.symbol(), vm.toString(address(token)));
         console2.log("  Seller  : %s", vm.toString(seller));
         console2.log("  Holding : %s %s", formatTokens(balance), token.symbol());

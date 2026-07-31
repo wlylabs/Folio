@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {console2} from "forge-std/console2.sol";
-import {BaseSepoliaScript} from "./BaseSepoliaScript.sol";
+import {FolioScript} from "./FolioScript.sol";
 import {FolioFactory} from "../src/FolioFactory.sol";
 import {FolioToken} from "../src/FolioToken.sol";
 
@@ -35,8 +35,8 @@ import {FolioToken} from "../src/FolioToken.sol";
  * balance. The balance should be at least reserve + unclaimed fees; anything
  * above that is ETH someone force-sent, which the curve deliberately ignores.
  */
-contract CheckReserve is BaseSepoliaScript {
-    function run() external view onlyBaseSepolia {
+contract CheckReserve is FolioScript {
+    function run() external view onlySupportedNetwork {
         FolioFactory factory = loadFactory();
         FolioToken token = loadToken();
 
@@ -46,7 +46,7 @@ contract CheckReserve is BaseSepoliaScript {
         uint256 fees = token.feesAccrued();
         uint256 balance = address(token).balance;
 
-        header("Reserve status - Base Sepolia");
+        header(string.concat("Reserve status - ", networkName()));
         console2.log("  Token   : %s (%s)", token.symbol(), vm.toString(address(token)));
         console2.log("  Name    : %s", token.name());
         console2.log("  Creator : %s", vm.toString(token.creator()));
@@ -110,14 +110,14 @@ contract CheckReserve is BaseSepoliaScript {
             console2.log("  FAIL - reserve is below its obligation. This should be unreachable.");
             console2.log("         Pause the platform and stop here:");
             console2.log("         forge script contracts/script/Pause.s.sol:Pause \\");
-            console2.log("           --rpc-url base-sepolia --broadcast");
+            console2.log("           --rpc-url %s --broadcast", networkSlug());
         } else if (balance < accountedFor) {
             console2.log("  FAIL - contract holds less ETH than reserve + unclaimed fees.");
         } else {
             console2.log("  OK - every holder can sell back at the quoted price.");
         }
         console2.log("");
-        console2.log("  Token on Basescan : %s", addressLink(address(token)));
+        console2.log("  Token on explorer : %s", addressLink(address(token)));
         console2.log("");
     }
 

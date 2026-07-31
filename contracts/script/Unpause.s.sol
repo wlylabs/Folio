@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {console2} from "forge-std/console2.sol";
-import {BaseSepoliaScript} from "./BaseSepoliaScript.sol";
+import {FolioScript} from "./FolioScript.sol";
 import {FolioFactory} from "../src/FolioFactory.sol";
 import {FolioToken} from "../src/FolioToken.sol";
 import {TradeProbe} from "./TradeProbe.sol";
@@ -25,16 +25,16 @@ import {TradeProbe} from "./TradeProbe.sol";
  * behind by the unpause. A quote that prices and a buy that no longer reverts
  * with `TradingPaused()` together mean the curve is live again.
  */
-contract Unpause is BaseSepoliaScript {
+contract Unpause is FolioScript {
     /// @notice `DEPLOYER_PRIVATE_KEY` is not the factory owner.
     error NotFactoryOwner(address owner, address caller);
 
-    function run() external onlyBaseSepolia {
+    function run() external onlySupportedNetwork {
         FolioFactory factory = loadFactory();
         address owner = factory.owner();
         address caller = deployer();
 
-        header("Release emergency pause - Base Sepolia");
+        header(string.concat("Release emergency pause - ", networkName()));
         console2.log("  Factory       : %s", vm.toString(address(factory)));
         console2.log("  Factory owner : %s", vm.toString(owner));
         console2.log("  Your wallet   : %s", vm.toString(caller));
@@ -55,7 +55,7 @@ contract Unpause is BaseSepoliaScript {
 
         header("Unpaused");
         console2.log("  factory.paused() : %s", factory.paused() ? "true" : "false");
-        console2.log("  Basescan         : %s", addressLink(address(factory)));
+        console2.log("  Explorer         : %s", addressLink(address(factory)));
 
         _verifyTradingResumed();
 

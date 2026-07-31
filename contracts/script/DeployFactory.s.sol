@@ -3,14 +3,14 @@ pragma solidity 0.8.26;
 
 import {console2} from "forge-std/console2.sol";
 import {stdJson} from "forge-std/StdJson.sol";
-import {BaseSepoliaScript} from "./BaseSepoliaScript.sol";
+import {FolioScript} from "./FolioScript.sol";
 import {FolioFactory} from "../src/FolioFactory.sol";
 import {CurveConfig} from "../src/types/CurveConfig.sol";
 
 /**
  * @title DeployFactory
- * @notice Deploys `FolioFactory` to Base Sepolia and records the result in
- *         `deployments/base-sepolia.json`.
+ * @notice Deploys `FolioFactory` to either supported testnet and records the
+ *         result in `deployments/<network>.json`.
  *
  * The factory's constructor deploys the shared `FolioToken` implementation, so
  * this one transaction produces both addresses and there is no window in which
@@ -23,6 +23,14 @@ import {CurveConfig} from "../src/types/CurveConfig.sol";
  * forge script contracts/script/DeployFactory.s.sol:DeployFactory \
  *   --rpc-url base-sepolia --broadcast --verify -vvv
  * ```
+ *
+ * The same script, unmodified, deploys to Robinhood Chain Testnet — the chain
+ * is chosen by `--rpc-url` alone, and every chain-shaped value (record path,
+ * explorer, banner) comes from the {NetworkProfile} the guard resolved. The
+ * bytecode is identical on both: nothing here reads `block.chainid`, and
+ * `evm_version = "paris"` keeps the opcode set to what both chains run.
+ * Robinhood verifies through Blockscout rather than Etherscan, so its deploy
+ * takes two extra flags — see DEPLOYMENT.md.
  *
  * Re-running deploys a *second, independent* factory. That is intentional —
  * nothing here mutates a live factory — but it means the JSON record is
@@ -38,14 +46,14 @@ import {CurveConfig} from "../src/types/CurveConfig.sol";
  * leg, and a price-move alert at a doubling. `setDefaultConfig` can retune them
  * afterwards for future launches without redeploying.
  */
-contract DeployFactory is BaseSepoliaScript {
+contract DeployFactory is FolioScript {
     using stdJson for string;
 
-    function run() external onlyBaseSepolia returns (FolioFactory factory) {
+    function run() external onlySupportedNetwork returns (FolioFactory factory) {
         CurveConfig memory config = _configFromEnv();
         address owner = vm.envOr("FACTORY_OWNER", deployer());
 
-        header("Deploy FolioFactory - Base Sepolia");
+        header(string.concat("Deploy FolioFactory - ", networkName()));
         console2.log("  Owner (emergency stop) : %s", vm.toString(owner));
         console2.log("  virtualEthReserve      : %s ETH", formatEth(config.virtualEthReserve));
         console2.log("  maxReserveCap          : %s ETH", formatEth(config.maxReserveCap));
@@ -53,14 +61,14 @@ contract DeployFactory is BaseSepoliaScript {
         console2.log("  feeBps                 : %s", formatBps(config.feeBps));
         console2.log("  priceMoveAlertBps      : %s", formatBps(config.priceMoveAlertBps));
 
-        if (vm.exists(DEPLOYMENTS_PATH)) {
-            string memory existing = vm.readFile(DEPLOYMENTS_PATH);
+        if (vm.exists(deploymentsPath())) {
+            string memory existing = vm.readFile(deploymentsPath());
             console2.log("");
             console2.log("  NOTE: a deployment record already exists and will be overwritten:");
             console2.log("        %s", vm.toString(existing.readAddress(".factory")));
         }
 
-        confirm("deploy a new FolioFactory to Base Sepolia");
+        confirm(string.concat("deploy a new FolioFactory to ", networkName()));
 
         uint256 gasBefore = gasleft();
         vm.startBroadcast(deployerKey());
@@ -76,16 +84,16 @@ contract DeployFactory is BaseSepoliaScript {
         console2.log("  Owner          : %s", vm.toString(factory.owner()));
         console2.log("  Gas used       : ~%s", vm.toString(gasUsed));
         console2.log("");
-        console2.log("  Factory on Basescan        : %s", addressLink(address(factory)));
-        console2.log("  Implementation on Basescan : %s", addressLink(implementation));
+        console2.log("  Factory on explorer        : %s", addressLink(address(factory)));
+        console2.log("  Implementation on explorer : %s", addressLink(implementation));
 
         _write(factory, implementation, owner, config);
 
         header("Next");
-        console2.log("  1. Confirm both contracts show as verified on Basescan.");
+        console2.log("  1. Confirm both contracts show as verified on the explorer.");
         console2.log("  2. Create a test launch:");
         console2.log("     forge script contracts/script/CreateToken.s.sol:CreateToken \\");
-        console2.log("       --rpc-url base-sepolia --broadcast -vvv");
+        console2.log("       --rpc-url %s --broadcast -vvv", networkSlug());
         console2.log("");
     }
 
@@ -107,7 +115,7 @@ contract DeployFactory is BaseSepoliaScript {
         // chain over every field is what pushes this function past the EVM's
         // 16-slot reach and fails the build with "stack too deep".
         string memory json = "{\n";
-        json = string.concat(json, '  "network": "base-sepolia",\n');
+        json = string.concat(json, _str("network", networkSlug(), 2));
         json = string.concat(json, _num("chainId", block.chainid, 2));
         json = string.concat(json, _str("factory", vm.toString(address(factory)), 2));
         json = string.concat(json, _str("implementation", vm.toString(implementation), 2));
@@ -115,7 +123,7 @@ contract DeployFactory is BaseSepoliaScript {
         json = string.concat(json, _str("deployer", vm.toString(deployer()), 2));
         json = string.concat(json, _num("deployedAtBlock", block.number, 2));
         json = string.concat(json, _num("deployedAtTimestamp", block.timestamp, 2));
-        json = string.concat(json, _str("explorer", EXPLORER, 2));
+        json = string.concat(json, _str("explorer", _profile().explorer, 2));
         // Filled in by `CreateToken`, so the trading scripts need no arguments.
         json = string.concat(json, _str("lastToken", "", 2));
 
@@ -136,9 +144,9 @@ contract DeployFactory is BaseSepoliaScript {
         );
         json = string.concat(json, "  }\n}\n");
 
-        vm.writeFile(DEPLOYMENTS_PATH, json);
+        vm.writeFile(deploymentsPath(), json);
         console2.log("");
-        console2.log("  Recorded in %s", DEPLOYMENTS_PATH);
+        console2.log("  Recorded in %s", deploymentsPath());
     }
 
     /// @dev One `"key": "value",` line, indented by `indent` spaces.
