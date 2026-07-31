@@ -70,7 +70,7 @@ We may update these Terms of Service from time to time. Changes will be communic
 
 ## 9. Contact
 
-Questions about these Terms of Service can be directed to: [FILL IN EMAIL/CONTACT]
+Questions about these Terms of Service can be directed to: [wly38347@gmail.com](mailto:wly38347@gmail.com)
 
 ---
 

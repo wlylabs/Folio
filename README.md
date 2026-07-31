@@ -26,8 +26,8 @@ updates and deletes, so existing listings can't be tampered with.
 `/terms` and `/privacy` render those two files directly — the markdown at the
 repo root is the only copy. Both are unreviewed drafts, so both pages carry a
 "Draft — pending legal review" badge; clearing `draft` in `lib/legal.ts`
-removes it. Each document still has placeholders (governing law and contact in
-the terms, contact in the privacy policy), and a lawyer has to look at them
+removes it. Governing law in the terms is still a placeholder — it depends on
+where the operator is domiciled — and a lawyer has to look at both documents
 before this runs against real value or real users.
 
 One gap worth knowing about, because the privacy policy implies otherwise: the

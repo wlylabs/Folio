@@ -73,7 +73,7 @@ This Privacy Policy may be updated from time to time. Material changes will be c
 
 ## 10. Contact
 
-Questions about this Privacy Policy can be directed to: [FILL IN EMAIL/CONTACT]
+Questions about this Privacy Policy can be directed to: [wly38347@gmail.com](mailto:wly38347@gmail.com)
 
 ---
 
