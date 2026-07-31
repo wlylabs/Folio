@@ -485,10 +485,10 @@ p {
 
 /* --- The view switch --------------------------------------------------------
 
-   Launchpad or Postfolio, in the masthead on every page. Drawn as one framed
-   pair rather than two nav links because the two are exclusive: at any moment
-   you are reading one of them, and a control that shows which one you are in
-   has to look like a switch that is thrown, not like two destinations.
+   Launchpad or Postfolio, in the settings panel. Drawn as one framed pair
+   rather than two nav links because the two are exclusive: at any moment you
+   are reading one of them, and a control that shows which one you are in has to
+   look like a switch that is thrown, not like two destinations.
 
    The selected half is set solid — ink on paper reversed — which is the same
    move .btn--primary makes, and the strongest contrast this palette has. It is
@@ -535,14 +535,17 @@ p {
   }
 }
 
-/* On a narrow phone the switch shares the bar with a wordmark, a wallet dot and
-   sometimes a staff link. Tightening the tracking buys back the ~12px that
-   otherwise wraps the row. */
-@media (max-width: 26rem) {
-  .mode-switch__opt {
-    padding-inline: var(--sp-2);
-    letter-spacing: 0.04em;
-  }
+/* In the settings panel there is a column to fill rather than a bar to share:
+   the frame runs the full width and the two halves split it evenly, which lines
+   its edges up with the wallet button and the currency selector under it. */
+.settings__group .mode-switch {
+  display: flex;
+}
+
+.settings__group .mode-switch__opt {
+  flex: 1;
+  min-height: 2.25rem;
+  justify-content: center;
 }
 
 /* ==========================================================================

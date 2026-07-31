@@ -20,8 +20,12 @@ import {
  * Postfolio are each one keyboard tab and one crawl away from the other, which
  * a stateful toggle would have cost.
  *
- * It sits in the masthead on every page, because the whole point of a second
- * view is being able to leave the first one from wherever you are.
+ * It lives in the settings panel, which is on every page — the whole point of a
+ * second view is being able to leave the first one from wherever you are, and
+ * one press on Settings is a cheap enough toll for a switch thrown once a
+ * session. In the panel it stretches to the full width in two equal halves, so
+ * the frame reads as one control with a side selected rather than as a pair of
+ * links that happen to be touching.
  */
 export default function ModeSwitch() {
   const pathname = usePathname() ?? LAUNCHPAD_PATH;
