@@ -2,13 +2,11 @@ import type { MetadataRoute } from "next";
 import { siteUrl } from "@/lib/siteUrl";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { tokenPath } from "@/lib/seo";
-import { listPosts, postPath } from "@/lib/posts";
-import { POSTFOLIO_PATH } from "@/lib/postfolio";
 
 /**
  * Every public URL on the site, including one per published listing.
  *
- * Regenerated hourly rather than per request. Listing the tokens means a
+ * Regenerated hourly rather than per request. Listing them means a
  * Supabase query, and a sitemap is fetched by crawlers on their own schedule —
  * a bot that pulls it every few minutes must not turn into a query every few
  * minutes. An hour is well inside how fast a search engine acts on a new URL
@@ -28,44 +26,19 @@ type TokenRow = { contract_address: string; created_at: string };
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();
-  const [tokens, posts] = await Promise.all([getPublishedTokens(), listPosts(MAX_TOKEN_URLS)]);
+  const tokens = await getPublishedTokens();
 
-  // The front page carries both feeds, so it is as fresh as whichever published
-  // most recently.
-  const newest = [tokens[0]?.created_at, posts[0]?.created_at]
-    .map(parseDate)
-    .filter((date): date is Date => date !== null)
-    .sort((a, b) => b.getTime() - a.getTime())[0];
-  const frontPageModified = newest ?? new Date();
+  // The front page is the launch feed, so it is as fresh as the newest listing.
+  const frontPageModified = parseDate(tokens[0]?.created_at) ?? new Date();
   const buildTime = new Date();
 
   const statics: MetadataRoute.Sitemap = [
     { url: `${base}/`, lastModified: frontPageModified, changeFrequency: "daily", priority: 1 },
-    {
-      // Postfolio's front page. It is the article half of the publication, and
-      // it changes exactly when the desk publishes.
-      url: `${base}${POSTFOLIO_PATH}`,
-      lastModified: parseDate(posts[0]?.created_at) ?? buildTime,
-      changeFrequency: "daily",
-      priority: 0.8,
-    },
-    // /create is the only form a visitor can use. The article desk is staff and
-    // lives at /desk, which is noindex and disallowed — a sitemap entry for a
-    // page that answers with a password box is a crawl budget spent on a door.
     { url: `${base}/create`, lastModified: buildTime, changeFrequency: "monthly", priority: 0.6 },
     { url: `${base}/about`, lastModified: buildTime, changeFrequency: "monthly", priority: 0.5 },
     { url: `${base}/terms`, lastModified: buildTime, changeFrequency: "yearly", priority: 0.3 },
     { url: `${base}/privacy`, lastModified: buildTime, changeFrequency: "yearly", priority: 0.3 },
   ];
-
-  const articles: MetadataRoute.Sitemap = posts.map((post) => ({
-    url: `${base}${postPath(post)}`,
-    // A post is never edited: `posts` has no update policy for any key the app
-    // holds, so published is modified.
-    lastModified: parseDate(post.created_at) ?? buildTime,
-    changeFrequency: "yearly",
-    priority: 0.7,
-  }));
 
   const listings: MetadataRoute.Sitemap = tokens.map((token) => ({
     url: `${base}${tokenPath(token)}`,
@@ -79,7 +52,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }));
 
-  return [...statics, ...listings, ...articles];
+  return [...statics, ...listings];
 }
 
 /**

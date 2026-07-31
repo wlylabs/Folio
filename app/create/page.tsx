@@ -3,14 +3,12 @@ import LaunchForm from "./LaunchForm";
 import { pageTitle, socialMetadata } from "@/lib/seo";
 
 /**
- * The launchpad: an article with a token behind it, and the only way onto Folio
- * for anyone who is not staff.
+ * The launchpad: an article with a token behind it, and the only way onto
+ * Folio.
  *
  * It used to share a tab strip with article mode, which read as two settings of
- * one form. They were never that. The agent's desk moved to /desk behind a
- * password — it publishes free, so it cannot be public — and this page is now
- * about one thing: your article, your token, one transaction. What the desk
- * publishes is read-only to everyone here, in Postfolio.
+ * one form. They were never that, and the article side is gone — this page is
+ * about one thing: your article, your token, one transaction.
  *
  * The form is a client component — it holds an editor, a wallet connection and
  * a transaction — and a "use client" module cannot export `metadata`. This page

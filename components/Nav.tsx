@@ -5,27 +5,14 @@ import { usePathname } from "next/navigation";
 import { useAccount } from "wagmi";
 import SettingsMenu from "@/components/SettingsMenu";
 import Logo from "@/components/Logo";
-import {
-  LAUNCHPAD_PATH,
-  POSTFOLIO_NAME,
-  POSTFOLIO_PATH,
-  modeForPath,
-} from "@/lib/postfolio";
 
 export default function Nav() {
   const { isConnected } = useAccount();
-  const pathname = usePathname() ?? LAUNCHPAD_PATH;
+  const pathname = usePathname() ?? "/";
 
-  // Which view you are in decides what the wordmark says and where it goes.
-  // Inside Postfolio the masthead is Postfolio's — a "FOLIO" wordmark that
-  // returns to the launchpad would undo the switch every time a reader reached
-  // for the way back up.
-  const mode = modeForPath(pathname);
-  const home = mode === "postfolio" ? POSTFOLIO_PATH : LAUNCHPAD_PATH;
-
-  // Each view's front page opens with its own full masthead, so the nav would
-  // only be repeating the wordmark a few pixels above it.
-  const showWordmark = pathname !== home;
+  // The front page opens with its own full masthead, so the nav would only be
+  // repeating the wordmark a few pixels above it.
+  const showWordmark = pathname !== "/";
 
   return (
     <header className="navbar">
@@ -33,15 +20,9 @@ export default function Nav() {
         {showWordmark ? (
           // The masthead, shrunk down: same face and weight as the front page
           // so the two read as one wordmark rather than two.
-          <Link
-            href={home}
-            aria-label={mode === "postfolio" ? `${POSTFOLIO_NAME} — home` : "Folio — home"}
-            className="wordmark"
-          >
+          <Link href="/" aria-label="Folio — home" className="wordmark">
             <Logo className="wordmark__mark" />
-            <span className="wordmark__text">
-              {mode === "postfolio" ? POSTFOLIO_NAME.toUpperCase() : "FOLIO"}
-            </span>
+            <span className="wordmark__text">FOLIO</span>
           </Link>
         ) : (
           // Holds the left end of the bar so the switch and the settings stay
@@ -55,13 +36,6 @@ export default function Nav() {
             twice — the masthead button and, on an empty edition, the one in
             the feed — and the colophon carries it on every other page. A third
             copy in the masthead was the one nobody was reading.
-
-            The view switch is not here either: it moved into the settings
-            panel. It is thrown once and then left alone for a whole session,
-            which is not enough traffic to hold a permanent frame in a bar this
-            narrow — and standing next to the wordmark it read as navigation to
-            two more pages rather than as the one control that decides which
-            side of the site you are on.
           */}
           {isConnected && (
             <Link
