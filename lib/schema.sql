@@ -119,6 +119,70 @@ create policy "delistings are publicly readable"
   using (true);
 
 -- ---------------------------------------------------------------------------
+-- Articles that are not launches
+--
+-- Folio has two publishing modes. A launch writes to `tokens`: an article with
+-- a contract behind it. Article mode writes here: a piece of writing with
+-- nothing behind it but its sources — no contract, no curve, no transaction,
+-- no gas. The two share a front page and a house style and nothing else, which
+-- is why this is a separate table rather than a nullable contract_address on
+-- `tokens`. Every column over there describes a token; none of them would ever
+-- be filled in for a post.
+--
+-- The rows are written by the article agent (lib/ai/writer.ts) from headlines
+-- it reads off public RSS feeds, so two columns carry the provenance that makes
+-- that publishable rather than laundered:
+--
+--   sources  the feed items the draft was written from — title, url, publisher.
+--            Rendered at the foot of every post as a real list of links. A
+--            draft that cannot say where it came from is rejected before it
+--            reaches this table (app/api/articles/publish/route.ts).
+--   model    which model wrote it, e.g. 'groq:llama-3.3-70b-versatile'. The
+--            byline says a machine wrote the piece and this says which one.
+--
+-- ---------------------------------------------------------------------------
+-- Writes are server-side only
+--
+-- Unlike a launch, publishing here costs nothing — no gas, no signature, no
+-- transaction to wait on. That is the whole point of article mode and also its
+-- only real risk: anyone holding the public anon key could fill the feed at no
+-- cost. So there is no insert policy for the anon role. Posts are written by
+-- the route handlers in app/api/articles/ using SUPABASE_SERVICE_ROLE_KEY,
+-- which bypasses RLS, and a deployment without that key can read posts but
+-- cannot publish one. /api/articles/publish says so plainly rather than
+-- failing with a policy error.
+-- ---------------------------------------------------------------------------
+create table if not exists posts (
+  id uuid primary key default gen_random_uuid(),
+  slug text unique not null,           -- kebab-case, the /read/<slug> URL
+  title text not null,
+  excerpt text not null,               -- the meta description, written not derived
+  body text not null,                  -- HTML from markdown, sanitized before insert
+                                       -- and again on render
+  topic text not null,                 -- 'ai' | 'technology' | 'crypto', see lib/ai/news.ts
+  tags text[] not null default '{}',
+  sources jsonb not null default '[]', -- [{ title, url, publisher, published_at }]
+  model text,                          -- provider:model that produced the draft
+  author_wallet text,                  -- the wallet that pressed publish. A claim,
+                                       -- not a proof — same caveat as tokens.
+  cover_url text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists posts_created_at_idx on posts (created_at desc);
+create index if not exists posts_topic_idx on posts (topic);
+
+alter table posts enable row level security;
+
+drop policy if exists "posts are publicly readable" on posts;
+create policy "posts are publicly readable"
+  on posts for select
+  using (true);
+
+-- Deliberately no insert, update or delete policy. See the note above: the
+-- service role is the only writer.
+
+-- ---------------------------------------------------------------------------
 -- Storage bucket for token avatars.
 -- ---------------------------------------------------------------------------
 insert into storage.buckets (id, name, public)
