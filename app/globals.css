@@ -591,12 +591,27 @@ p {
 
 /* The Tiptap surface, dressed like the inputs beside it. */
 .editor {
+  position: relative;
   border: 1px solid var(--rule);
   background: var(--paper-raised);
   padding: var(--sp-4);
   transition:
     border-color var(--dur) ease,
     box-shadow var(--dur) ease;
+}
+
+/* The prompt lives here rather than in the document, so there is nothing to
+   delete before typing and nothing to accidentally publish. */
+.editor--empty::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  top: var(--sp-4);
+  left: var(--sp-4);
+  right: var(--sp-4);
+  color: var(--ink-soft);
+  font-size: 1rem;
+  line-height: 1.7;
+  pointer-events: none;
 }
 
 .editor:focus-within {
