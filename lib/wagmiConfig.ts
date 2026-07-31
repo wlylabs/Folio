@@ -1,5 +1,5 @@
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
-import type { Chain } from "viem";
+import { http, type Chain, type Transport } from "viem";
 import { SUPPORTED_CHAINS } from "./chains";
 
 const PLACEHOLDER_PROJECT_ID = "00000000000000000000000000000000";
@@ -38,10 +38,25 @@ const chains = SUPPORTED_CHAINS.map((entry) => entry.chain) as unknown as readon
   ...Chain[],
 ];
 
+/**
+ * Read endpoints for the browser, from the same NEXT_PUBLIC_RPC_* variables the
+ * server already uses (see publicClientFor).
+ *
+ * Without this the page falls back to each chain's built-in public endpoint for
+ * every read it makes — balances included. Those are shared and aggressively
+ * rate limited, so a throttled read leaves a balance unresolved rather than
+ * wrong, which reads on screen as a wallet that never got funded. An unset
+ * variable keeps the old fallback, so this only ever narrows the failure.
+ */
+const transports = Object.fromEntries(
+  SUPPORTED_CHAINS.map((entry) => [entry.chain.id, http(entry.rpcEnv || undefined)])
+) as Record<number, Transport>;
+
 export const wagmiConfig = getDefaultConfig({
   appName: "Folio",
   projectId: projectId || PLACEHOLDER_PROJECT_ID,
   chains,
+  transports,
   ssr: true,
   walletConnectParameters: {
     // Do not treat a session as stale just because it was opened before the

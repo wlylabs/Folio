@@ -3,13 +3,14 @@
 import { useMemo, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useAccount, useBalance, useConfig } from "wagmi";
+import { useAccount, useConfig } from "wagmi";
 import { getAccount, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { formatEther, formatUnits, parseEther, parseEventLogs } from "viem";
 import { useRouter } from "next/navigation";
 import WalletButton from "@/components/WalletButton";
 import FiatValue from "@/components/FiatValue";
 import { FaucetLinks, FaucetNotice } from "@/components/Faucet";
+import { useGasBalance } from "@/components/useGasBalance";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { FOLIO_FACTORY_ABI } from "@/lib/contracts/folioFactory";
 import { FACTORY_DEPLOYMENT, openingPriceEth } from "@/lib/contracts/deployment";
@@ -142,13 +143,14 @@ export default function CreatePage() {
 
   // Launching costs gas, and a wallet that has never touched this testnet has
   // none. Read the balance up front so the form can point at a faucet instead
-  // of letting the wallet reject the signature.
-  const { data: balance } = useBalance({
-    address,
-    chainId: chainEntry?.chain.id,
-    query: { enabled: Boolean(address && chainEntry) },
-  });
-  const noGas = balance !== undefined && balance.value === 0n;
+  // of letting the wallet reject the signature — and keep reading it, so a
+  // claim made in the faucet tab lands here without a reload.
+  const {
+    balance,
+    noGas,
+    checking: checkingGas,
+    refetch: refetchBalance,
+  } = useGasBalance({ address, chainId: chainEntry?.chain.id });
 
   // The curve opens at virtualEthReserve / supply, so the price a buyer first
   // sees is known before anything is signed.
@@ -387,6 +389,8 @@ export default function CreatePage() {
           <FaucetNotice
             chain={deployment?.chain ?? "base-sepolia"}
             heading={`No ${chainEntry?.chain.nativeCurrency.symbol ?? "test ETH"} to pay gas with`}
+            onRecheck={() => void refetchBalance()}
+            checking={checkingGas}
           />
         </div>
       )}
