@@ -22,6 +22,10 @@ signature-based auth (Sign-In With Ethereum minting a Supabase JWT), which isn't
 implemented here. Row-level security in `lib/schema.sql` blocks client-side
 updates and deletes, so existing listings can't be tampered with.
 
+`TERMS.md` holds a draft Terms of Service covering the testnet stage. It is an
+unreviewed draft — a lawyer has to look at it before this runs against real
+value, and two sections (governing law, contact) are still placeholders.
+
 ## Setup (from your phone, via GitHub Codespaces)
 
 1. Push this folder to a new GitHub repo (see steps below).
