@@ -133,6 +133,31 @@ export function formatEth(value: number | null | undefined): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
 }
 
+/**
+ * An ETH figure kept to significant figures rather than decimal places.
+ *
+ * {formatEth} stops at six decimals and prints "<0.000001" below that, which is
+ * right for a balance and wrong for a curve price: a launch that opens around
+ * 1e-9 ETH per token has its whole price history inside that clamp, and an axis
+ * whose high and low both read "<0.000001" says nothing at all.
+ *
+ * So this keeps four significant figures wherever they fall. Use it where the
+ * distance between two small numbers is the point — chart scales, per-token
+ * prices — and {formatEth} everywhere else, so ordinary ETH amounts keep
+ * reading the way they do across the rest of the site.
+ */
+export function formatEthPrice(value: number | null | undefined): string {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return "0";
+  if (n === 0) return "0";
+
+  // Past this the digits run off the end of a caption, and an exponent is the
+  // honest way to say "smaller than this format can show".
+  if (Math.abs(n) < 1e-9) return n.toExponential(2);
+
+  return n.toLocaleString("en-US", { maximumSignificantDigits: 4 });
+}
+
 /** A publication date, or "undated" for a row that has no usable timestamp. */
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "undated";
@@ -149,6 +174,32 @@ export function formatDateShort(value: string | null | undefined): string {
   return Number.isNaN(date.getTime())
     ? "—"
     : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/**
+ * How long ago something happened, from a Unix timestamp in seconds.
+ *
+ * Chain events carry block timestamps, and "4m ago" is what a reader wants from
+ * a trade tape — a wall-clock time makes them do the subtraction. Past a week
+ * the relative form stops meaning anything, so it becomes a date.
+ *
+ * A missing timestamp says so rather than falling back to the epoch: a block
+ * header that didn't load is not a trade from 1970.
+ */
+export function formatRelativeTime(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return "time unknown";
+
+  const elapsed = Math.floor(Date.now() / 1000) - Number(seconds);
+  // Clock skew between the reader and the chain, not a trade from the future.
+  if (elapsed < 45) return "just now";
+  if (elapsed < 3_600) return `${Math.round(elapsed / 60)}m ago`;
+  if (elapsed < 86_400) return `${Math.round(elapsed / 3_600)}h ago`;
+  if (elapsed < 7 * 86_400) return `${Math.round(elapsed / 86_400)}d ago`;
+
+  return new Date(Number(seconds) * 1000).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 /** Basis points as a percentage: 100 -> "1%", 25 -> "0.25%". */

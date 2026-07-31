@@ -14,6 +14,7 @@ import { useDockHeight } from "@/components/useDockHeight";
 import { useGasBalance } from "@/components/useGasBalance";
 import { classifyTxError } from "@/lib/txErrors";
 import { ensureWalletReady } from "@/lib/walletReady";
+import { announceTradeSettled } from "@/lib/tradeEvents";
 import { formatBps, formatEth, formatTokens, type CurveStats, type Token } from "@/lib/types";
 
 type Status = { kind: "info" | "error" | "success" | "muted"; message: string; tx?: string };
@@ -193,6 +194,9 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
 
     setStatus({ kind: "success", message: done, tx: hash });
     await Promise.all([refetchEth(), refetchTokens(), refetchLive()]);
+    // The price history and the creator's fee balance both just changed, and
+    // neither is downstream of this component or of router.refresh().
+    announceTradeSettled();
     router.refresh();
   }
 

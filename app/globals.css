@@ -873,6 +873,147 @@ p {
   transition: width var(--dur) ease;
 }
 
+/* ==========================================================================
+   Price chart and trade tape
+
+   One series, ink on paper, so there is no palette here and no legend: the
+   panel heading names the line. The buy/sell distinction is carried twice
+   over — a filled or hollow marker on the chart, a word in the tape — because
+   a difference that lives only in a colour is a difference some readers do not
+   get.
+   ========================================================================== */
+
+.chart {
+  padding: var(--sp-3) 0.875rem var(--sp-2);
+  border-top: 1px solid var(--rule);
+}
+
+/*
+  The y-axis, as text. It lives outside the SVG because everything inside a
+  scaled viewBox scales with it, and an axis label that is legible on a desktop
+  is 5px tall on a phone.
+*/
+.chart__scale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  margin: 0 0 var(--sp-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+}
+
+.chart__scale dt {
+  display: inline;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.chart__scale dd {
+  display: inline;
+  margin-left: 0.4em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The tooltip is positioned against this box, so the SVG's own coordinates map
+   straight onto it. */
+.chart__plot {
+  position: relative;
+}
+
+.chart__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* The crosshair follows the pointer, so a drag on the chart should not fight
+     the page for a vertical scroll. */
+  touch-action: pan-y;
+}
+
+.chart__span {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin: var(--sp-1) 0 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  color: var(--ink-muted);
+}
+
+.chart__tip {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  min-width: 9rem;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--paper-raised);
+  border: 1px solid var(--ink);
+  box-shadow: var(--shadow-press);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.tape {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tape__row {
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: 0.45rem 0.875rem;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
+  transition: background var(--dur) ease;
+}
+
+/* The row for the point the pointer is on, so hovering the chart and reading
+   the tape are the same act. */
+.tape__row--on {
+  background: var(--paper-sunk);
+}
+
+.tape__side {
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tape__side--buy {
+  color: var(--ink);
+}
+
+.tape__side--sell {
+  color: var(--ink-muted);
+}
+
+.tape__amount,
+.tape__when {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.tape__when {
+  text-align: right;
+}
+
+.tape__sub {
+  display: block;
+  font-size: var(--fs-micro);
+  color: var(--ink-muted);
+  margin-top: 0.1em;
+}
+
 .stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
@@ -1286,6 +1427,22 @@ html[data-dock] body {
     position: sticky;
     top: calc(var(--nav-h) + var(--sp-4));
   }
+
+  /*
+    Last in the markup so auto-placement doesn't steal the rail's cell, but
+    named back into the main column so it reads as part of the article. The
+    rail stays sticky and short; a chart tall enough to overflow the viewport
+    inside a sticky panel is a panel whose bottom half can't be reached.
+  */
+  .article__chart {
+    grid-column: 1;
+  }
+}
+
+.article__chart {
+  min-width: 0;
+  max-width: var(--measure);
+  margin-top: var(--sp-6);
 }
 
 /* Sanitized article HTML — see lib/sanitize.ts for the tag allowlist. */

@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import TradeBar from "@/components/TradeBar";
+import TradeHistoryPanel from "@/components/TradeHistoryPanel";
+import CreatorFees from "@/components/CreatorFees";
 import SetupNotice from "@/components/SetupNotice";
 import Mark from "@/components/Mark";
 import FiatValue from "@/components/FiatValue";
@@ -211,7 +213,27 @@ export default async function TokenPage({
         </section>
 
         <TradeBar token={token} stats={stats} />
+
+        {/*
+          Renders for the creator and nobody else, and decides that from
+          `creator()` on the contract rather than the database's byline — one is
+          a fact, the other is a claim, and this one moves money.
+        */}
+        {stats.kind === "curve" && <CreatorFees token={token} stats={stats} />}
       </aside>
+
+      {/*
+        Last in the markup, first in the main column on a wide screen (see
+        .article__chart). It sits below the article rather than in the rail
+        because a price chart squeezed into a 21rem gutter is not worth drawing
+        — and because it loads on its own schedule, which the rail's sticky
+        panels should not be waiting on.
+      */}
+      {stats.kind === "curve" && (
+        <div className="article__chart">
+          <TradeHistoryPanel token={token} />
+        </div>
+      )}
     </main>
   );
 }
