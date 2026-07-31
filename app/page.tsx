@@ -4,6 +4,7 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import SetupNotice from "@/components/SetupNotice";
 import JsonLd from "@/components/JsonLd";
 import Mark from "@/components/Mark";
+import Logo from "@/components/Logo";
 import FiatValue from "@/components/FiatValue";
 import { articleExcerpt } from "@/lib/sanitize";
 import { chainLabel, DEFAULT_CHAIN_SLUG } from "@/lib/chains";
@@ -70,6 +71,10 @@ export default async function HomePage() {
 
       <header className="shell">
         <div className="masthead">
+          {/* An emblem above the nameplate, the way a printed front page
+              carries one. The nav pairs the two side by side instead — there
+              is no vertical room up there for a stacked lockup. */}
+          <Logo className="masthead__mark" />
           <h1 className="masthead__wordmark">FOLIO</h1>
           <p className="masthead__tagline">Every token, told as a story</p>
           <p className="masthead__lede">

@@ -299,23 +299,40 @@ p {
 }
 
 /*
- * The masthead wordmark. It sits in ink rather than the browser's link blue,
- * and earns a hairline on hover — enough to show it leads home without
- * printing a rule under it at rest.
+ * The masthead wordmark: the folded-sheet mark, then the name. It sits in ink
+ * rather than the browser's link blue, and earns a hairline on hover — enough
+ * to show it leads home without printing a rule under it at rest.
+ *
+ * The rule belongs to the word, not to the lockup, so hover underlines FOLIO
+ * the way it always did rather than dragging a line under the mark too.
  */
 .wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
   font-family: var(--font-display);
   font-weight: 900;
   font-size: 1.0625rem;
   letter-spacing: 0.06em;
   color: var(--ink);
   text-decoration: none;
-  border-bottom: 1px solid transparent;
   line-height: 1;
+}
+
+/* Sized in em so the mark tracks the wordmark: a shade taller than the caps,
+   which is what stops a lockup from reading as two separate things. */
+.wordmark__mark {
+  flex: none;
+  width: 1.2em;
+  height: 1.2em;
+}
+
+.wordmark__text {
+  border-bottom: 1px solid transparent;
   padding-block: 0.15em;
 }
 
-.wordmark:hover {
+.wordmark:hover .wordmark__text {
   border-bottom-color: var(--rule-strong);
 }
 
@@ -952,6 +969,16 @@ p {
   text-align: center;
   padding-block: var(--sp-6) var(--sp-5);
   border-bottom: 2px solid var(--ink);
+}
+
+/* Scales with the nameplate it sits over — both are fluid, so the pair keeps
+   its proportion from a phone to a wide desktop. */
+.masthead__mark {
+  display: block;
+  width: clamp(2rem, 1.1rem + 3.4vw, 3.25rem);
+  height: clamp(2rem, 1.1rem + 3.4vw, 3.25rem);
+  margin: 0 auto var(--sp-4);
+  color: var(--ink);
 }
 
 .masthead__wordmark {
