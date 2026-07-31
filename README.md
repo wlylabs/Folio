@@ -256,6 +256,15 @@ compiler — only edits to a `.sol` file do.
   caches CoinGecko server-side for a minute. It is display only — no trade, no
   floor and no stored value is ever computed from it — and it disappears
   entirely when the price feed is unreachable, leaving the ETH untouched.
+- **Connecting a phone wallet is a round trip, and Folio owns both ends of it.**
+  The pairing sends the reader into their wallet app; `lib/walletMetadata.ts`
+  gives that session a `redirect` so the wallet can hand them straight back to
+  the page they left, rather than leaving them to find the browser themselves.
+  Wallets honour it unevenly — iOS 17 took away an app's ability to push the
+  reader back into Safari — so the return is caught rather than assumed:
+  `WalletSessionSync` adopts the approved session across the first seconds the
+  tab is visible again, however it got there, and the wallet button reads
+  "Connecting…" while it does.
 - **Article HTML is sanitized on render** (`lib/sanitize.ts`) with an allowlist
   matching Tiptap's output. Stored bodies are untrusted — they arrive through
   the public anon key.
