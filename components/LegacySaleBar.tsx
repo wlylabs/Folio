@@ -243,6 +243,10 @@ export default function LegacySaleBar({
 
         {status && (
           <p
+            // Keyed on the message so each step of a trade mounts as its own
+            // line and plays the entry animation, rather than the text being
+            // swapped inside one node and the panel appearing to flicker.
+            key={status.message}
             className={`status${status.kind === "error" ? " status--error" : ""}`}
             role="status"
           >
@@ -296,7 +300,7 @@ export default function LegacySaleBar({
 
               <div className="trade-row__action">
                 {walletWaking ? (
-                  <button type="button" className="btn btn--primary btn--block" disabled>
+                  <button type="button" className="btn btn--primary btn--block" disabled data-busy>
                     Reconnecting wallet...
                   </button>
                 ) : isConnected ? (
@@ -305,6 +309,9 @@ export default function LegacySaleBar({
                     className="btn btn--primary btn--block"
                     onClick={handleBuy}
                     disabled={buyDisabled}
+                    // Separates "waiting on your wallet" from the other reasons
+                    // this button is disabled. Drives the sweep in globals.css.
+                    data-busy={pending || undefined}
                   >
                     {soldOut ? "Sold out" : pending ? "Confirming..." : `Buy $${token.symbol}`}
                   </button>
@@ -340,7 +347,7 @@ export default function LegacySaleBar({
 
               <div className="trade-row__action">
                 {walletWaking ? (
-                  <button type="button" className="btn btn--primary btn--block" disabled>
+                  <button type="button" className="btn btn--primary btn--block" disabled data-busy>
                     Reconnecting wallet...
                   </button>
                 ) : isConnected ? (
@@ -349,6 +356,7 @@ export default function LegacySaleBar({
                     className="btn btn--primary btn--block"
                     onClick={handleSell}
                     disabled={sellDisabled}
+                    data-busy={pending || undefined}
                   >
                     {pending
                       ? "Confirming..."

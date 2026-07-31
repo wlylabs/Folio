@@ -31,7 +31,8 @@ export default function WalletButton({
       {({ account, chain, openAccountModal, openChainModal, openConnectModal, mounted }) => {
         // Wallet state is client-only, so the server render has nothing to show.
         // Hide it from assistive tech and pointer events rather than swapping
-        // markup, which would shift the layout on hydration.
+        // markup, which would shift the layout on hydration. The reveal is a
+        // fade rather than a switch — see `.wallet-mount` in globals.css.
         const ready = mounted;
         const connected = ready && account && chain;
         const block = variant === "block";
@@ -44,14 +45,7 @@ export default function WalletButton({
         };
 
         return (
-          <div
-            aria-hidden={!ready}
-            style={
-              ready
-                ? { width: "100%" }
-                : { opacity: 0, pointerEvents: "none", userSelect: "none" }
-            }
-          >
+          <div className="wallet-mount" aria-hidden={!ready}>
             {(() => {
               if (!connected) {
                 return (

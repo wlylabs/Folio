@@ -326,6 +326,11 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
 
         {status && (
           <p
+            // Keyed on the message so each step of a trade — sent, confirming,
+            // settled — mounts as its own line and plays the entry animation,
+            // rather than React swapping the text inside one node and the panel
+            // appearing to flicker between states.
+            key={status.message}
             className={`status${status.kind === "error" ? " status--error" : ""}`}
             role="status"
           >
@@ -411,7 +416,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
 
               <div className="trade-row__action">
                 {walletWaking ? (
-                  <button type="button" className="btn btn--primary btn--block" disabled>
+                  <button type="button" className="btn btn--primary btn--block" disabled data-busy>
                     Reconnecting wallet...
                   </button>
                 ) : isConnected ? (
@@ -420,6 +425,10 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
                     className="btn btn--primary btn--block"
                     onClick={handleBuy}
                     disabled={buyDisabled}
+                    // Separates "waiting on your wallet" from the several other
+                    // reasons this button is disabled, which otherwise look
+                    // identical. Drives the sweep in globals.css.
+                    data-busy={pending || undefined}
                   >
                     {paused
                       ? "Trading halted"
@@ -488,7 +497,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
 
               <div className="trade-row__action">
                 {walletWaking ? (
-                  <button type="button" className="btn btn--primary btn--block" disabled>
+                  <button type="button" className="btn btn--primary btn--block" disabled data-busy>
                     Reconnecting wallet...
                   </button>
                 ) : isConnected ? (
@@ -497,6 +506,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
                     className="btn btn--primary btn--block"
                     onClick={handleSell}
                     disabled={sellDisabled}
+                    data-busy={pending || undefined}
                   >
                     {paused
                       ? "Trading halted"

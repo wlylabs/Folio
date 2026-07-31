@@ -193,6 +193,7 @@ export default function CreatorFees({ token, stats }: { token: Token; stats: Cur
           className="btn btn--primary btn--block"
           onClick={handleClaim}
           disabled={pending || nothingToClaim}
+          data-busy={pending || undefined}
         >
           {pending ? "Confirming..." : nothingToClaim ? "Nothing to claim yet" : "Claim fees"}
         </button>
