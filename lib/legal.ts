@@ -38,7 +38,7 @@ const SOURCES: Record<LegalSlug, LegalSource> = {
     file: "TERMS.md",
     metaTitle: "Terms of Service — Folio",
     metaDescription:
-      "The terms governing use of Folio, a testnet token launchpad where every token is published as an article.",
+      "The terms governing use of Folio, a token launchpad where every token is published as an article.",
     draft: true,
   },
   privacy: {

@@ -113,7 +113,7 @@ const relaylessWallets = [
  *
  * Only this chain is required. The rest of SUPPORTED_CHAINS stays in the
  * optional namespace, so a wallet that has them approves them too and a token
- * on the other testnet still trades without a second pairing.
+ * on the other network still trades without a second pairing.
  */
 const requiredChainSetting =
   process.env.NEXT_PUBLIC_WALLETCONNECT_REQUIRED_CHAIN || DEFAULT_CHAIN_SLUG;

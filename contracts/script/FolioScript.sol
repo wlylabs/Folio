@@ -16,19 +16,30 @@ import {FolioToken} from "../src/FolioToken.sol";
  * ## The network guard is the important part
  *
  * Every script here inherits {onlySupportedNetwork}, which reverts unless
- * `block.chainid` is one of the two testnets in {_profile} — 84532 (Base
- * Sepolia) or 46630 (Robinhood Chain Testnet). That check runs inside the EVM,
- * during the local simulation `forge script` always performs first, so a wrong
- * `--rpc-url` fails before a single transaction is signed — let alone
- * broadcast. It is deliberately not a warning: a testnet script pointed at a
- * chain where the addresses hold real money should not be one confirmation
- * away from running.
+ * `block.chainid` is one of the two chains in {_profile} — 84532 (Base Sepolia)
+ * or 4663 (Robinhood Chain). That check runs inside the EVM, during the local
+ * simulation `forge script` always performs first, so a wrong `--rpc-url` fails
+ * before a single transaction is signed — let alone broadcast. It is
+ * deliberately not a warning: a script pointed at a chain nobody chose should
+ * not be one confirmation away from running.
  *
  * The guard is an allowlist, not a denylist. Adding a chain means adding a
- * {NetworkProfile} for it and nothing else; a chain id with no profile — every
- * mainnet included — reverts with {WrongNetwork}. `foundry.toml` reinforces
- * this by naming no mainnet RPC alias at all, but the alias list only covers
- * `--rpc-url <alias>`; this guard also covers a URL someone pasted by hand.
+ * {NetworkProfile} for it and nothing else; a chain id with no profile —
+ * Ethereum, Base mainnet, an Orbit chain that is not this one — reverts with
+ * {WrongNetwork}. `foundry.toml` reinforces this by resolving no alias beyond
+ * these two, but the alias list only covers `--rpc-url <alias>`; this guard
+ * also covers a URL someone pasted by hand.
+ *
+ * ## One of these chains holds real money
+ *
+ * Robinhood Chain (4663) is a mainnet. Its ETH was bought, the addresses in
+ * `deployments/robinhood-mainnet.json` are live, and a mistake there costs
+ * money rather than a faucet claim. Nothing below treats it differently — the
+ * guard is about *which* chain, not how much a mistake costs — so what stands
+ * between an operator and a wrong mainnet broadcast is {confirm}, which prints
+ * the network and chain id and blocks on stdin. Read that banner. And keep
+ * `FOLIO_SKIP_CONFIRM` for CI runs whose decision was already made in a
+ * reviewed workflow file, which is the only place it appears.
  *
  * ## Everything chain-shaped lives in one place
  *
@@ -57,9 +68,9 @@ abstract contract FolioScript is Script {
     ///         `deployments/base-sepolia.json` lives on.
     uint256 internal constant BASE_SEPOLIA = 84532;
 
-    /// @notice Robinhood Chain Testnet — an Arbitrum Orbit L2, EVM-equivalent
-    ///         for everything these contracts do.
-    uint256 internal constant ROBINHOOD_TESTNET = 46630;
+    /// @notice Robinhood Chain mainnet — an Arbitrum Orbit L2, EVM-equivalent
+    ///         for everything these contracts do. Real ETH.
+    uint256 internal constant ROBINHOOD_MAINNET = 4663;
 
     /**
      * @notice Everything about a network that a script needs to know.
@@ -107,11 +118,11 @@ abstract contract FolioScript is Script {
     /**
      * @dev The profile for the chain the script is running against.
      *
-     *      Two testnets, and deliberately no third. Base Sepolia is where the
-     *      live factory is; Robinhood Chain Testnet is the port. Both are
-     *      testnets whose ETH is free, which is the property that makes an
-     *      accidental run there survivable — and the reason no mainnet, Base's
-     *      or Robinhood's, gets a row here.
+     *      Two chains, and deliberately no third. Base Sepolia is where the
+     *      rehearsal happens and its ETH is free; Robinhood Chain is the
+     *      mainnet Folio launches on, where it is not. Prove a change on
+     *      84532 before pointing anything at 4663 — that ordering is the
+     *      reason the testnet row is still here at all.
      */
     function _profile() internal view returns (NetworkProfile memory) {
         if (block.chainid == BASE_SEPOLIA) {
@@ -122,13 +133,13 @@ abstract contract FolioScript is Script {
                 blockscout: false
             });
         }
-        if (block.chainid == ROBINHOOD_TESTNET) {
+        if (block.chainid == ROBINHOOD_MAINNET) {
             return NetworkProfile({
-                name: "Robinhood Chain Testnet",
-                slug: "robinhood-testnet",
+                name: "Robinhood Chain (MAINNET - real funds)",
+                slug: "robinhood-mainnet",
                 // Blockscout, not an Etherscan deployment — which is also why
                 // `--verify` needs `--verifier blockscout`. See DEPLOYMENT.md.
-                explorer: "https://explorer.testnet.chain.robinhood.com",
+                explorer: "https://robinhoodchain.blockscout.com",
                 blockscout: true
             });
         }

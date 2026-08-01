@@ -1,5 +1,5 @@
 One record per chain, named after the `--rpc-url` alias: `base-sepolia.json`,
-`robinhood-testnet.json`. DeployFactory.s.sol writes the one for the chain it
+`robinhood-mainnet.json`. DeployFactory.s.sol writes the one for the chain it
 ran on and CreateToken.s.sol updates it with the most recent launch. Commit it
 once it exists, so the frontend and the interaction scripts read the same
 address.

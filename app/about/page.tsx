@@ -12,7 +12,7 @@ import { socialMetadata } from "@/lib/seo";
 export const dynamic = "force-static";
 
 const DESCRIPTION =
-  "What Folio is, how a launch works, and what a testnet edition means for the tokens published on it.";
+  "What Folio is, how a launch works, and what the network a token is published on means for the money involved.";
 
 export const metadata: Metadata = {
   title: "About Folio",
@@ -61,12 +61,20 @@ export default function AboutPage() {
             it, not cached from a market somewhere else.
           </p>
 
-          <h2>This is a testnet edition</h2>
+          <h2>Which network a launch is on decides whether it is real</h2>
           <p>
-            Every launch settles in testnet ETH from a faucet. The tokens carry
-            no value, they are not an investment, and the network they live on
-            can be reset out from under them. Treat everything here as a
-            rehearsal.
+            Folio runs on two networks. A launch on{" "}
+            <strong>Robinhood Chain</strong> settles in real ETH — the trade is
+            final, the fees are real, and a token bought there can lose every
+            bit of what it cost. It is not an investment and nobody is
+            underwriting it. A launch on <strong>Base Sepolia</strong> settles
+            in free testnet ETH from a faucet, carries no value at all, and can
+            be reset out from under you; that is the rehearsal.
+          </p>
+          <p>
+            Every listing names its network, and so does the trade panel before
+            you sign. Read it. The two look identical otherwise, which is the
+            whole reason it is written on the page.
           </p>
           <p>
             One limitation is worth stating plainly: a byline is a claim, not a

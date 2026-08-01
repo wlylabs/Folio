@@ -37,12 +37,13 @@
 # wrong RPC URL in the secret fails the run rather than deploying somewhere
 # real.
 #
-# The guard now admits Robinhood Chain Testnet (46630) as well as Base Sepolia
-# (84532), so it alone no longer pins *this workflow* to Base Sepolia — what
-# does is `BASE_SEPOLIA_RPC_URL`, the only endpoint this file ever passes. A
-# Robinhood deploy needs its own workflow (and its own Blockscout verification
-# flags); it is deliberately not a checkbox on this one, because the two chains
-# write different records and one wrong click should not overwrite the wrong file.
+# The guard admits Robinhood Chain (4663) as well as Base Sepolia (84532), so it
+# alone no longer pins *this workflow* to Base Sepolia — what does is
+# `BASE_SEPOLIA_RPC_URL`, the only endpoint this file ever passes. That matters
+# more than it used to: Robinhood Chain is a mainnet. A deploy there needs its
+# own workflow (and its own Blockscout verification flags); it is deliberately
+# not a checkbox on this one, because the two chains write different records,
+# and a mainnet broadcast should not be one wrong click away from a testnet run.
 
 name: Deploy — Base Sepolia
 

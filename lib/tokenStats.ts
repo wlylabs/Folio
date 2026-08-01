@@ -60,7 +60,7 @@ type Client = NonNullable<ReturnType<typeof publicClientFor>>;
  * That used to be the end of the road: a refused multicall was read as "not a
  * curve", so on such a chain every listing rendered as offline with cached
  * numbers. Which chains have Multicall3 is not something this app should have
- * to know — see the note on `robinhoodTestnet` in lib/chains.ts.
+ * to know — see the note on `robinhoodMainnet` in lib/chains.ts.
  */
 async function fetchCurveStats(client: Client, token: Token) {
   const address = token.contract_address as `0x${string}`;

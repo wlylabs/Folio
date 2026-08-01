@@ -1,16 +1,21 @@
 # Deploying Folio
 
-Two networks, both testnets:
+Two networks — one testnet to rehearse on, one mainnet to launch on:
 
-| Network | Chain id | RPC alias | Deployment record | Explorer |
-| --- | --- | --- | --- | --- |
-| Base Sepolia | 84532 | `base-sepolia` | `deployments/base-sepolia.json` | Basescan (Etherscan) |
-| Robinhood Chain Testnet | 46630 | `robinhood-testnet` | `deployments/robinhood-testnet.json` | Blockscout |
+| Network | Chain id | RPC alias | Deployment record | Explorer | Funds |
+| --- | --- | --- | --- | --- | --- |
+| Base Sepolia | 84532 | `base-sepolia` | `deployments/base-sepolia.json` | Basescan (Etherscan) | Faucet ETH |
+| Robinhood Chain | 4663 | `robinhood-mainnet` | `deployments/robinhood-mainnet.json` | Blockscout | **Real ETH** |
 
-`foundry.toml` names no mainnet RPC alias — not Base's, not Robinhood's — and
-every script reverts with `WrongNetwork` before signing anything if
-`block.chainid` is neither 84532 nor 46630, so a hand-typed `--rpc-url` cannot
-route a deploy somewhere real either.
+Every script reverts with `WrongNetwork` before signing anything if
+`block.chainid` is neither 84532 nor 4663, and `foundry.toml` resolves no other
+alias, so a hand-typed `--rpc-url` cannot route a deploy to a third network.
+
+**Robinhood Chain is a mainnet.** The guard is about *which* chain, not how much
+a mistake costs there, so what protects a mainnet deploy is the confirmation
+banner — it prints the network name and chain id and blocks until you type
+`yes`. Read it. Rehearse the whole thing on Base Sepolia first; it is the same
+script and the same bytecode, and its ETH is free.
 
 **One set of scripts serves both chains.** There is no `DeployFactoryRobinhood`
 and there should not be one: the chain is chosen by `--rpc-url` alone, and
@@ -19,8 +24,9 @@ comes from the `NetworkProfile` in `contracts/script/FolioScript.sol`. Adding a
 chain means adding a profile there and an alias in `foundry.toml`, nothing else.
 
 Sections 1–3 below are written against Base Sepolia because that is where the
-live factory is. [Section 4](#4-deploy-to-robinhood-chain-testnet) covers what
-is different about Robinhood Chain; everything else applies unchanged.
+live factory is and where a deploy should be practised.
+[Section 4](#4-deploy-to-robinhood-chain-mainnet) covers what is different about
+Robinhood Chain; everything else applies unchanged.
 
 ---
 
@@ -39,16 +45,15 @@ Fill in at minimum:
 
 | Variable | What it is |
 | --- | --- |
-| `DEPLOYER_PRIVATE_KEY` | Signs deploys and trades. **Use a throwaway testnet wallet.** |
+| `DEPLOYER_PRIVATE_KEY` | Signs deploys and trades. **Use a throwaway wallet for section 3.** Section 4 cannot — see there. |
 | `BASE_SEPOLIA_RPC_URL` | Defaults to `https://sepolia.base.org`, which works. |
 | `BASESCAN_API_KEY` | From etherscan.io → API Keys. Only needed for `--verify`. |
-| `ROBINHOOD_TESTNET_RPC_URL` | Only for section 4. Defaults to the public endpoint. |
+| `ROBINHOOD_MAINNET_RPC_URL` | Only for section 4. Defaults to the public endpoint. |
 | `BLOCKSCOUT_API_KEY` | Only for section 4, and normally empty — Blockscout needs no key. |
 
-Fund the deployer from a [Base Sepolia faucet](https://docs.base.org/chain/network-faucets),
-or for Robinhood Chain from
-[faucet.testnet.chain.robinhood.com](https://faucet.testnet.chain.robinhood.com).
-A deploy plus a few trades needs well under 0.05 ETH.
+Fund the deployer from a [Base Sepolia faucet](https://docs.base.org/chain/network-faucets).
+A deploy plus a few trades needs well under 0.05 ETH. Robinhood Chain has no
+faucet — its gas is bought, and section 4 says what that changes.
 
 > **Never put a real private key in `.env.example`** — that file is committed.
 > There is no script in this repo that takes a key on the command line, and none
@@ -294,76 +299,92 @@ artifact for you to commit.
 
 ---
 
-## 4. Deploy to Robinhood Chain Testnet
+## 4. Deploy to Robinhood Chain (mainnet)
 
 Robinhood Chain is an Arbitrum Orbit L2, EVM-compatible, ETH for gas. The
 contracts, the scripts and the test suite are the same ones section 3 uses —
-what follows is only the four things that differ.
+what follows is only what differs.
+
+**This chain holds real money.** Gas is paid in real ETH, the factory you deploy
+is one real buyers can trade against, and nothing here is undoable. Before you
+run any of it: complete section 3 against Base Sepolia with the same commit, and
+decide the curve terms deliberately rather than inheriting the script's
+defaults, which were chosen when the only ETH involved came from a faucet.
 
 ### What is actually different
 
-| | Base Sepolia | Robinhood Chain Testnet |
+| | Base Sepolia | Robinhood Chain |
 | --- | --- | --- |
-| `--rpc-url` alias | `base-sepolia` | `robinhood-testnet` |
-| Chain id | 84532 | 46630 |
+| `--rpc-url` alias | `base-sepolia` | `robinhood-mainnet` |
+| Chain id | 84532 | 4663 |
+| Funds | faucet ETH | **real ETH** |
 | Explorer | Basescan, an Etherscan deployment | Blockscout |
 | `--verify` | works on its own | needs `--verifier blockscout --verifier-url ...` |
-| Record written | `deployments/base-sepolia.json` | `deployments/robinhood-testnet.json` |
+| Record written | `deployments/base-sepolia.json` | `deployments/robinhood-mainnet.json` |
 
 Nothing else: same `DeployFactory.s.sol`, same bytecode, same `evm_version`.
 The contracts read no chain id and use no post-Merge opcode.
 
 ### Step by step
 
-**1. Point `ROBINHOOD_TESTNET_RPC_URL` at the chain.** The public endpoint in
-`.env.example` is rate-limited but works for one deploy. For anything repeated,
-create a Robinhood Chain Testnet app in the same Alchemy dashboard you already
-use for Base Sepolia and use
-`https://robinhood-testnet.g.alchemy.com/v2/<API_KEY>` instead.
+**1. Point `ROBINHOOD_MAINNET_RPC_URL` at the chain.** The public endpoint in
+`.env.example` is rate-limited but works for one deploy; use a dedicated
+provider endpoint for anything repeated.
 
-Confirm the URL before spending a deploy on it — chain registries disagree
-about whether the public endpoint carries a trailing `/rpc`:
+Confirm the URL before spending a deploy on it — 4663 and the testnet's 46630
+are one keystroke apart:
 
 ```bash
-cast chain-id --rpc-url $ROBINHOOD_TESTNET_RPC_URL     # must print 46630
+cast chain-id --rpc-url $ROBINHOOD_MAINNET_RPC_URL     # must print 4663
 ```
 
-**2. Fund the deployer** from
-[faucet.testnet.chain.robinhood.com](https://faucet.testnet.chain.robinhood.com).
-Under 0.05 ETH covers a deploy plus a handful of trades.
+**2. Fund the deployer.** There is no faucet. The key in `.env` has to hold real
+ETH, and it owns the factory's emergency stop afterwards, so it is not the
+throwaway key section 3 uses — fund it with the deploy cost and little more, and
+prefer the CI workflow (which reads the key from a GitHub Environment) over a
+plaintext key on a laptop for anything beyond a one-off.
 
-**3. Dry run.** Broadcasts nothing, and the network guard runs here — a wrong
+**3. Choose the curve terms.** `FACTORY_VIRTUAL_ETH_RESERVE`,
+`FACTORY_MAX_RESERVE_CAP` and `FACTORY_GRADUATION_THRESHOLD` default to 2, 5 and
+4 ETH. Those are testnet numbers. Set them in `.env` for what you actually want
+a launch on this chain to be; the dry run below prints all five.
+
+**4. Dry run.** Broadcasts nothing, and the network guard runs here — a wrong
 RPC fails at this step rather than at signing.
 
 ```bash
 forge script contracts/script/DeployFactory.s.sol:DeployFactory \
-  --rpc-url robinhood-testnet -vvv
+  --rpc-url robinhood-mainnet -vvv
 ```
 
-The banner must read **Robinhood Chain Testnet / 46630**. If it says anything
-else, stop: the RPC is not the chain you think it is.
+The banner must read **Robinhood Chain (MAINNET - real funds) / 4663**. If it
+says anything else, stop: the RPC is not the chain you think it is.
 
-**4. Deploy.**
+**5. Deploy.** The confirmation prompt is the last gate — it prints the network,
+the chain id, the deployer and its balance, and waits for `yes`.
 
 ```bash
-npm run deploy:robinhood-testnet
+npm run deploy:robinhood-mainnet
 ```
 
 or spelled out — note the two extra verification flags:
 
 ```bash
 forge script contracts/script/DeployFactory.s.sol:DeployFactory \
-  --rpc-url robinhood-testnet --broadcast \
+  --rpc-url robinhood-mainnet --broadcast \
   --verify --verifier blockscout \
-  --verifier-url https://explorer.testnet.chain.robinhood.com/api/ \
+  --verifier-url https://robinhoodchain.blockscout.com/api/ \
   -vvv
 ```
 
-**5. Commit the record.**
+Do not set `FOLIO_SKIP_CONFIRM` here. It exists for the CI workflow, where the
+decision was already made by an environment reviewer.
+
+**6. Commit the record.**
 
 ```bash
-git add deployments/robinhood-testnet.json
-git commit -m "chore: record Robinhood Chain Testnet deployment"
+git add deployments/robinhood-mainnet.json
+git commit -m "chore: record Robinhood Chain deployment"
 ```
 
 This is a *second* record, not a replacement — `deployments/base-sepolia.json`
@@ -378,7 +399,7 @@ selects the provider and `--verifier-url` points at this chain's instance. The
 `/api/` suffix is part of it — Blockscout serves its Etherscan-compatible
 endpoint there, and the bare explorer URL will not work.
 
-`foundry.toml` already carries the URL under `[etherscan] robinhood-testnet`,
+`foundry.toml` already carries the URL under `[etherscan] robinhood-mainnet`,
 but the *provider* is a command-line choice, which is why the flag is still
 needed. Blockscout requires no API key; `BLOCKSCOUT_API_KEY` stays empty unless
 the instance starts asking for one.
@@ -388,9 +409,9 @@ To verify after the fact, against an address that is already deployed:
 ```bash
 forge verify-contract <FACTORY_ADDRESS> \
   contracts/src/FolioFactory.sol:FolioFactory \
-  --chain-id 46630 --watch \
+  --chain-id 4663 --watch \
   --verifier blockscout \
-  --verifier-url https://explorer.testnet.chain.robinhood.com/api/ \
+  --verifier-url https://robinhoodchain.blockscout.com/api/ \
   --constructor-args $(cast abi-encode \
     "constructor(address,(uint256,uint256,uint256,uint16,uint16))" \
     <OWNER> "(2000000000000000000,5000000000000000000,4000000000000000000,100,10000)")
@@ -401,13 +422,17 @@ either way, and this command can be re-run against the recorded address.
 
 ### Interacting
 
-Every script in section 5 takes `--rpc-url robinhood-testnet` and needs no
-other change. They read `deployments/robinhood-testnet.json`, so a launch made
+Every script in section 5 takes `--rpc-url robinhood-mainnet` and needs no
+other change. They read `deployments/robinhood-mainnet.json`, so a launch made
 on Robinhood cannot be confused with one made on Base Sepolia.
+
+Each of them spends real ETH here, `Buy.s.sol` most obviously. The `npm run
+folio:*` shortcuts in `package.json` are all pinned to `--rpc-url base-sepolia`
+and stay that way; reaching this chain is a flag you type.
 
 ```bash
 forge script contracts/script/CreateToken.s.sol:CreateToken \
-  --rpc-url robinhood-testnet --broadcast -vvv
+  --rpc-url robinhood-mainnet --broadcast -vvv
 ```
 
 ### Gas
@@ -536,9 +561,11 @@ npm run folio:reserve   npm run folio:pause    npm run folio:unpause
 ```
 
 These are pinned to `--rpc-url base-sepolia`. For Robinhood Chain, run the
-`forge script` command spelled out above with `--rpc-url robinhood-testnet` —
+`forge script` command spelled out above with `--rpc-url robinhood-mainnet` —
 deliberately not wrapped in a second set of shortcuts, so which chain a trade
 lands on stays something you typed rather than something you picked off a list.
+That mattered when both chains were testnets; it matters more now that one of
+them settles in real ETH.
 
 ---
 
@@ -551,7 +578,7 @@ Work top to bottom. Tick each before wiring up the frontend.
 - [ ] `forge test` passes.
 - [ ] `npm run slither` reports only the one known informational finding.
 - [ ] Dry run (no `--broadcast`) completes without reverting.
-- [ ] Deploy confirmation banner shows the chain you meant — **Base Sepolia / 84532** or **Robinhood Chain Testnet / 46630** — and the expected deployer.
+- [ ] Deploy confirmation banner shows the chain you meant — **Base Sepolia / 84532** or **Robinhood Chain (MAINNET - real funds) / 4663** — and the expected deployer.
 - [ ] Answering anything other than `yes` aborts and broadcasts nothing.
 - [ ] Factory and implementation both show **verified** on Basescan.
 - [ ] `deployments/base-sepolia.json` exists, has the right `chainId`, and is committed.
@@ -770,7 +797,7 @@ early.
 **`WrongNetwork(1)`** — the RPC points at a chain with no `NetworkProfile`;
 the argument is the chain id it actually found. Working as intended. Check the
 RPC URL for the alias you used — `BASE_SEPOLIA_RPC_URL` (84532) or
-`ROBINHOOD_TESTNET_RPC_URL` (46630).
+`ROBINHOOD_MAINNET_RPC_URL` (4663).
 
 **`vm.prompt: IO error: not a terminal`** — the confirmation needs a real TTY.
 Run it from a terminal, or set `FOLIO_SKIP_CONFIRM=true` for CI.

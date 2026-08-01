@@ -63,10 +63,11 @@ export type FundsElsewhere = {
  * the rest of this hook was not stale: the explorer showed the claim landing,
  * the wallet showed the ETH, and Folio went on saying zero however often it
  * asked. It was asking a different question. `chainId` here is the *token's*
- * chain, not whichever one the wallet happens to be on, and all three
- * supported testnets spend something called ETH — so a claim on the wrong one
- * looks identical to a claim that never arrived. `elsewhere` and `unreadable`
- * exist to tell those apart, because a bare zero cannot.
+ * chain, not whichever one the wallet happens to be on, and every supported
+ * chain spends something called ETH — so funding the wrong one looks identical
+ * to a transfer that never arrived. `elsewhere` and `unreadable` exist to tell
+ * those apart, because a bare zero cannot. That mattered when the wrong chain
+ * cost a faucet claim; it matters more now that one of them is a mainnet.
  */
 export function useGasBalance({ address, chainId }: Options) {
   const config = useConfig();

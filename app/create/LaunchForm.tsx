@@ -291,7 +291,7 @@ export default function LaunchForm() {
   // picked, or when none of them has a factory.
   const launchChain = deployment?.chain ?? DEFAULT_CHAIN_SLUG;
 
-  // Launching costs gas, and a wallet that has never touched this testnet has
+  // Launching costs gas, and a wallet that has never touched this network has
   // none. Read the balance up front so the form can say so instead of letting
   // the wallet reject the signature — and keep reading it, so a claim made in
   // the faucet tab lands here without a reload.
@@ -309,16 +309,20 @@ export default function LaunchForm() {
    *
    * The launch is the one screen where finding the money elsewhere can be good
    * news: nothing has been signed yet, so if Folio has a factory on the chain
-   * the ETH is actually on, the listing can go there instead and the faucet
-   * stops being the blocker. That is one press — the same press the network
-   * picker makes, aimed by the balance sweep rather than by the creator
-   * guessing which testnet they claimed on.
+   * the ETH is actually on, the listing can go there instead and funding stops
+   * being the blocker. That is one press — the same press the network picker
+   * makes, aimed by the balance sweep rather than by the creator guessing
+   * which network their ETH is on.
+   *
+   * Worth being deliberate about now that the chains are not equivalent: the
+   * press moves the launch to where the money is, which can mean moving it from
+   * a testnet to a mainnet or back. The button names the chain it would switch
+   * to, and the chain picker sits next to it either way.
    *
    * When there is no factory there, the honest answer is the other one. A
-   * reader who knows their ETH is on the other testnet will otherwise go
+   * creator who knows their ETH is on the other network will otherwise go
    * looking for a bridge or a setting that would let them spend it, and there
-   * isn't one;
-   * saying so is what ends that search and sends them to the faucet.
+   * isn't one; saying so is what ends that search.
    */
   const elsewhereDeployment = gasElsewhere ? deploymentFor(gasElsewhere.slug) : null;
   const wayOut = !gasElsewhere
@@ -602,7 +606,11 @@ export default function LaunchForm() {
         </h1>
         <p style={{ color: "var(--ink-soft)", maxWidth: "var(--measure)" }}>
           Write the piece and mint the token it describes, in one transaction, on the Folio factory
-          on {chainEntry?.chain.name ?? chainBySlug(DEFAULT_CHAIN_SLUG)?.chain.name ?? "a testnet"}.
+          on{" "}
+          {chainEntry?.chain.name ??
+            chainBySlug(DEFAULT_CHAIN_SLUG)?.chain.name ??
+            "a supported network"}
+          .
           The article is yours and it is the listing — this is the way to publish on Folio under
           your own name. You pay only gas: the whole supply starts on a bonding curve, so anyone
           can buy from it or sell back to it at a price the curve sets, and you earn{" "}

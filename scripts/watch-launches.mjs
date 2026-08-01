@@ -20,7 +20,7 @@
  *   FOLIO_WS_RPC     a websocket RPC (wss://…) for a real subscription. Applies
  *                    to the one chain being watched; with several, use the
  *                    per-chain form below.
- *   FOLIO_WS_RPC_<CHAIN>          e.g. FOLIO_WS_RPC_ROBINHOOD_TESTNET
+ *   FOLIO_WS_RPC_<CHAIN>          e.g. FOLIO_WS_RPC_ROBINHOOD_MAINNET
  *   NEXT_PUBLIC_RPC_<CHAIN>       the same HTTP endpoints the site reads with,
  *                                 e.g. NEXT_PUBLIC_RPC_BASE_SEPOLIA
  *   INDEXER_SECRET   sent as a bearer token, when the endpoint requires one.
@@ -43,7 +43,7 @@ const deploymentsDir = join(root, "deployments");
  */
 const PUBLIC_RPC = {
   "base-sepolia": "https://sepolia.base.org",
-  "robinhood-testnet": "https://rpc.testnet.chain.robinhood.com",
+  "robinhood-mainnet": "https://rpc.mainnet.chain.robinhood.com",
 };
 
 /** `base-sepolia` -> `BASE_SEPOLIA`, for the env var names. */

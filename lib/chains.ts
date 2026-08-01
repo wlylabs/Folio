@@ -2,11 +2,15 @@ import { createPublicClient, defineChain, http, type PublicClient } from "viem";
 import { baseSepolia } from "viem/chains";
 
 /**
- * Robinhood Chain Testnet — an Arbitrum Orbit L2, EVM-equivalent, ETH for gas.
+ * Robinhood Chain — an Arbitrum Orbit L2, EVM-equivalent, ETH for gas.
+ *
+ * Mainnet. The ETH spent here is real, which is the one thing that separates
+ * this entry from every other chain Folio has supported: there is no faucet
+ * below, because there is nothing to claim.
  *
  * Defined here rather than imported from `viem/chains`, which does not ship it.
  * The values match `contracts/script/FolioScript.sol`'s NetworkProfile for
- * 46630, and DEPLOYMENT.md section 4 is where they came from.
+ * 4663, and DEPLOYMENT.md section 4 is where they came from.
  *
  * No `contracts.multicall3` entry: whether Multicall3 sits at the canonical
  * address here has not been confirmed on chain, and claiming it would send
@@ -15,23 +19,23 @@ import { baseSepolia } from "viem/chains";
  * this out is one round trip per read on a chain that does support it — which
  * is the right way round for a fact we haven't verified.
  *
- * Some chain registries list the public RPC with a trailing `/rpc`. If reads
- * here fail, set NEXT_PUBLIC_RPC_ROBINHOOD_TESTNET to that form; the same note
- * is in .env.example for the Foundry side.
+ * The public RPC is rate limited. Set NEXT_PUBLIC_RPC_ROBINHOOD_MAINNET to a
+ * dedicated endpoint for anything with traffic; the same note is in
+ * .env.example for the Foundry side.
  */
-export const robinhoodTestnet = defineChain({
-  id: 46630,
-  name: "Robinhood Chain Testnet",
+export const robinhoodMainnet = defineChain({
+  id: 4663,
+  name: "Robinhood Chain",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: { default: { http: ["https://rpc.testnet.chain.robinhood.com"] } },
+  rpcUrls: { default: { http: ["https://rpc.mainnet.chain.robinhood.com"] } },
   blockExplorers: {
     default: {
       name: "Blockscout",
-      url: "https://explorer.testnet.chain.robinhood.com",
-      apiUrl: "https://explorer.testnet.chain.robinhood.com/api",
+      url: "https://robinhoodchain.blockscout.com",
+      apiUrl: "https://robinhoodchain.blockscout.com/api",
     },
   },
-  testnet: true,
+  testnet: false,
 });
 
 /**
@@ -43,9 +47,15 @@ export const robinhoodTestnet = defineChain({
  * switch to it. Whether you can *launch* on it is a separate question, answered
  * by `deployments/<slug>.json` — see lib/contracts/deployment.ts.
  *
- * Two testnets, the same two `FolioScript.onlySupportedNetwork` allows: the app
- * offers to switch a wallet to a chain, so listing one the contracts refuse to
- * deploy on would move a reader somewhere Folio has nothing to trade.
+ * The same two `FolioScript.onlySupportedNetwork` allows: the app offers to
+ * switch a wallet to a chain, so listing one the contracts refuse to deploy on
+ * would move a reader somewhere Folio has nothing to trade.
+ *
+ * One testnet and one mainnet, which is a change from when both were testnets:
+ * a trade on `robinhood-mainnet` spends real ETH. Nothing in this file guards
+ * that — the wallet's own confirmation is the guard — but `faucets` being empty
+ * for that chain is not an omission, and every "claim free ETH" affordance keys
+ * off it.
  */
 export const SUPPORTED_CHAINS = [
   {
@@ -62,18 +72,13 @@ export const SUPPORTED_CHAINS = [
     ],
   },
   {
-    slug: "robinhood-testnet",
-    chain: robinhoodTestnet,
-    rpcEnv: process.env.NEXT_PUBLIC_RPC_ROBINHOOD_TESTNET,
-    // One faucet, where Base Sepolia has three. That is worth knowing rather
-    // than discovering: on this chain a faucet outage is a site outage, since
-    // nobody can pay for gas without it.
-    faucets: [
-      {
-        label: "Robinhood Chain faucet",
-        url: "https://faucet.testnet.chain.robinhood.com",
-      },
-    ],
+    slug: "robinhood-mainnet",
+    chain: robinhoodMainnet,
+    rpcEnv: process.env.NEXT_PUBLIC_RPC_ROBINHOOD_MAINNET,
+    // Empty, and it stays empty: gas here is bought, not claimed. A faucet link
+    // on a mainnet is either a scam or a misunderstanding, so the UI showing
+    // nothing is the correct outcome rather than a gap to fill later.
+    faucets: [],
   },
 ] as const;
 

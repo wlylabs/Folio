@@ -10,7 +10,7 @@ import FiatValue from "@/components/FiatValue";
 import JsonLd from "@/components/JsonLd";
 import { sanitizeArticleHtml } from "@/lib/sanitize";
 import { fetchTokenStats } from "@/lib/tokenStats";
-import { chainLabel, explorerAddressUrl } from "@/lib/chains";
+import { chainBySlug, chainLabel, explorerAddressUrl } from "@/lib/chains";
 import {
   pageTitle,
   socialMetadata,
@@ -226,7 +226,14 @@ export default async function TokenPage({
         <details className="factbox factbox--fold">
           <summary className="factbox__head">
             <span>Contract data</span>
-            <span>Testnet</span>
+            {/*
+              Read from the token's own chain, never a constant: this used to
+              say "Testnet" on every listing, which was true while every
+              supported network was one. A token on Robinhood Chain settles in
+              real ETH, and a badge that says otherwise is the one error on this
+              page that costs a reader money.
+            */}
+            <span>{chainBySlug(token.chain)?.chain.testnet ? "Testnet" : "Mainnet"}</span>
           </summary>
 
           <div className="factbox__rows">

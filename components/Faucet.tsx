@@ -89,9 +89,9 @@ export function fixedChainWayOut(
 /**
  * The wallet has no gas, said as briefly as the situation allows.
  *
- * It names the network, because a faucet claim on the wrong testnet looks
- * exactly like a claim that never arrived: confirmed on an explorer, invisible
- * here. And it carries a re-check button — the balance polls itself, but
+ * It names the network, because funding the wrong one looks exactly like a
+ * transfer that never arrived: confirmed on an explorer, invisible here. And it
+ * carries a re-check button — the balance polls itself, but
  * someone staring at a confirmed transaction wants to press something rather
  * than wait out an interval they cannot see.
  *
@@ -149,7 +149,7 @@ export function GasNotice({
               {formatEth(Number(formatUnits(elsewhere.value, elsewhere.decimals)))}{" "}
               {elsewhere.symbol}
             </span>{" "}
-            there, nothing here — a claim on the wrong testnet looks exactly like this.
+            there, nothing here — funding the wrong network looks exactly like this.
             {wayOut ? ` ${wayOut.note}` : ""}
           </p>
           {wayOut?.action && (
@@ -168,10 +168,25 @@ export function GasNotice({
       ) : (
         <>
           <p className="notice__title">{heading}</p>
-          <p>
-            Faucets are in Settings, under Test ETH. Claim{network ? ` on ${network}` : ""} and come
-            back — this updates on its own.
-          </p>
+          {/*
+            A chain with no faucet is a chain whose gas is bought, so pointing
+            at the faucet list there would send the reader looking for something
+            that does not exist — and the things that answer that search on a
+            mainnet are not faucets. What is true on both is the network the
+            {symbol} has to be on.
+          */}
+          {faucetsFor(chain).length > 0 ? (
+            <p>
+              Faucets are in Settings, under Test ETH. Claim
+              {network ? ` on ${network}` : ""} and come back — this updates on its own.
+            </p>
+          ) : (
+            <p>
+              {symbol} on {network ?? "this network"} has to be bridged or bought — there is no
+              faucet for it. Fund this wallet{network ? ` on ${network}` : ""} and come back; this
+              updates on its own.
+            </p>
+          )}
         </>
       )}
 

@@ -1,5 +1,5 @@
 import baseSepoliaRecord from "@/deployments/base-sepolia.json";
-import robinhoodTestnetRecord from "@/deployments/robinhood-testnet.json";
+import robinhoodMainnetRecord from "@/deployments/robinhood-mainnet.json";
 import { FOLIO_FACTORY_ABI } from "@/lib/contracts/folioFactory";
 import { FOLIO_TOKEN_ABI } from "@/lib/contracts/folioToken";
 import { DEFAULT_CHAIN_SLUG, SUPPORTED_CHAINS, chainIdBySlug, type ChainSlug } from "@/lib/chains";
@@ -23,7 +23,7 @@ import { DEFAULT_CHAIN_SLUG, SUPPORTED_CHAINS, chainIdBySlug, type ChainSlug } f
  * factory that isn't the committed one without editing the repo:
  *
  *   NEXT_PUBLIC_FACTORY_ADDRESS_BASE_SEPOLIA=0x...
- *   NEXT_PUBLIC_FACTORY_ADDRESS_ROBINHOOD_TESTNET=0x...
+ *   NEXT_PUBLIC_FACTORY_ADDRESS_ROBINHOOD_MAINNET=0x...
  *   NEXT_PUBLIC_FACTORY_ADDRESS=0x...   (the default chain, kept for back-compat)
  *
  * They have to be NEXT_PUBLIC_*, because the create page reads them in the
@@ -84,7 +84,7 @@ export type FactoryDeployment = {
  */
 const RECORDS: Partial<Record<ChainSlug, DeploymentRecord>> = {
   "base-sepolia": baseSepoliaRecord as DeploymentRecord,
-  "robinhood-testnet": robinhoodTestnetRecord as DeploymentRecord,
+  "robinhood-mainnet": robinhoodMainnetRecord as DeploymentRecord,
 };
 
 /**
@@ -94,7 +94,7 @@ const RECORDS: Partial<Record<ChainSlug, DeploymentRecord>> = {
  */
 const ADDRESS_OVERRIDES: Partial<Record<ChainSlug, string | undefined>> = {
   "base-sepolia": process.env.NEXT_PUBLIC_FACTORY_ADDRESS_BASE_SEPOLIA,
-  "robinhood-testnet": process.env.NEXT_PUBLIC_FACTORY_ADDRESS_ROBINHOOD_TESTNET,
+  "robinhood-mainnet": process.env.NEXT_PUBLIC_FACTORY_ADDRESS_ROBINHOOD_MAINNET,
 };
 
 /** The old single-chain override, still honoured — for the default chain. */
