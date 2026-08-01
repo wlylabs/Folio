@@ -36,6 +36,21 @@ export const FOLIO_FACTORY_ABI = [
             "internalType": "uint16",
             "name": "priceMoveAlertBps",
             "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "sniperWindowSeconds",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "sniperMaxEthPerWallet",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "migrator",
+            "type": "address"
           }
         ],
         "internalType": "struct CurveConfig",
@@ -109,6 +124,16 @@ export const FOLIO_FACTORY_ABI = [
   },
   {
     "inputs": [],
+    "name": "InvalidSniperCap",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidSniperWindow",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InvalidSupply",
     "type": "error"
   },
@@ -166,6 +191,16 @@ export const FOLIO_FACTORY_ABI = [
   },
   {
     "inputs": [],
+    "name": "SniperCapAboveDefault",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "SniperWindowBelowDefault",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "SupplyTooLargeForCurve",
     "type": "error"
   },
@@ -209,6 +244,21 @@ export const FOLIO_FACTORY_ABI = [
             "internalType": "uint16",
             "name": "priceMoveAlertBps",
             "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "sniperWindowSeconds",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "sniperMaxEthPerWallet",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "migrator",
+            "type": "address"
           }
         ],
         "indexed": false,
@@ -374,6 +424,21 @@ export const FOLIO_FACTORY_ABI = [
             "internalType": "uint16",
             "name": "priceMoveAlertBps",
             "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "sniperWindowSeconds",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "sniperMaxEthPerWallet",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "migrator",
+            "type": "address"
           }
         ],
         "indexed": false,
@@ -432,6 +497,19 @@ export const FOLIO_FACTORY_ABI = [
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_SNIPER_WINDOW_SECONDS",
+    "outputs": [
+      {
+        "internalType": "uint16",
+        "name": "",
+        "type": "uint16"
       }
     ],
     "stateMutability": "view",
@@ -504,6 +582,19 @@ export const FOLIO_FACTORY_ABI = [
   },
   {
     "inputs": [],
+    "name": "MIN_SNIPER_MAX_ETH_PER_WALLET",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "MIN_VIRTUAL_ETH_RESERVE",
     "outputs": [
       {
@@ -519,6 +610,50 @@ export const FOLIO_FACTORY_ABI = [
     "inputs": [],
     "name": "acceptOwnership",
     "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "name_",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "symbol_",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "wholeSupply",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "maxReserveCap",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint16",
+        "name": "sniperWindowSeconds",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "sniperMaxEthPerWallet",
+        "type": "uint256"
+      }
+    ],
+    "name": "createToken",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
     "stateMutability": "nonpayable",
     "type": "function"
   },
@@ -613,6 +748,21 @@ export const FOLIO_FACTORY_ABI = [
         "internalType": "uint16",
         "name": "priceMoveAlertBps",
         "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "sniperWindowSeconds",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "sniperMaxEthPerWallet",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "migrator",
+        "type": "address"
       }
     ],
     "stateMutability": "view",
@@ -731,6 +881,21 @@ export const FOLIO_FACTORY_ABI = [
             "internalType": "uint16",
             "name": "priceMoveAlertBps",
             "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "sniperWindowSeconds",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "sniperMaxEthPerWallet",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "migrator",
+            "type": "address"
           }
         ],
         "internalType": "struct CurveConfig",

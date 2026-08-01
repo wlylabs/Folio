@@ -170,6 +170,18 @@ Both legs read the wallet's balances and the live curve state first, so the
 button can say *why* it is disabled — no test ETH, no tokens to sell, curve
 graduated, trading paused — before anything is signed.
 
+**The opening window** shows up here too. For the first couple of minutes of a
+launch each wallet has a buy cap, and the panel reports how much of it this
+wallet has left and how long is to go. Buys over the cap are not refused, they
+are trimmed and the difference refunded in the same transaction, and the quote
+says so before anything is signed. It caps addresses, not people — the full
+account of what that does and does not stop is in `contracts/README.md`.
+
+A creator can tighten it for their own launch from the create form: a longer
+window, a smaller bite per wallet. Both directions are the protective one, and
+neither can be loosened past what the platform set — the same bargain the
+reserve cap already runs on.
+
 **Paused** is its own state and says so plainly. The factory's emergency stop
 halts buying *and* selling on every launch; the panel disables both and explains
 that holdings are untouched and creator fees are still claimable.

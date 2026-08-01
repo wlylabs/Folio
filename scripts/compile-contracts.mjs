@@ -43,6 +43,16 @@ const TARGETS = [
     bytecode: false,
   },
   {
+    // The migrator is not deployed from the browser either, but a creator whose
+    // launch has migrated collects their pool fees through it, so the frontend
+    // needs the ABI the same way it needs the token's.
+    source: "contracts/src/FolioMigrator.sol",
+    contract: "FolioMigrator",
+    out: "folioMigrator.ts",
+    exportName: "FOLIO_MIGRATOR_ABI",
+    bytecode: false,
+  },
+  {
     source: "contracts/FolioSale.sol",
     // Compiled under its bare filename, the source-unit name it had when the
     // committed artifact was generated. Solidity hashes the unit name into the

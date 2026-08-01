@@ -49,7 +49,13 @@ contract FolioInvariantTest is Test {
             maxReserveCap: 500 ether,
             graduationThreshold: 0,
             feeBps: 100,
-            priceMoveAlertBps: 10_000
+            priceMoveAlertBps: 10_000,
+            // Off. The handler trades from a small set of actors on a fast-forward
+            // clock, so a live window would throttle them into a much narrower
+            // slice of the state space than the invariants are meant to sweep.
+            sniperWindowSeconds: 0,
+            sniperMaxEthPerWallet: 0,
+            migrator: address(0)
         });
 
         factory = new FolioFactory(owner, config);

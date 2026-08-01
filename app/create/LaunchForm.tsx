@@ -59,6 +59,19 @@ const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 const DEFAULT_SUPPLY = "1000000000";
 
 /**
+ * The factory's own bounds on the opening window, mirrored so the form can
+ * refuse a launch before it costs gas rather than after.
+ *
+ * Constants rather than reads, because they are `constant` on the factory and
+ * cannot drift the way `defaultConfig` can — that one *is* read, and comes in
+ * as `config`. Keep these in step with `FolioFactory.MAX_SNIPER_WINDOW_SECONDS`
+ * and `MIN_SNIPER_MAX_ETH_PER_WALLET`; the chain is the authority either way,
+ * and a stale copy here only costs a worse error message.
+ */
+const MAX_SNIPER_WINDOW_SECONDS = 3600;
+const MIN_SNIPER_MAX_ETH_PER_WALLET = 100_000_000_000_000n; // 0.0001 ETH
+
+/**
  * Something that stopped a launch, in the shape the box on screen needs.
  *
  * A launch fails in more than one place and the places are not alike: a
@@ -169,6 +182,13 @@ type FormState = {
   supply: string;
   /** Optional per-launch ETH ceiling, in ETH. Empty means "platform default". */
   maxReserveCap: string;
+  /** Optional opening-window length, in seconds. Empty means "platform
+   *  default". May only be longer than the default — protection can be added to
+   *  a launch, never taken off it. */
+  sniperWindowSeconds: string;
+  /** Optional per-wallet opening cap, in ETH. Empty means "platform default",
+   *  and it may only be lower. */
+  sniperMaxEthPerWallet: string;
   articleTitle: string;
 };
 
@@ -228,6 +248,55 @@ function validate(form: FormState, avatar: File | null, config: CurveConfig | un
     }
   }
 
+  // The opening window, which moves the opposite way to everything else on this
+  // form: a *longer* window and a *smaller* per-wallet bite are the tightenings,
+  // because both hand the launch's buyers more protection from snipers. The
+  // factory refuses the other direction, and so does this.
+  const windowRaw = form.sniperWindowSeconds.trim();
+  if (windowRaw) {
+    if (!/^\d+$/.test(windowRaw)) {
+      errors.sniperWindowSeconds = "Whole seconds, digits only.";
+    } else {
+      const seconds = Number(windowRaw);
+      if (seconds > MAX_SNIPER_WINDOW_SECONDS) {
+        errors.sniperWindowSeconds = `The platform allows at most ${MAX_SNIPER_WINDOW_SECONDS} seconds.`;
+      } else if (config && seconds < config.sniperWindowSeconds) {
+        errors.sniperWindowSeconds = `A launch may only lengthen the window. The platform default is ${config.sniperWindowSeconds}s.`;
+      }
+    }
+  }
+
+  const walletCapRaw = form.sniperMaxEthPerWallet.trim();
+  if (walletCapRaw) {
+    if (!/^\d*\.?\d+$/.test(walletCapRaw)) {
+      errors.sniperMaxEthPerWallet = "Use a plain decimal number, e.g. 0.05.";
+    } else if ((walletCapRaw.split(".")[1]?.length ?? 0) > 18) {
+      errors.sniperMaxEthPerWallet = "At most 18 decimal places.";
+    } else {
+      const walletCap = parseEther(walletCapRaw);
+      if (walletCap < MIN_SNIPER_MAX_ETH_PER_WALLET) {
+        errors.sniperMaxEthPerWallet = "The platform minimum is 0.0001 ETH.";
+      } else if (
+        config &&
+        config.sniperMaxEthPerWallet > 0n &&
+        walletCap > config.sniperMaxEthPerWallet
+      ) {
+        errors.sniperMaxEthPerWallet = `A launch may only lower the per-wallet cap. The platform default is ${formatEth(
+          Number(formatEther(config.sniperMaxEthPerWallet))
+        )} ETH.`;
+      }
+    }
+  }
+
+  // A creator switching the window on for a platform that ships it off has to
+  // name the cap it runs under; the factory rejects the half-configured pair.
+  if (windowRaw && !errors.sniperWindowSeconds && config?.sniperMaxEthPerWallet === 0n) {
+    if (!walletCapRaw) {
+      errors.sniperMaxEthPerWallet =
+        "This platform has no default per-wallet cap, so a window needs one set here.";
+    }
+  }
+
   const title = form.articleTitle.trim();
   if (!title) errors.articleTitle = "Your launch needs a headline.";
   else if (title.length > 200) errors.articleTitle = "Keep the headline under 200 characters.";
@@ -250,6 +319,8 @@ export default function LaunchForm() {
     symbol: "",
     supply: DEFAULT_SUPPLY,
     maxReserveCap: "",
+    sniperWindowSeconds: "",
+    sniperMaxEthPerWallet: "",
     articleTitle: "",
   });
   const [avatar, setAvatar] = useState<File | null>(null);
@@ -450,15 +521,30 @@ export default function LaunchForm() {
         });
       }
 
-      // The four-argument overload, always. Zero means "use the platform
-      // default cap"; anything else tightens this launch's blast radius.
+      // The six-argument overload, always. Zero means "use the platform default"
+      // for each of the three; anything else tightens this launch — a smaller
+      // blast radius, a longer opening window, a smaller bite per wallet. None
+      // of them can go the other way, here or on the factory.
       const cap = form.maxReserveCap.trim() ? parseEther(form.maxReserveCap.trim()) : 0n;
+      const sniperWindow = form.sniperWindowSeconds.trim()
+        ? Number(form.sniperWindowSeconds.trim())
+        : 0;
+      const sniperCap = form.sniperMaxEthPerWallet.trim()
+        ? parseEther(form.sniperMaxEthPerWallet.trim())
+        : 0n;
 
       const call = {
         address: deployment.factory,
         abi: FOLIO_FACTORY_ABI,
         functionName: "createToken",
-        args: [form.name.trim(), form.symbol.trim(), BigInt(form.supply.trim()), cap],
+        args: [
+          form.name.trim(),
+          form.symbol.trim(),
+          BigInt(form.supply.trim()),
+          cap,
+          sniperWindow,
+          sniperCap,
+        ],
         chainId: chainEntry.chain.id,
       } as const;
 
@@ -793,6 +879,56 @@ export default function LaunchForm() {
             />
           </Field>
 
+          <Field
+            label="Opening window (seconds)"
+            hint={
+              curve
+                ? `Optional. Blank uses the platform default of ${curve.sniperWindowSeconds}s. You may lengthen it, never shorten it — a longer window is more protection from snipers, not less.`
+                : "Optional."
+            }
+            error={errors.sniperWindowSeconds}
+          >
+            <input
+              type="number"
+              min="0"
+              step="1"
+              inputMode="numeric"
+              placeholder={curve ? String(curve.sniperWindowSeconds) : "120"}
+              value={form.sniperWindowSeconds}
+              onChange={(e) => set("sniperWindowSeconds")(e.target.value)}
+              disabled={busy}
+              className="input"
+            />
+          </Field>
+
+          <Field
+            label="Opening cap per wallet (ETH)"
+            hint={
+              curve && curve.sniperMaxEthPerWallet > 0n
+                ? `Optional. Blank uses the platform default of ${formatEth(
+                    Number(formatEther(curve.sniperMaxEthPerWallet))
+                  )} ETH. You may lower it, never raise it. It caps addresses, not people — a determined bot can fund more wallets.`
+                : "Optional. This platform sets no default, so a window you switch on needs a cap here."
+            }
+            error={errors.sniperMaxEthPerWallet}
+          >
+            <input
+              type="number"
+              min="0"
+              step="0.0001"
+              inputMode="decimal"
+              placeholder={
+                curve && curve.sniperMaxEthPerWallet > 0n
+                  ? formatEther(curve.sniperMaxEthPerWallet)
+                  : "0.1"
+              }
+              value={form.sniperMaxEthPerWallet}
+              onChange={(e) => set("sniperMaxEthPerWallet")(e.target.value)}
+              disabled={busy}
+              className="input"
+            />
+          </Field>
+
           <Field label="Article headline" error={errors.articleTitle} wide>
             <input
               placeholder="The story of your launch"
@@ -871,6 +1007,25 @@ export default function LaunchForm() {
                       )
                     )}
                   />,
+                ],
+                [
+                  "Opening window",
+                  (() => {
+                    const seconds =
+                      form.sniperWindowSeconds.trim() && !errors.sniperWindowSeconds
+                        ? Number(form.sniperWindowSeconds.trim())
+                        : curve.sniperWindowSeconds;
+                    if (seconds === 0) return "none — no per-wallet cap at launch";
+                    const walletCap =
+                      form.sniperMaxEthPerWallet.trim() && !errors.sniperMaxEthPerWallet
+                        ? parseEther(form.sniperMaxEthPerWallet.trim())
+                        : curve.sniperMaxEthPerWallet;
+                    return (
+                      <>
+                        <Eth value={Number(formatEther(walletCap))} /> per wallet for {seconds}s
+                      </>
+                    );
+                  })(),
                 ],
                 ["Your fee", `${formatBps(curve.feeBps)} of every buy and sell`],
               ] as [string, React.ReactNode][]

@@ -114,6 +114,31 @@ import {IFolioFactory} from "./interfaces/IFolioFactory.sol";
  * deliberately so: on a bonding curve a large price move is what a large trade
  * *is*, and refusing those would just be a smaller cap enforced badly.
  *
+ * ## The opening-window buy cap
+ *
+ * The first buyer on a bonding curve gets the lowest price there will ever be.
+ * That is the curve working as designed, and it is also exactly what a bot that
+ * watches for `TokenCreated` is there to collect: on an unprotected launch one
+ * address can take the whole cheap end of the curve in the first block and sell it
+ * back to the humans who arrive a minute later.
+ *
+ * `sniperWindowSeconds` and `sniperMaxEthPerWallet` bound that. While the window is
+ * open, any one address may spend at most the cap across all its buys; a buy that
+ * would exceed it is filled up to the remaining allowance and the rest refunded,
+ * the same clamp-and-refund the reserve ceiling uses and for the same reason —
+ * reverting would make everyone race and most transactions fail. When the window
+ * closes the cap stops being read at all and the launch trades normally forever.
+ *
+ * What this is not: sybil resistance. N wallets get N caps, and no contract can
+ * tell them apart. The honest claim is narrower and still worth having — sniping a
+ * protected launch costs a funded fleet instead of one transaction, and the fleet
+ * is visible in the holder list afterwards. Anyone who tells you their launchpad
+ * *stops* snipers on chain is selling something.
+ *
+ * Note where this sits: outside the curve, like the fees. Clamped ETH is refunded
+ * before anything is priced, so `k`, the reserve and the sell-back guarantee are
+ * all untouched by it, and {reserveHealthBps} still reads `10_000` exactly.
+ *
  * ## What graduation does here, and what it does not
  *
  * When the real reserve reaches `graduationThreshold` the curve stops accepting
@@ -151,6 +176,18 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
     /// @notice Price move, in basis points, at which one trade emits
     ///         {LargePriceMove}. Zero disables the signal.
     uint16 public priceMoveAlertBps;
+    /// @notice True once the reserve has been handed to {migrator}. Terminal:
+    ///         the curve stops quoting both ways and never restarts.
+    bool public migrated;
+    /// @notice Seconds after {launchedAt} during which {sniperMaxEthPerWallet}
+    ///         binds. Zero disables the opening-window cap entirely.
+    uint16 public sniperWindowSeconds;
+    /// @notice Block timestamp {initialize} ran at — the instant the launch went
+    ///         live, and the origin the opening window is measured from.
+    /// @dev `uint40` rather than `uint256` so it lands in the same slot as
+    ///      `factory`, which `whenTradingActive` has already warmed on every
+    ///      trade. The window check therefore costs no cold storage read.
+    uint40 public launchedAt;
 
     /// @notice Receives the trading fees. Has no other authority here.
     address public creator;
@@ -174,6 +211,32 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
     uint256 public ethReserve;
     /// @notice Fees earned and not yet claimed by the creator, in wei.
     uint256 public feesAccrued;
+
+    /// @notice The one address this launch may ever hand its reserve to, or zero
+    ///         if it can never migrate. Copied at creation and never writable.
+    address public migrator;
+
+    /// @notice Marginal price at the instant of migration, in wei per whole
+    ///         token. Zero until then.
+    /// @dev {currentPrice} returns this once migrated, because the live formula
+    ///      would divide a zeroed reserve and report a price that was never true.
+    ///      It is a closing price, not a live one: after migration the token's
+    ///      price is whatever the pool says, and nothing on this contract tracks
+    ///      it. Read it as "where the curve ended", and go to the pool for now.
+    uint256 public migrationPrice;
+
+    /// @notice Most ETH one address may spend on buys while the opening window is
+    ///         open, in wei. Never read once the window has closed.
+    /// @dev Appended after `feesAccrued` on purpose. Everything above keeps the
+    ///      slot it had, which matters because the suite reaches `ethReserve` by
+    ///      slot number to manufacture a state the curve cannot reach on its own.
+    uint256 public sniperMaxEthPerWallet;
+
+    /// @notice ETH each address has spent on buys during the opening window, in
+    ///         wei. Only written while the window is open, and never cleared —
+    ///         after it closes the entries are a record of who bought the opening
+    ///         and how much, which is the point.
+    mapping(address => uint256) public sniperSpent;
 
     // -----------------------------------------------------------------------
     // Events
@@ -247,6 +310,39 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         address indexed trader, uint256 priceBefore, uint256 priceAfter, uint256 moveBps
     );
 
+    /**
+     * @notice A buy was trimmed to fit the opening window's per-wallet cap.
+     *
+     * Emitted from the settled trade, not from a rejection — the buy went through
+     * for `allowed` and the difference went straight back. It is here so that
+     * demand the cap turned away is a number somebody can add up afterwards,
+     * rather than something invisible that only the bot operator knows about. A
+     * launch whose log is full of these was one the snipers wanted.
+     *
+     * @param buyer Who was clamped.
+     * @param requested Wei they sent.
+     * @param allowed Wei of that the cap let through, fee included. The remainder
+     *        was refunded in the same transaction.
+     */
+    event SniperClamped(address indexed buyer, uint256 requested, uint256 allowed);
+
+    /**
+     * @notice The reserve left the curve for the migrator. Terminal.
+     *
+     * After this the curve quotes nothing: buys were already closed by
+     * graduation, and selling closes here. Every holder's exit from this point is
+     * the pool the migrator built, at whatever that pool pays.
+     *
+     * @param migrator Who received it — always the address frozen at creation.
+     * @param ethOut The entire reserve, in wei.
+     * @param tokensOut Token units minted to seed the pool's other side, sized so
+     *        the pool opens at `closingPrice` and migration is not itself a jump.
+     * @param closingPrice The curve's last marginal price, wei per whole token.
+     */
+    event Migrated(
+        address indexed migrator, uint256 ethOut, uint256 tokensOut, uint256 closingPrice
+    );
+
     // -----------------------------------------------------------------------
     // Errors
     // -----------------------------------------------------------------------
@@ -269,6 +365,9 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
     error SlippageExceeded(uint256 got, uint256 wanted);
     /// @notice Buys are closed: the curve graduated, or it hit its ETH ceiling.
     error CurveClosed();
+    /// @notice This address has already spent its whole opening-window allowance.
+    ///         Temporary: the cap stops being enforced when the window closes.
+    error SniperCapReached();
     /// @notice Trading is halted by the platform-wide emergency stop.
     error TradingPaused();
     /// @notice More tokens were offered for sale than the curve ever issued.
@@ -279,6 +378,20 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
     ///         by construction; if it ever fires, the curve maths is wrong and the
     ///         trade must not settle.
     error ReserveShortfall(uint256 required, uint256 available);
+    /// @notice Only this launch's frozen `migrator` may call the release.
+    error NotMigrator();
+    /// @notice The launch has no migrator, so its reserve can never leave the
+    ///         curve. This is a permanent property of the launch, not a state.
+    error NoMigrator();
+    /// @notice The curve has not graduated, so there is nothing to migrate yet.
+    error NotGraduated();
+    /// @notice The reserve has already been handed over. Migration is once only.
+    error AlreadyMigrated();
+    /// @notice Graduated with an empty reserve — everyone sold back out before
+    ///         anyone called the migration. There is no liquidity to seed with.
+    error NothingToMigrate();
+    /// @notice The curve has migrated and no longer quotes. Trade on the pool.
+    error CurveMigrated();
     /// @notice Only the creator may claim fees.
     error NotCreator();
     /// @notice There are no accrued fees to claim.
@@ -329,10 +442,13 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         //
         // Only the fields that could break the curve's arithmetic or its solvency
         // are re-checked here. The factory's other bounds — the fee ceiling, the
-        // alert floor — are platform policy rather than safety properties, and
-        // re-enforcing policy in the token would only mean two places to keep in
-        // step. `priceMoveAlertBps` in particular cannot break anything: it is read
-        // by one `emit` and nothing else.
+        // alert floor, the opening window's length and its cap — are platform
+        // policy rather than safety properties, and re-enforcing policy in the
+        // token would only mean two places to keep in step. `priceMoveAlertBps` in
+        // particular cannot break anything: it is read by one `emit` and nothing
+        // else. The window is the same kind of parameter: the worst a bad pair can
+        // do is refuse buys until it expires, which is bounded, self-inflicted, and
+        // not something the reserve can be hurt by.
         if (config.virtualEthReserve == 0 || config.maxReserveCap == 0) revert InvalidConfig();
         if (config.graduationThreshold > config.maxReserveCap) revert InvalidConfig();
 
@@ -345,6 +461,13 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         virtualEthReserve = config.virtualEthReserve;
         maxReserveCap = config.maxReserveCap;
         graduationThreshold = config.graduationThreshold;
+        sniperWindowSeconds = config.sniperWindowSeconds;
+        sniperMaxEthPerWallet = config.sniperMaxEthPerWallet;
+        migrator = config.migrator;
+        // The launch is live from here, so this is the instant the opening window
+        // is measured from. Truncation to `uint40` is not a concern any deployment
+        // will meet: it overflows in the year 36812.
+        launchedAt = uint40(block.timestamp);
 
         // The whole supply is curve inventory, and none of it is minted yet. It
         // exists as the `y` axis of the curve and comes into being one buy at a
@@ -376,6 +499,10 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
      *      because it moves the curve. Use the quote functions for actual trades.
      */
     function currentPrice() public view returns (uint256) {
+        // The reserve is zero after migration, so the live formula would report a
+        // price the launch never traded at. The closing price is the true last
+        // thing this curve did; the live one now belongs to the pool.
+        if (migrated) return migrationPrice;
         return Math.mulDiv(virtualEthReserve + ethReserve, 10 ** decimals(), curveTokenReserve());
     }
 
@@ -408,6 +535,32 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         return IFolioFactory(factory).paused();
     }
 
+    /// @notice Timestamp the opening-window buy cap stops applying at. Zero when
+    ///         the launch has no window configured.
+    function sniperWindowEndsAt() public view returns (uint256) {
+        uint256 window = sniperWindowSeconds;
+        return window == 0 ? 0 : uint256(launchedAt) + window;
+    }
+
+    /// @notice True while the per-wallet opening cap is still being enforced.
+    function sniperWindowActive() public view returns (bool open) {
+        (open,) = _windowState(address(0));
+    }
+
+    /**
+     * @notice How much more ETH `buyer` may spend on buys right now, in wei.
+     * @dev `type(uint256).max` once the window has closed, or when the launch
+     *      never had one — that is the "no limit" reading, and it is what makes
+     *      the clamp in `_quoteBuy` a no-op rather than a special case.
+     *
+     *      Sending more than this does not fail. The buy fills to the allowance
+     *      and the rest comes back in the same transaction; see {buy}.
+     * @param buyer Address to report the remaining allowance for.
+     */
+    function sniperAllowance(address buyer) public view returns (uint256 allowance) {
+        (, allowance) = _windowState(buyer);
+    }
+
     /**
      * @notice What it costs to buy exactly `tokenAmount` token units right now.
      * @dev Inclusive of the creator fee — this is the number to put in a
@@ -416,9 +569,10 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
      *      unit or two more.
      *
      *      This prices the curve and nothing else. It does not know about the
-     *      reserve cap, the graduation threshold, or the emergency stop — check
-     *      {ethHeadroom}, {graduated} and {tradingPaused} for those, or use
-     *      {getBuyQuote}, which mirrors `buy` exactly.
+     *      reserve cap, the graduation threshold, the opening-window buy cap, or
+     *      the emergency stop — check {ethHeadroom}, {graduated},
+     *      {sniperAllowance} and {tradingPaused} for those, or use
+     *      {getBuyQuoteFor}, which mirrors `buy` exactly.
      * @param tokenAmount Token units wanted. Must be below {curveTokenReserve};
      *      the curve's last token sits at a vertical asymptote and has no price.
      * @return ethCost Wei to send.
@@ -461,18 +615,45 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
      *      every other view here: a stopped market is one people are entitled to
      *      keep reading. Pair it with {tradingPaused} to render why the button is
      *      disabled.
+     *
+     *      Quotes for `msg.sender`, which is the connected wallet on an
+     *      `eth_call` that sets `from` and the zero address on one that does not.
+     *      While an opening window is open those two differ — the zero address has
+     *      spent nothing and so quotes an untouched allowance. Use
+     *      {getBuyQuoteFor} whenever the buyer is known, which for a frontend is
+     *      always.
      * @param ethIn Wei the caller intends to send.
      * @return tokensOut Token units they would receive.
      * @return ethSpent Wei actually consumed, fee included.
      * @return refund Wei sent straight back, when the trade would overshoot the
-     *      ETH ceiling.
+     *      ETH ceiling or the caller's remaining opening-window allowance.
      */
     function getBuyQuote(uint256 ethIn)
         public
         view
         returns (uint256 tokensOut, uint256 ethSpent, uint256 refund)
     {
-        (tokensOut,, refund) = _quoteBuy(ethIn);
+        return getBuyQuoteFor(ethIn, msg.sender);
+    }
+
+    /**
+     * @notice {getBuyQuote} for a named buyer, rather than for whoever is calling.
+     * @dev The one a frontend should use. During an opening window the answer
+     *      depends on how much that specific address has already spent, so a quote
+     *      taken for the wrong address is a quote for a different trade.
+     * @param ethIn Wei the buyer intends to send.
+     * @param buyer Address that would be sending it.
+     * @return tokensOut Token units they would receive.
+     * @return ethSpent Wei actually consumed, fee included.
+     * @return refund Wei sent straight back.
+     */
+    function getBuyQuoteFor(uint256 ethIn, address buyer)
+        public
+        view
+        returns (uint256 tokensOut, uint256 ethSpent, uint256 refund)
+    {
+        (, uint256 allowance) = _windowState(buyer);
+        (tokensOut,, refund) = _quoteBuy(ethIn, allowance);
         ethSpent = ethIn - refund;
     }
 
@@ -505,6 +686,12 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
      *      not a restatement of it.
      */
     function getOutstandingSellObligation() public view returns (uint256) {
+        // A migrated curve owes nothing: it holds no reserve and refuses every
+        // sell, so there is no obligation left here to measure. The liability
+        // moved to the pool along with the ETH, and this contract is not the
+        // place to read it. Without this the reserve would read as 0% covered
+        // against an obligation nothing can ever call on.
+        if (migrated) return 0;
         uint256 circulating = tokensSold;
         if (circulating == 0) return 0;
         (uint256 grossEth,,) = _quoteSell(circulating);
@@ -542,6 +729,11 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
      * curve could only ever *reach* its threshold via an exactly-sized trade, and
      * would leave the last slice of a launch unbuyable.
      *
+     * A buy over the caller's remaining opening-window allowance is trimmed the
+     * same way, and for the same reason. Only a caller with *no* allowance left
+     * reverts, with {SniperCapReached}, since there is no trade left to settle.
+     * Quote with {getBuyQuoteFor} to see the trim before signing.
+     *
      * @param minTokensOut Floor on token units received; the trade reverts below
      *        it. Quote with {getBuyQuote} and subtract your slippage tolerance.
      *        Passing zero disables the check, which on a public mempool means
@@ -558,7 +750,15 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         if (msg.value == 0) revert ZeroEthIn();
         if (graduated || ethHeadroom() == 0) revert CurveClosed();
 
-        (uint256 out, uint256 netEth, uint256 refund) = _quoteBuy(msg.value);
+        // Read once, up front, and reused for the clamp, the record and the log.
+        (bool windowOpen, uint256 allowance) = _windowState(msg.sender);
+
+        (uint256 out, uint256 netEth, uint256 refund) = _quoteBuy(msg.value, allowance);
+        uint256 spent = msg.value - refund;
+        // Reached only through the opening-window clamp. The other two ways
+        // `_quoteBuy` bounces the whole send — graduated, and no headroom — both
+        // reverted a line above, so an empty spend here means one thing.
+        if (spent == 0) revert SniperCapReached();
         if (out == 0) revert PaymentTooSmall();
         if (out < minTokensOut) revert SlippageExceeded(out, minTokensOut);
         tokensOut = out;
@@ -568,14 +768,16 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         // --- Effects. Everything below settles before the one external call. ---
         ethReserve += netEth;
         tokensSold += tokensOut;
-        feesAccrued += msg.value - refund - netEth;
+        feesAccrued += spent - netEth;
+        if (windowOpen) sniperSpent[msg.sender] += spent;
         _mint(msg.sender, tokensOut);
 
         bool justGraduated = graduationThreshold != 0 && ethReserve >= graduationThreshold;
         if (justGraduated) graduated = true;
 
         uint256 priceAfter = currentPrice();
-        emit TokensBought(msg.sender, msg.value - refund, tokensOut, priceAfter);
+        emit TokensBought(msg.sender, spent, tokensOut, priceAfter);
+        if (msg.value > allowance) emit SniperClamped(msg.sender, msg.value, allowance);
         if (justGraduated) emit Graduated(ethReserve, tokensSold);
         _signalLargeMove(priceBefore, priceAfter);
 
@@ -604,6 +806,7 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         whenTradingActive
         returns (uint256 ethOut)
     {
+        if (migrated) revert CurveMigrated();
         if (tokenAmount == 0) revert ZeroTokenAmount();
         // Cannot be reached by a legitimate holder — every token in existence came
         // out of the curve, so no balance can exceed `tokensSold`. Kept so that a
@@ -638,6 +841,73 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
     }
 
     /**
+     * @notice Hand the entire reserve, and the tokens to pair against it, to this
+     *         launch's frozen {migrator}. Callable once, by that address only,
+     *         and only after graduation.
+     *
+     * This is the end of the curve, and of the sell-back guarantee with it.
+     * {sell} reverts with {CurveMigrated} from here on, the reserve is zero, and
+     * every holder's exit becomes whatever the migrator's pool pays. Read
+     * {Migrated} and the note on `migrator` in `CurveConfig` before wiring one up:
+     * total exit value falls, because an AMM position holds both sides forever.
+     * What it buys is a market with no ceiling, where a graduated curve had one.
+     *
+     * The token side is sized so the pool opens at exactly the price the curve
+     * closed at: `reserve / price` units, which is always strictly less than the
+     * curve's unsold inventory, so the remainder is simply never minted. Seeding
+     * with everything unsold instead would open the pool below the closing price
+     * and hand the last buyers an instant loss, which is the dump graduation is
+     * supposed to avoid rather than a migration.
+     *
+     * Whatever the reserve happens to be at this moment is what migrates. Selling
+     * stays open right up to the call, so a launch that graduates and is then
+     * sold back down migrates a smaller pool — smaller, but still opening at the
+     * price the curve left off at.
+     *
+     * @dev Deliberately not automatic on the graduating buy: that would bill one
+     *      unlucky buyer for a pool deployment. Anyone may prompt the migrator,
+     *      which then calls this.
+     * @return ethOut The whole reserve, in wei.
+     * @return tokensOut Token units minted to the migrator.
+     */
+    function releaseForMigration()
+        external
+        nonReentrant
+        returns (uint256 ethOut, uint256 tokensOut)
+    {
+        address to = migrator;
+        if (to == address(0)) revert NoMigrator();
+        if (msg.sender != to) revert NotMigrator();
+        if (migrated) revert AlreadyMigrated();
+        // Migration rides on graduation, so a launch with the threshold disabled
+        // never reaches this — it has no defined moment to close the curve at.
+        if (!graduated) revert NotGraduated();
+
+        ethOut = ethReserve;
+        if (ethOut == 0) revert NothingToMigrate();
+
+        // Read before the state below moves, so it is the price the curve
+        // actually closed at.
+        uint256 closingPrice = currentPrice();
+        tokensOut = Math.mulDiv(ethOut, 10 ** decimals(), closingPrice, Math.Rounding.Floor);
+
+        // --- Effects, all of them, before the one transfer out. ---
+        migrated = true;
+        migrationPrice = closingPrice;
+        ethReserve = 0;
+        // `tokensSold` tracks what has been minted, and these have been. Keeping
+        // it equal to `totalSupply()` is what every supply assertion in the suite
+        // rests on, and the curve is closed either way.
+        tokensSold += tokensOut;
+        _mint(to, tokensOut);
+
+        emit Migrated(to, ethOut, tokensOut, closingPrice);
+
+        // --- Interactions. ---
+        _sendEth(to, ethOut);
+    }
+
+    /**
      * @notice Send the creator every fee accrued so far.
      * @dev Callable by the creator only, and by design *not* blocked by the
      *      platform pause. Fees live outside `ethReserve`, so this cannot touch
@@ -667,13 +937,51 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
      *      than the creator's pocket, and `tokensOut` floors, so the curve keeps
      *      the fractional token. Both push `k` up, never down.
      */
-    function _quoteBuy(uint256 ethIn)
+    /**
+     * @dev Whether the opening window is still binding, and what `buyer` has left
+     *      under it. `type(uint256).max` is the "no limit" reading, which is what
+     *      lets every caller treat the clamp as ordinary arithmetic rather than a
+     *      branch on whether the feature is switched on.
+     *
+     *      One function rather than three because `buy` needs both answers on
+     *      every trade, and reading them separately meant walking the same storage
+     *      three times per buy — about 1.1k gas, most of it paid by launches with
+     *      no window at all. The window fields share a slot with `factory`, which
+     *      `whenTradingActive` has already warmed, so folded together they cost a
+     *      warm read and a comparison.
+     *
+     *      `buyer` is only read when the window is open; pass anything when the
+     *      allowance is not wanted.
+     */
+    function _windowState(address buyer) private view returns (bool open, uint256 allowance) {
+        uint256 window = sniperWindowSeconds;
+        if (window == 0 || block.timestamp >= uint256(launchedAt) + window) {
+            return (false, type(uint256).max);
+        }
+        uint256 cap = sniperMaxEthPerWallet;
+        uint256 spent = sniperSpent[buyer];
+        return (true, spent >= cap ? 0 : cap - spent);
+    }
+
+    function _quoteBuy(uint256 ethIn, uint256 allowance)
         private
         view
         returns (uint256 tokensOut, uint256 netEth, uint256 refund)
     {
         uint256 headroom = ethHeadroom();
         if (headroom == 0 || graduated) return (0, 0, ethIn);
+
+        // The opening-window clamp comes first, before the curve has seen any of
+        // this ETH. Trimming here rather than after pricing is what keeps the
+        // mechanism outside the curve: the refunded wei never reach the reserve,
+        // never move `k`, and never appear in a fee.
+        uint256 clamped;
+        if (ethIn > allowance) {
+            clamped = ethIn - allowance;
+            ethIn = allowance;
+            // Allowance fully spent. Nothing to price, and the whole send bounces.
+            if (ethIn == 0) return (0, 0, clamped);
+        }
 
         uint256 fee = (ethIn * feeBps) / BPS;
         netEth = ethIn - fee;
@@ -687,6 +995,10 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
             if (gross > ethIn) gross = ethIn;
             refund = ethIn - gross;
         }
+        // Both refunds go back in one transfer. `ethIn` was already reduced by the
+        // clamp above, so the headroom refund is a slice of what the window let
+        // through and the two never double-count.
+        refund += clamped;
 
         tokensOut = Math.mulDiv(
             curveTokenReserve(),

@@ -209,10 +209,17 @@ workflow (which reads the key from a GitHub Environment) over a plaintext key on
 a laptop for anything beyond a one-off.
 
 **5. Choose the curve terms.** `FACTORY_VIRTUAL_ETH_RESERVE`,
-`FACTORY_MAX_RESERVE_CAP` and `FACTORY_GRADUATION_THRESHOLD` default to 2, 5 and
-4 ETH. Those numbers were picked for a chain whose ETH was free. Set them in
-`.env` for what you actually want a launch on this chain to be; the dry run
-below prints all five.
+`FACTORY_MAX_RESERVE_CAP` and `FACTORY_GRADUATION_THRESHOLD` default to 5, 12 and
+10 ETH. Set them in `.env` for what you actually want a launch on this chain to
+be; the dry run below prints all seven.
+
+Two things worth knowing before you change them. Aggression is the *ratio*
+`(V + threshold) / V` squared, so moving the threshold without the virtual
+reserve makes the curve steeper for late buyers rather than just bigger — the
+shipped pair is 9x, and `2 / 10` would be 36x. And the threshold is the entire
+real reserve a launch ever holds, which makes it the depth of any market that
+comes after the curve: a 1 ETH sell costs 44% against a 4 ETH reserve and 19%
+against 10. See `contracts/README.md` for the table.
 
 **6. Dry run.** Simulates against real chain state and broadcasts nothing. The
 network guard runs here — a wrong RPC fails at this step rather than at signing.
@@ -346,9 +353,23 @@ No verification secret: Blockscout needs no API key, so turning the run's
 The curve terms default to the same numbers the script uses. Override any of
 them with repository *variables* named `FACTORY_VIRTUAL_ETH_RESERVE`,
 `FACTORY_MAX_RESERVE_CAP`, `FACTORY_GRADUATION_THRESHOLD`, `FACTORY_FEE_BPS`,
-`FACTORY_PRICE_MOVE_ALERT_BPS`; only the ones you set are passed through, since
-an empty value is not the same as an unset one to `vm.envOr`. On this chain they
-are real amounts — set them.
+`FACTORY_PRICE_MOVE_ALERT_BPS`, `FACTORY_SNIPER_WINDOW_SECONDS`,
+`FACTORY_SNIPER_MAX_ETH_PER_WALLET`; only the ones you set are passed through,
+since an empty value is not the same as an unset one to `vm.envOr`. On this chain
+they are real amounts — set them.
+
+The last two are the opening-window buy cap, defaulting to 0.25 ETH a wallet for
+the first 120 seconds of a launch. Setting the window to `0` switches it off.
+Note that the cap is per *address*, not per person — see the honest account of
+what it does and does not stop in `contracts/README.md`.
+
+`FACTORY_MIGRATOR` is separate and defaults to the zero address, meaning launches
+graduate and stay on the curve forever. Setting it to a deployed `FolioMigrator`
+opts every *subsequent* launch into moving its reserve to a Uniswap v4 pool at
+graduation — which also ends the sell-back guarantee for those launches. Deploy
+the migrator first, verify it, and read the migration section of
+`contracts/README.md` before setting this. Launches already created are untouched
+either way: the address is frozen into each one at creation.
 
 Three things the workflow does that are worth knowing when reading a failed run:
 
@@ -396,14 +417,42 @@ identical to L1's, so the `~Gas used` line the scripts print is indicative
 there, not exact. It is a printed figure only — nothing in the contracts
 depends on it.
 
+### Uniswap v4 on Robinhood Chain
+
+Needed only if you are deploying a `FolioMigrator`. Addresses come from
+Uniswap's own `sdks` package (`sdk-core/src/addresses.ts`, `ROBINHOOD_ADDRESSES`)
+and were each checked to hold code on chain 4663 at block 25,066,538:
+
+| Contract | Address | Code |
+| --- | --- | --- |
+| v4 `PoolManager` | `0x8366a39CC670B4001A1121B8F6A443A643e40951` | 24,009 bytes |
+| v4 `PositionManager` | `0x58daec3116aae6d93017baaea7749052e8a04fa7` | 23,877 bytes |
+| v4 `StateView` | `0xf3334192d15450cdd385c8b70e03f9a6bd9e673b` | 3,531 bytes |
+| v4 `Quoter` | `0x8dc178efb8111bb0973dd9d722ebeff267c98f94` | 6,118 bytes |
+
+`FolioMigrator` uses the `PoolManager` only; the rest are listed because they are
+what a frontend or a quoting service would reach for next.
+
+Do not take this table on trust — it is a snapshot, and Uniswap can redeploy.
+`contracts/test-v4/FolioMigrationFork.t.sol` re-checks the `PoolManager` address
+against the live chain and runs a whole migration through it, and the `fork` job
+in `.github/workflows/contracts.yml` runs that on every push. Set the
+`ROBINHOOD_MAINNET_RPC_URL` secret or the job self-skips and warns.
+
 ### Still unconfirmed
 
 `evm_version` stays `paris`, deliberately. Arbitrum has supported PUSH0 since
 ArbOS 11 and TSTORE/MCOPY since ArbOS 20, so Cancun would very probably work —
 but the measured saving is ~63k gas on the one-off factory deploy and under
 0.4% per trade, which is not worth deploying on an assumption about a chain's
-EVM revision. Once a deploy has landed and the explorer confirms what the chain
-runs, this is worth revisiting.
+EVM revision.
+
+That assumption is now weaker than it was: Uniswap v4 is live on this chain and
+its `PoolManager` is built on TSTORE, so the chain demonstrably executes Cancun
+opcodes. That is inference from someone else's deployment rather than a check of
+our own bytecode, which is why the default has not moved — but it is the evidence
+this section was waiting for, and the case for switching is now mostly about
+whether the sub-0.4% is worth a re-verification pass.
 
 ---
 
@@ -574,7 +623,7 @@ Work top to bottom. Tick each before wiring up the frontend.
 - [ ] `claimFees` still works while paused (call it from the creator wallet on Blockscout).
 - [ ] `Unpause` restores trading; a `Buy` afterwards succeeds.
 
-### Graduation (optional — needs ~4 ETH of buys, at real cost)
+### Graduation (optional — needs the full threshold in buys, at real cost)
 
 - [ ] Buying past `graduationThreshold` emits `Graduated` and sets `graduated`.
 - [ ] Further buys revert with `CurveClosed`.

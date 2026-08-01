@@ -91,8 +91,18 @@ function endpointFor(slug) {
   return { url: process.env[`NEXT_PUBLIC_RPC_${key}`] || "", websocket: false };
 }
 
+/**
+ * The trailing tuple is `CurveConfig`, and it has to match the struct exactly.
+ *
+ * Adding a field to `contracts/src/types/CurveConfig.sol` changes this event's
+ * signature and so its topic0, at which point a stale copy here matches nothing
+ * and this watcher goes quiet without erroring — the worst failure shape
+ * available. `lib/indexer.ts` avoids the problem by reading the generated ABI;
+ * this is a plain `.mjs` and cannot import the TypeScript module, so the string
+ * is maintained by hand and this comment is the reminder that it must be.
+ */
 const TOKEN_CREATED = parseAbiItem(
-  "event TokenCreated(address indexed token, address indexed creator, string name, string symbol, uint256 totalSupply, (uint256 virtualEthReserve, uint256 maxReserveCap, uint256 graduationThreshold, uint16 feeBps, uint16 priceMoveAlertBps) config)"
+  "event TokenCreated(address indexed token, address indexed creator, string name, string symbol, uint256 totalSupply, (uint256 virtualEthReserve, uint256 maxReserveCap, uint256 graduationThreshold, uint16 feeBps, uint16 priceMoveAlertBps, uint16 sniperWindowSeconds, uint256 sniperMaxEthPerWallet, address migrator) config)"
 );
 
 /**

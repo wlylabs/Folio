@@ -379,7 +379,33 @@ function factRows(
     // Only shown when true — a status row that reads "no" on every healthy
     // listing is noise, and these two are the states that change what a reader
     // can do next.
-    if (stats.graduated) rows.push(["Status", "Graduated — buys closed, selling open"]);
+    // Migration first: it is the stronger state, and the graduated line promises
+    // that selling stays open, which stops being true the moment the reserve
+    // leaves for the pool.
+    if (stats.migrated) {
+      rows.push(["Status", "Migrated to a Uniswap v4 pool — the curve is closed both ways"]);
+      if (stats.poolPrice !== null) {
+        rows.push(["Pool price", <Eth key="poolprice" value={stats.poolPrice} />]);
+      }
+      // The explorer link is optional the same way the contract row's is: a
+      // chain without one still gets the address, just not as a link.
+      const migrator = stats.migrator;
+      const migratorUrl = migrator ? explorerAddressUrl(token.chain, migrator) : null;
+      if (migrator) {
+        rows.push([
+          "Pool held by",
+          migratorUrl ? (
+            <a key="migrator" href={migratorUrl} target="_blank" rel="noopener noreferrer">
+              {shortAddress(migrator)}
+            </a>
+          ) : (
+            shortAddress(migrator)
+          ),
+        ]);
+      }
+    } else if (stats.graduated) {
+      rows.push(["Status", "Graduated — buys closed, selling open"]);
+    }
     if (stats.paused) rows.push(["Status", "Trading halted by the platform emergency stop"]);
     if (!stats.verified) rows.push(["Registry", "Not registered with the configured factory"]);
 

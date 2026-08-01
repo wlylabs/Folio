@@ -48,6 +48,16 @@ type DeploymentRecord = {
     graduationThreshold: string;
     feeBps: number;
     priceMoveAlertBps: number;
+    /** Both absent on records written before the opening-window cap existed.
+     *  A factory deployed then has no such fields on its config at all, so the
+     *  honest reading of a missing pair is "that launch had no window", which
+     *  is what the zero default below means. */
+    sniperWindowSeconds?: number;
+    sniperMaxEthPerWallet?: string;
+    /** Absent on records written before migration existed, and zero on any
+     *  platform that has not opted into it. Zero means the curve is terminal:
+     *  it graduates, closes to buys, and keeps the sell-back floor forever. */
+    migrator?: string;
   };
 };
 
@@ -57,6 +67,14 @@ export type CurveConfig = {
   graduationThreshold: bigint;
   feeBps: number;
   priceMoveAlertBps: number;
+  /** Seconds after a launch during which sniperMaxEthPerWallet binds. Zero on
+   *  factories predating the mechanism, which is also how it is switched off. */
+  sniperWindowSeconds: number;
+  /** Most ETH one address may spend while that window is open, in wei. */
+  sniperMaxEthPerWallet: bigint;
+  /** The only address a launch will ever hand its reserve to, or the zero
+   *  address for a platform whose curves are terminal. */
+  migrator: `0x${string}`;
 };
 
 export type FactoryDeployment = {
@@ -143,6 +161,9 @@ function buildDeployment(slug: ChainSlug): FactoryDeployment | null {
       graduationThreshold: BigInt(record.defaultConfig.graduationThreshold),
       feeBps: record.defaultConfig.feeBps,
       priceMoveAlertBps: record.defaultConfig.priceMoveAlertBps,
+      sniperWindowSeconds: record.defaultConfig.sniperWindowSeconds ?? 0,
+      sniperMaxEthPerWallet: BigInt(record.defaultConfig.sniperMaxEthPerWallet ?? 0),
+      migrator: address(record.defaultConfig.migrator) ?? ZERO_ADDRESS,
     },
   };
 }

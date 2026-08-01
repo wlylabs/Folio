@@ -847,7 +847,10 @@ contract FolioAdversarialTest is FolioTestBase {
             maxReserveCap: 1000 ether,
             graduationThreshold: 1000 ether,
             feeBps: 500,
-            priceMoveAlertBps: 100
+            priceMoveAlertBps: 100,
+            sniperWindowSeconds: 0,
+            sniperMaxEthPerWallet: 0,
+            migrator: address(0)
         });
         vm.startPrank(owner);
         factory.setDefaultConfig(hostile);

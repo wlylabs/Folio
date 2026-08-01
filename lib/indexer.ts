@@ -1,5 +1,6 @@
-import { formatUnits, parseAbiItem } from "viem";
+import { formatUnits, getAbiItem } from "viem";
 import { publicClientFor } from "@/lib/chains";
+import { FOLIO_FACTORY_ABI } from "@/lib/contracts/folioFactory";
 import {
   FACTORY_DEPLOYMENTS,
   deploymentFor,
@@ -40,9 +41,17 @@ import { serverSupabase } from "@/lib/supabaseAdmin";
  * Neither one runs on page load. Pages read the table.
  */
 
-const TOKEN_CREATED = parseAbiItem(
-  "event TokenCreated(address indexed token, address indexed creator, string name, string symbol, uint256 totalSupply, (uint256 virtualEthReserve, uint256 maxReserveCap, uint256 graduationThreshold, uint16 feeBps, uint16 priceMoveAlertBps) config)"
-);
+/**
+ * Taken from the generated ABI rather than written out here.
+ *
+ * The event carries a `CurveConfig`, so every field added to that struct changes
+ * the event's signature and therefore its topic0. A hand-copied string goes stale
+ * silently the first time one is: the filter stops matching, the scan reports
+ * `found: 0`, and nothing anywhere looks broken. Deriving it means a struct change
+ * reaches this file through `npm run compile:contracts` like it reaches
+ * everything else. `app/create/LaunchForm.tsx` reads the same item the same way.
+ */
+const TOKEN_CREATED = getAbiItem({ abi: FOLIO_FACTORY_ABI, name: "TokenCreated" });
 
 /**
  * Blocks per `eth_getLogs` call. Public RPCs cap the range — Base's rejects
@@ -295,6 +304,9 @@ type LaunchArgs = {
     graduationThreshold: bigint;
     feeBps: number;
     priceMoveAlertBps: number;
+    sniperWindowSeconds: number;
+    sniperMaxEthPerWallet: bigint;
+    migrator: `0x${string}`;
   };
 };
 

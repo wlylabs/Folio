@@ -17,8 +17,17 @@ Foundry.
 ```
 npm run forge:build     # compile src/
 npm run forge:test      # run test/*.t.sol
+npm run forge:test:v4   # run test-v4/*.t.sol — the migration suite
 npm run forge:gas       # print the create-cost comparison against FolioSale
 ```
+
+The migration suite is a second profile because Uniswap's `PoolManager` is built
+on transient storage and cannot compile at the paris this project ships at. It
+gets its own directory, its own artifacts, and `evm_version = "cancun"`; nothing
+Folio deploys uses transient storage, and `FolioMigrator` builds with everything
+else under the default profile. Set `ROBINHOOD_MAINNET_RPC_URL` and the same
+command also checks the recorded Uniswap addresses against the live chain —
+without it those tests skip and say so.
 
 ## Layout
 
@@ -26,11 +35,15 @@ npm run forge:gas       # print the create-cost comparison against FolioSale
 | --- | --- |
 | `src/FolioFactory.sol` | Deploys launches, holds default curve terms, owns the emergency stop |
 | `src/FolioToken.sol` | The cloned ERC20 + bonding curve, one instance per launch |
+| `src/FolioMigrator.sol` | Moves a graduated launch onto a locked Uniswap v4 pool |
 | `src/types/CurveConfig.sol` | The curve terms a launch is frozen to at creation |
 | `src/interfaces/IFolioFactory.sol` | The slice of the factory a token reads at runtime |
 | `test/FolioFactory.t.sol` | Creating launches: proxies, bounds, owner powers, gas |
 | `test/FolioTrading.t.sol` | The curve: pricing, buy, sell, reserve, reentrancy, ordering |
 | `test/FolioSafety.t.sol` | Pause, ownership, reserve cap, price signal, audit trail |
+| `test/FolioAntiSniper.t.sol` | The opening-window per-wallet buy cap, and its limits |
+| `test-v4/FolioMigration.t.sol` | Migration against a locally deployed v4 `PoolManager` |
+| `test-v4/FolioMigrationFork.t.sol` | The same, against the real v4 on Robinhood Chain |
 | `test/folioSale.test.mjs` | Legacy in-memory-EVM tests for `FolioSale.sol` |
 
 ## How the curve prices a trade
@@ -43,7 +56,8 @@ circulating supply at all times.
 | Function | Direction | Includes fee? |
 | --- | --- | --- |
 | `getBuyPrice(tokenAmount)` | tokens → ETH to send | yes, rounded up |
-| `getBuyQuote(ethIn)` | ETH → tokens, spend, refund | yes; mirrors `buy` exactly |
+| `getBuyQuote(ethIn)` | ETH → tokens, spend, refund | yes; mirrors `buy` for `msg.sender` |
+| `getBuyQuoteFor(ethIn, buyer)` | the same, for a named buyer | yes; what a frontend should call |
 | `getSellPrice(tokenAmount)` | tokens → ETH received | yes, net of fee |
 
 All of them are `view`, and the two quote functions run the same internal maths
@@ -67,11 +81,140 @@ restatement, and `reserveHealthBps()` should never read below `10_000`.
 
 The price multiple from launch to graduation is
 `((virtualEthReserve + graduationThreshold) / virtualEthReserve) ** 2`. At the
-shipped defaults (2 ETH virtual, 4 ETH threshold) that is **9x**. Raising the
+shipped defaults (5 ETH virtual, 10 ETH threshold) that is **9x**. Raising the
 virtual reserve to 6 ETH makes it 2.8x. Nothing in `FolioToken.sol` changes.
 
+Note what that formula does *not* depend on: the absolute size of either number.
+Aggression is the ratio, so `2 / 4` and `5 / 10` are the same 9x curve at
+different scales — the same 67% of supply sold at graduation, the same shape.
+That is what lets the threshold be chosen for the size of the reserve it
+accumulates without making the climb steeper for late buyers. Move one without
+the other and the shape changes: `2 / 10` is 36x.
+
+### Why the threshold is also a liquidity decision
+
+The graduation threshold is the whole real reserve a launch ever holds, so it is
+also the depth of whatever market comes after the curve. Extracting `X` ETH from
+a constant-product pool of depth `D` moves the price to `((D - X) / D) ** 2`:
+
+| Threshold | A 0.5 ETH sell | A 1 ETH sell |
+| --- | --- | --- |
+| 4 ETH | −23% | −44% |
+| 10 ETH | −10% | −19% |
+| 20 ETH | −5% | −10% |
+
+The shipped 10 ETH is a deliberate middle: high enough that a graduated launch
+is a market a person can trade in, low enough to still be reachable. Set it low
+and graduation produces a pool that one ordinary sell breaks; set it very high
+and nothing ever graduates. It is the number to revisit first if migration to a
+DEX is ever built, because it is that pool's opening depth.
+
 Graduation closes buying and emits `Graduated`. Selling stays open forever, and
-there is no migration path to a DEX in this contract — that is a later stage.
+nothing in `FolioToken` moves the reserve anywhere — unless the launch was created
+with a migrator.
+
+### Migration, and what it costs
+
+A curve that graduates is finished: buys never reopen, so the price can only fall
+from there and everyone can see the threshold coming. `FolioMigrator` is the exit
+from that shape. Once a launch has graduated, anyone may call `migrate(token)`,
+which takes the reserve and pairs it against freshly minted tokens in a full-range
+Uniswap v4 position that this contract holds and has no function to unwind.
+
+The pool opens at exactly the price the curve closed at. `FolioToken` sizes the
+token side as `reserve / closingPrice`, always strictly less than the unsold
+inventory, and the remainder is never minted. Seeding with everything unsold would
+open the pool *below* the closing price — the graduation dump under a new name.
+
+**Migration ends the sell-back guarantee, and that is not a side effect.** On the
+curve, selling every circulating token back returns exactly the reserve. In a pool
+it does not: an AMM position holds both sides at every price, so part of the ETH is
+never reachable by sellers, and at the shipped terms the collective exit falls by
+roughly a quarter. `sell()` reverts with `CurveMigrated` from then on, and
+`getOutstandingSellObligation()` returns zero because the curve no longer owes
+anything — the liability went to the pool with the money.
+
+So it is opt-in and it is frozen per launch. `CurveConfig.migrator` defaults to
+zero, which keeps the floor and the dead end; a launch created with zero can never
+migrate, whoever asks. The address is snapshotted at creation and deliberately not
+read from the factory at call time, because a swappable migrator would be a lever
+that moves other people's money out of a live launch.
+
+### Creator fees after migration
+
+The position's principal is locked; its swap fees are not. `collectFees(token)` is
+callable by anyone and pays the accrued fees to the launch's creator. Without it a
+creator's income stops at graduation — exactly when a launch most needs somebody
+with a reason to look after it — while the pool goes on charging its 1% into a
+position nobody can reach.
+
+That is a second `modifyLiquidity`, so it is worth being exact about why the lock
+survives it:
+
+- It passes a **literal zero**. A zero delta cannot shrink a position; the poke
+  only makes the manager realise fees it already owed.
+- Neither branch of `unlockCallback` takes its delta from calldata — `Provide`
+  widens a `uint128`, `Collect` writes `0` — so there is no input to the contract
+  that removes liquidity.
+- The recipient is read off the token, never supplied by the caller, and `take`
+  sends straight there. Prompting a collection is a favour to the creator and
+  cannot be redirected into one for the caller.
+
+`test_Fees_CollectingLeavesThePrincipalUntouched` holds the first of those, and
+`test_Fees_AnyoneMayPromptButOnlyTheCreatorIsPaid` the third.
+
+Fees go 100% to the creator. Folio takes no protocol cut anywhere else, and this
+was not the place to introduce the first one.
+
+One thing still deliberately absent: nothing recovers the few thousand wei of
+rounding dust each migration strands in the migrator. A sweep is a withdrawal path
+in a contract whose whole claim is that it has none, and dust is the cheaper side
+of that trade.
+
+### The opening window
+
+The first buyer gets the lowest price the curve will ever offer. That is the
+curve working, and it is also what a bot watching for `TokenCreated` is there to
+collect. `sniperWindowSeconds` and `sniperMaxEthPerWallet` bound it: for that many
+seconds after creation, any one address may spend at most that much across all
+its buys. The shipped default is **0.25 ETH a wallet for 120 seconds**, which
+against a 10 ETH graduation caps a single address at 2.5% of the whole curve
+during the minutes a launch is being discovered.
+
+A buy over the remaining allowance is trimmed and the excess refunded — the same
+clamp-and-refund the reserve ceiling uses, because reverting would make every
+opening a race that most transactions lose after paying gas. Only a wallet with
+nothing left reverts, with `SniperCapReached`. Set the window to zero to switch
+the whole mechanism off; that is what every launch ran under before it existed.
+
+A creator may tighten both terms at creation, the same way they may tighten
+`maxReserveCap`, through the six-argument `createToken`:
+
+| Argument | Zero means | May move |
+| --- | --- | --- |
+| `maxReserveCap` | platform default | down only |
+| `sniperWindowSeconds` | platform default | up only |
+| `sniperMaxEthPerWallet` | platform default | down only |
+
+The directions differ but the rule does not: **no argument to `createToken` can
+make a launch riskier than the platform default.** That is what lets the default
+be read as a guarantee about every launch here rather than a starting point
+somebody might have negotiated away. Zero is "inherit", never "switch off", so
+there is no call that removes a window the platform put there. A platform that
+ships the mechanism off is the one case where a creator names a cap outright —
+there is no default to be under, and `InvalidSniperCap` catches a window turned
+on without one.
+
+**This is not sybil resistance, and nothing on chain could be.** N wallets get N
+caps. What it buys is that taking the opening costs a funded fleet instead of one
+transaction, and that the fleet is legible afterwards in `sniperSpent` and in the
+holder list. `test_Sybil_EachWalletGetsItsOwnCap` exists to keep that limitation
+a tested fact rather than a caveat someone can quietly drop.
+
+It sits outside the curve, like the fees. Clamped ETH is refunded before anything
+is priced, so `k`, the reserve and the sell-back guarantee never see it, and
+`reserveHealthBps()` still reads exactly `10_000`. The cost is about 417 gas on a
+warm buy, paid whether or not a launch has a window configured.
 
 ## The safety layer
 

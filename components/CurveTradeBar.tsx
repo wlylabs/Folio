@@ -2,7 +2,7 @@
 
 import { useAccount, useConfig, useReadContract, useReadContracts } from "wagmi";
 import { getAccount, switchChain, writeContract } from "wagmi/actions";
-import { formatEther, formatUnits, parseEther, parseUnits } from "viem";
+import { formatEther, formatUnits, parseEther, parseUnits, zeroAddress } from "viem";
 import { useEffect, useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FOLIO_TOKEN_ABI } from "@/lib/contracts/folioToken";
@@ -145,20 +145,94 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
     query: { refetchInterval: REFRESH_MS },
   });
 
+  /**
+   * The parts of the token added after the first factory shipped, read apart
+   * from the batch above.
+   *
+   * A token cloned from an older implementation has none of these functions, and
+   * folding them into a strict batch would take the whole panel down with them —
+   * live price, headroom and all — over features that launch never had.
+   * `allowFailure` turns each absence into what it should be: no window, and not
+   * migrated.
+   */
+  const { data: extras } = useReadContracts({
+    contracts: [
+      { ...contract, functionName: "sniperWindowActive" },
+      { ...contract, functionName: "sniperWindowEndsAt" },
+      { ...contract, functionName: "migrated" },
+    ],
+    allowFailure: true,
+    query: { refetchInterval: REFRESH_MS },
+  });
+  const windowState = extras;
+
   const paused = live ? (live[0] as boolean) : stats.paused;
   const graduated = live ? (live[1] as boolean) : stats.graduated;
   const headroomWei = live ? (live[2] as bigint) : weiFromNumber(stats.headroom);
   const reserveWei = live ? (live[3] as bigint) : weiFromNumber(stats.reserve);
   const priceWei = live ? (live[4] as bigint) : weiFromNumber(stats.price);
   const soldUnits = live ? (live[5] as bigint) : 0n;
+  const migrated =
+    extras?.[2]?.status === "success" ? extras[2].result === true : stats.migrated;
+  const windowOpen = windowState?.[0]?.status === "success" && windowState[0].result === true;
+  const windowEndsAt =
+    windowState?.[1]?.status === "success" ? (windowState[1].result as bigint) : 0n;
 
-  const curveClosed = graduated || headroomWei === 0n;
+  // Migration is the strongest close: `graduated` is always true alongside it,
+  // but naming it here means the buy side does not depend on that coupling
+  // holding forever.
+  const curveClosed = graduated || migrated || headroomWei === 0n;
 
-  /** What this much ETH actually buys, straight from the contract. */
+  /**
+   * What is left of this wallet's opening-window allowance.
+   *
+   * Only read while the window is open — outside it the contract answers
+   * `type(uint256).max`, which is true but not a number worth putting on a
+   * screen. Polled on the same timer as the rest, since it falls as the wallet
+   * spends and the window can close underneath it.
+   */
+  const { data: allowanceRaw } = useReadContract({
+    ...contract,
+    functionName: "sniperAllowance",
+    args: address ? [address] : undefined,
+    chainId: targetChainId,
+    query: {
+      enabled: Boolean(address && targetChainId && windowOpen),
+      refetchInterval: REFRESH_MS,
+    },
+  });
+  const allowanceWei = windowOpen && allowanceRaw !== undefined ? (allowanceRaw as bigint) : null;
+
+  /**
+   * Roughly how much of the opening window is left.
+   *
+   * Relative rather than a clock time, which keeps it out of locale formatting
+   * and therefore out of hydration mismatches. It only renders once `live` has
+   * come back from the chain, so the server never produces a competing value.
+   * Accurate to within one refresh tick, which is the resolution the sentence
+   * it sits in deserves.
+   */
+  const windowLeftLabel = useMemo(() => {
+    if (!windowOpen || windowEndsAt === 0n) return null;
+    const seconds = Number(windowEndsAt) - Math.floor(Date.now() / 1000);
+    if (seconds <= 0) return "any moment now";
+    if (seconds < 60) return `${seconds}s`;
+    return `${Math.ceil(seconds / 60)} min`;
+  }, [windowOpen, windowEndsAt]);
+
+  /**
+   * What this much ETH actually buys, straight from the contract.
+   *
+   * Quoted *for the connected wallet*, not for whoever the RPC decides the
+   * caller is. Inside the opening window the answer depends on what that
+   * address has already spent, so the plain `getBuyQuote` would quote a
+   * different trade than the one about to be signed.
+   */
   const { data: buyQuote, isFetching: quotingBuy } = useReadContract({
     ...contract,
-    functionName: "getBuyQuote",
-    args: debouncedSpend !== null ? [debouncedSpend] : undefined,
+    functionName: "getBuyQuoteFor",
+    args:
+      debouncedSpend !== null ? [debouncedSpend, address ?? zeroAddress] : undefined,
     chainId: targetChainId,
     query: { enabled: debouncedSpend !== null, refetchInterval: REFRESH_MS },
   });
@@ -395,6 +469,9 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
   const sellDisabled =
     pending ||
     paused ||
+    // Selling survives graduation but not migration: the reserve has gone to
+    // the pool and `sell` reverts with CurveMigrated.
+    migrated ||
     sellUnits === null ||
     overSells ||
     noGas ||
@@ -527,11 +604,31 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
             </div>
           )}
 
-          {!paused && curveClosed && side === "buy" && (
+          {/* Migration closes both legs, so the graduated copy below — which
+              promises selling stays open — would send a holder to a transaction
+              that reverts. It is checked first for that reason. */}
+          {!paused && migrated && (
+            <p className="status">
+              This launch has moved to a Uniswap v4 pool. The curve is closed both
+              ways; trade the token there instead.
+            </p>
+          )}
+
+          {!paused && !migrated && curveClosed && side === "buy" && (
             <p className="status">
               {graduated
                 ? "Graduated — closed to buys. Selling stays open."
                 : "ETH ceiling reached — closed to buys. Selling stays open."}
+            </p>
+          )}
+
+          {!paused && !curveClosed && windowOpen && side === "buy" && (
+            <p className="status">
+              {allowanceWei === null
+                ? `Opening window — every wallet has a buy cap for another ${windowLeftLabel}.`
+                : allowanceWei === 0n
+                  ? `Opening cap reached for this wallet. Buying reopens in ${windowLeftLabel}.`
+                  : `Opening window: ${formatEth(Number(formatEther(allowanceWei)))} ETH left for this wallet, ${windowLeftLabel} to go. Anything over comes straight back.`}
             </p>
           )}
 
@@ -609,7 +706,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
                   label={`Sell ($${token.symbol})`}
                   value={sellTokens}
                   onChange={setSellTokens}
-                  disabled={pending || paused}
+                  disabled={pending || paused || migrated}
                   step="1"
                   placeholder="0"
                   // The buy side prices the field; this side can only price the
@@ -621,7 +718,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
                   picks={sellPicks}
                   current={sellTokens}
                   onPick={setSellTokens}
-                  disabled={pending || paused}
+                  disabled={pending || paused || migrated}
                   label={`Quick amounts to sell`}
                 />
               </div>

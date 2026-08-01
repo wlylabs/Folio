@@ -36,6 +36,48 @@ pragma solidity 0.8.26;
  *        note on that event in `FolioToken`. Zero disables the signal. The move is
  *        measured against the lower of the two prices, so a doubling and a halving
  *        both read `10_000` and one threshold covers both directions.
+ * @param sniperWindowSeconds How long after creation the per-wallet buy cap below
+ *        applies, in seconds. Zero disables the whole mechanism, and is the
+ *        setting every launch had before it existed. Bounded by
+ *        `MAX_SNIPER_WINDOW_SECONDS` in the factory.
+ * @param sniperMaxEthPerWallet The most ETH one address may spend on buys while
+ *        that window is open, in wei, summed across however many buys it makes.
+ *        Ignored entirely once the window closes, and meaningless when
+ *        `sniperWindowSeconds` is zero.
+ *
+ *        This is the anti-sniper layer, and it is worth being exact about what it
+ *        does and does not achieve. It bounds what any *one address* can take off
+ *        the opening of the curve, where the price is lowest and a bot that is
+ *        first in line would otherwise be free to take as much as it liked. It
+ *        does not bound what one *person* can take, because nothing on chain can:
+ *        an operator willing to fund N wallets gets N times the cap. What it buys
+ *        is that they must pay for those wallets, and that the resulting holder
+ *        distribution is visible to everyone reading the token — a snipe stops
+ *        being a single silent transaction and becomes a fleet somebody has to
+ *        build and cannot hide.
+ *
+ *        Deliberately kept outside the curve. A buy over the cap is clamped and
+ *        the excess refunded, exactly as an over-cap buy is, so the ETH the curve
+ *        prices is unchanged and `reserveHealthBps` still reads `10_000` on the
+ *        nose. The sell-back guarantee does not know this mechanism exists.
+ * @param migrator The one address a launch will ever hand its reserve to, or zero
+ *        for a launch that can never migrate. Frozen here at creation like
+ *        everything else, and deliberately *not* read from the factory at call
+ *        time: a swappable migrator would be a lever that moves other people's
+ *        money out of a live launch, which is categorically worse than the
+ *        emergency stop the platform already holds.
+ *
+ *        What it does is the subject of `FolioMigrator`, and the part to
+ *        understand before setting this is what it costs. Migration ends the
+ *        sell-back guarantee. The reserve leaves for a Uniswap v4 pool, the curve
+ *        stops quoting, and from then on a holder's exit is whatever the pool
+ *        pays — no floor, and less in total than the curve owed, because an AMM
+ *        position permanently holds both sides. What is bought with that is a
+ *        market that does not end: the curve closes to buys at graduation and
+ *        can only ever fall from there, and a pool cannot.
+ *
+ *        Zero is the honest default for a platform that has not decided. A launch
+ *        created with zero here keeps the curve, the floor, and the dead end.
  */
 struct CurveConfig {
     uint256 virtualEthReserve;
@@ -43,4 +85,7 @@ struct CurveConfig {
     uint256 graduationThreshold;
     uint16 feeBps;
     uint16 priceMoveAlertBps;
+    uint16 sniperWindowSeconds;
+    uint256 sniperMaxEthPerWallet;
+    address migrator;
 }

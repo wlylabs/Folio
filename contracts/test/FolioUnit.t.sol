@@ -681,13 +681,24 @@ contract FolioUnitTest is FolioTestBase {
             maxReserveCap: factory.MAX_RESERVE_CAP(),
             graduationThreshold: factory.MAX_RESERVE_CAP(),
             feeBps: factory.MAX_FEE_BPS(),
-            priceMoveAlertBps: factory.MIN_PRICE_MOVE_ALERT_BPS()
+            priceMoveAlertBps: factory.MIN_PRICE_MOVE_ALERT_BPS(),
+            // The harshest admissible opening window: as long as the factory
+            // allows, throttled as hard as it allows.
+            sniperWindowSeconds: factory.MAX_SNIPER_WINDOW_SECONDS(),
+            sniperMaxEthPerWallet: factory.MIN_SNIPER_MAX_ETH_PER_WALLET(),
+            migrator: address(0)
         });
         vm.prank(owner);
         factory.setDefaultConfig(cfg);
 
         vm.prank(creator);
         FolioToken big = FolioToken(factory.createToken("Big", "BIG", factory.MAX_WHOLE_SUPPLY()));
+
+        // Past that window, so what follows measures the curve at its extremes
+        // rather than the cap. That the window expires cleanly at its own maximum
+        // is the part being shown here; `FolioAntiSniper.t.sol` covers what it
+        // does while open.
+        vm.warp(block.timestamp + factory.MAX_SNIPER_WINDOW_SECONDS() + 1);
 
         vm.deal(alice, 100_000 ether);
         _buyOn(big, alice, 50_000 ether, 0);
@@ -701,7 +712,10 @@ contract FolioUnitTest is FolioTestBase {
             maxReserveCap: factory.MIN_RESERVE_CAP(),
             graduationThreshold: 0,
             feeBps: 0,
-            priceMoveAlertBps: 0
+            priceMoveAlertBps: 0,
+            sniperWindowSeconds: 0,
+            sniperMaxEthPerWallet: 0,
+            migrator: address(0)
         });
         vm.prank(owner);
         factory.setDefaultConfig(cfg);
