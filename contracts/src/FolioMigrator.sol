@@ -11,6 +11,7 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
+import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
 import {IERC20Minimal} from "@uniswap/v4-core/src/interfaces/external/IERC20Minimal.sol";
 import {FolioToken} from "./FolioToken.sol";
@@ -95,6 +96,7 @@ import {IFolioFactory} from "./interfaces/IFolioFactory.sol";
 contract FolioMigrator is IUnlockCallback {
     using PoolIdLibrary for PoolKey;
     using BalanceDeltaLibrary for BalanceDelta;
+    using StateLibrary for IPoolManager;
 
     /// @notice The v4 singleton every pool lives in.
     IPoolManager public immutable poolManager;
@@ -128,6 +130,34 @@ contract FolioMigrator is IUnlockCallback {
     /// @notice The id of that pool, for reading state out of the manager.
     function poolOf(address token) external view returns (PoolId) {
         return _poolKeyOf[token].toId();
+    }
+
+    /**
+     * @notice What the migrated pool is trading at now, in wei per whole token.
+     *
+     * The launch's own `currentPrice()` freezes at migration and stays there —
+     * correctly, since the curve stopped — so something has to answer "what is
+     * this worth today" afterwards. This does, from pool state, without the
+     * caller needing the manager's address or the slot maths.
+     *
+     * @dev Reads through `extsload`, which is an ordinary external view; nothing
+     *      here needs transient storage, which is why this contract still builds
+     *      under the paris profile with the rest of the project.
+     * @param token A migrated launch.
+     * @return weiPerToken Price of one whole token, or zero before migration.
+     */
+    function poolPrice(address token) external view returns (uint256 weiPerToken) {
+        if (!migrated[token]) return 0;
+
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(_poolKeyOf[token].toId());
+        if (sqrtPriceX96 == 0) return 0;
+
+        // The pool prices currency1 per currency0 — tokens per wei — as
+        // `(sqrtPriceX96 / 2**96) ** 2`. One whole token therefore costs
+        // `1e18 / that`, which is `1e18 * 2**192 / sqrtPriceX96 ** 2`. Split
+        // across two `mulDiv`s so the numerator never needs 512 bits at once.
+        uint256 half = Math.mulDiv(1e18, 1 << 96, sqrtPriceX96);
+        weiPerToken = Math.mulDiv(half, 1 << 96, sqrtPriceX96);
     }
 
     /**

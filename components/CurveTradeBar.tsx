@@ -146,21 +146,25 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
   });
 
   /**
-   * The opening window, read apart from the batch above.
+   * The parts of the token added after the first factory shipped, read apart
+   * from the batch above.
    *
-   * A token cloned from an implementation older than this mechanism has no such
-   * functions, and folding them into a strict batch would take the whole panel
-   * down with them — live price, headroom and all — over a feature that launch
-   * never had. `allowFailure` turns that into what it should be: no window.
+   * A token cloned from an older implementation has none of these functions, and
+   * folding them into a strict batch would take the whole panel down with them —
+   * live price, headroom and all — over features that launch never had.
+   * `allowFailure` turns each absence into what it should be: no window, and not
+   * migrated.
    */
-  const { data: windowState } = useReadContracts({
+  const { data: extras } = useReadContracts({
     contracts: [
       { ...contract, functionName: "sniperWindowActive" },
       { ...contract, functionName: "sniperWindowEndsAt" },
+      { ...contract, functionName: "migrated" },
     ],
     allowFailure: true,
     query: { refetchInterval: REFRESH_MS },
   });
+  const windowState = extras;
 
   const paused = live ? (live[0] as boolean) : stats.paused;
   const graduated = live ? (live[1] as boolean) : stats.graduated;
@@ -168,11 +172,16 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
   const reserveWei = live ? (live[3] as bigint) : weiFromNumber(stats.reserve);
   const priceWei = live ? (live[4] as bigint) : weiFromNumber(stats.price);
   const soldUnits = live ? (live[5] as bigint) : 0n;
+  const migrated =
+    extras?.[2]?.status === "success" ? extras[2].result === true : stats.migrated;
   const windowOpen = windowState?.[0]?.status === "success" && windowState[0].result === true;
   const windowEndsAt =
     windowState?.[1]?.status === "success" ? (windowState[1].result as bigint) : 0n;
 
-  const curveClosed = graduated || headroomWei === 0n;
+  // Migration is the strongest close: `graduated` is always true alongside it,
+  // but naming it here means the buy side does not depend on that coupling
+  // holding forever.
+  const curveClosed = graduated || migrated || headroomWei === 0n;
 
   /**
    * What is left of this wallet's opening-window allowance.
@@ -460,6 +469,9 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
   const sellDisabled =
     pending ||
     paused ||
+    // Selling survives graduation but not migration: the reserve has gone to
+    // the pool and `sell` reverts with CurveMigrated.
+    migrated ||
     sellUnits === null ||
     overSells ||
     noGas ||
@@ -592,7 +604,17 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
             </div>
           )}
 
-          {!paused && curveClosed && side === "buy" && (
+          {/* Migration closes both legs, so the graduated copy below — which
+              promises selling stays open — would send a holder to a transaction
+              that reverts. It is checked first for that reason. */}
+          {!paused && migrated && (
+            <p className="status">
+              This launch has moved to a Uniswap v4 pool. The curve is closed both
+              ways; trade the token there instead.
+            </p>
+          )}
+
+          {!paused && !migrated && curveClosed && side === "buy" && (
             <p className="status">
               {graduated
                 ? "Graduated — closed to buys. Selling stays open."
@@ -684,7 +706,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
                   label={`Sell ($${token.symbol})`}
                   value={sellTokens}
                   onChange={setSellTokens}
-                  disabled={pending || paused}
+                  disabled={pending || paused || migrated}
                   step="1"
                   placeholder="0"
                   // The buy side prices the field; this side can only price the
@@ -696,7 +718,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
                   picks={sellPicks}
                   current={sellTokens}
                   onPick={setSellTokens}
-                  disabled={pending || paused}
+                  disabled={pending || paused || migrated}
                   label={`Quick amounts to sell`}
                 />
               </div>

@@ -58,6 +58,18 @@ export type CurveStats = {
   feeBps: number;
   /** True once the curve closed itself to buys at its threshold. */
   graduated: boolean;
+  /**
+   * True once the reserve has left for a Uniswap pool. Terminal, and stronger
+   * than `graduated`: a graduated curve still buys back, a migrated one refuses
+   * both legs. Always false for launches predating migration, which is the
+   * truth about them rather than a fallback.
+   */
+  migrated: boolean;
+  /** The contract holding the migrated pool, or null when there is none. */
+  migrator: string | null;
+  /** Live price on that pool, in ETH per whole token. Null until migration —
+   *  before then `price` is the live one and after it, it is frozen. */
+  poolPrice: number | null;
   /** True while the platform emergency stop is engaged. Blocks buy and sell. */
   paused: boolean;
   /** Fee recipient, as the contract reports it. */

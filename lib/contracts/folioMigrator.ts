@@ -352,6 +352,25 @@ export const FOLIO_MIGRATOR_ABI = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "name": "poolPrice",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "weiPerToken",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "poolTickSpacing",
     "outputs": [

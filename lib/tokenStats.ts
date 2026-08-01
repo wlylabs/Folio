@@ -1,8 +1,9 @@
-import { formatEther, formatUnits } from "viem";
+import { formatEther, formatUnits, zeroAddress } from "viem";
 import { FOLIO_SALE_ABI } from "@/lib/contracts/folioSale";
 import { FOLIO_TOKEN_ABI } from "@/lib/contracts/folioToken";
 import { deploymentFor } from "@/lib/contracts/deployment";
 import { FOLIO_FACTORY_ABI } from "@/lib/contracts/folioFactory";
+import { FOLIO_MIGRATOR_ABI } from "@/lib/contracts/folioMigrator";
 import { publicClientFor } from "@/lib/chains";
 import {
   percentSold,
@@ -129,6 +130,17 @@ async function fetchCurveStats(client: Client, token: Token) {
   const supply = Number(formatUnits(curveSupply, DECIMALS));
   const sold = Number(formatUnits(tokensSold, DECIMALS));
 
+  /**
+   * Migration state, read apart from the batch above on purpose.
+   *
+   * That batch is all-or-nothing: one failure and this stops being a curve at
+   * all. A token cloned from an implementation older than migration answers
+   * neither of these calls, and the right reading of that is "this launch cannot
+   * migrate" — not "this is not a Folio token". Folding them in would have taken
+   * every such page down.
+   */
+  const migration = await readMigration(client, contract);
+
   return {
     kind: "curve" as const,
     onChain: true as const,
@@ -146,6 +158,9 @@ async function fetchCurveStats(client: Client, token: Token) {
     graduated,
     paused,
     creator,
+    migrated: migration.migrated,
+    migrator: migration.migrator,
+    poolPrice: migration.poolPrice,
     verified: await isFactoryToken(client, token.chain, address),
   };
 }
@@ -174,6 +189,54 @@ async function isFactoryToken(client: Client, chain: string, address: `0x${strin
   } catch {
     return false;
   }
+}
+
+/**
+ * Whether this launch has moved to a pool, and what that pool is trading at.
+ *
+ * Every branch falls back to "no migration", because every reason this can fail
+ * means exactly that: an implementation too old to have the functions, a launch
+ * with no migrator configured, or a migrator that has not been called yet. None
+ * of them is an error the page should show, and none of them should be allowed
+ * to make an otherwise readable curve unreadable.
+ */
+async function readMigration(
+  client: Client,
+  contract: { address: `0x${string}`; abi: typeof FOLIO_TOKEN_ABI }
+): Promise<{ migrated: boolean; migrator: string | null; poolPrice: number | null }> {
+  const none = { migrated: false, migrator: null, poolPrice: null };
+
+  let migrated: boolean;
+  let migrator: `0x${string}`;
+  try {
+    [migrated, migrator] = await Promise.all([
+      client.readContract({ ...contract, functionName: "migrated" }),
+      client.readContract({ ...contract, functionName: "migrator" }),
+    ]);
+  } catch {
+    return none;
+  }
+
+  if (migrator === zeroAddress) return none;
+  if (!migrated) return { migrated: false, migrator, poolPrice: null };
+
+  // The curve's own price froze at migration, so the live one has to come from
+  // the pool. A failure here still leaves a correct page — it just cannot show
+  // today's number.
+  let poolPrice: number | null = null;
+  try {
+    const raw = await client.readContract({
+      address: migrator,
+      abi: FOLIO_MIGRATOR_ABI,
+      functionName: "poolPrice",
+      args: [contract.address],
+    });
+    poolPrice = Number(formatEther(raw));
+  } catch {
+    poolPrice = null;
+  }
+
+  return { migrated: true, migrator, poolPrice };
 }
 
 /** The retired fixed-price sale. Kept so listings launched under it keep working. */

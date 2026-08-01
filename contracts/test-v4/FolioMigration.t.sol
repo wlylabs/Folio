@@ -381,6 +381,56 @@ contract FolioMigrationTest is Test {
     }
 
     // -----------------------------------------------------------------------
+    // Reading the price afterwards
+    // -----------------------------------------------------------------------
+
+    /**
+     * The token's own `currentPrice()` freezes at migration, correctly — the
+     * curve stopped. Something still has to answer "what is this worth now", and
+     * `poolPrice` does, in the same units, so a page can swap one for the other
+     * without converting anything.
+     */
+    function test_Price_PoolPriceStartsAtTheClosingPriceAndThenMoves() public {
+        _graduate();
+        uint256 closingPrice = token.currentPrice();
+
+        assertEq(migrator.poolPrice(address(token)), 0, "priced before there was a pool");
+
+        (PoolKey memory key,) = migrator.migrate(token);
+
+        assertApproxEqRel(
+            migrator.poolPrice(address(token)),
+            closingPrice,
+            1e14, // 0.01%, the sqrt round trip through Q96
+            "the pool did not open at the curve's closing price"
+        );
+
+        // A buy on the pool moves it, which the frozen curve price cannot show.
+        vm.prank(bob);
+        swapper.swap{value: 3 ether}(
+            key,
+            SwapParams({
+                zeroForOne: true,
+                amountSpecified: -3 ether,
+                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            }),
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            ""
+        );
+
+        assertGt(
+            migrator.poolPrice(address(token)),
+            closingPrice,
+            "buying the pool did not raise the price"
+        );
+        assertEq(token.currentPrice(), closingPrice, "the curve's closing price moved");
+    }
+
+    function test_Price_IsZeroForATokenThatNeverMigrated() public {
+        assertEq(migrator.poolPrice(makeAddr("nothing")), 0);
+    }
+
+    // -----------------------------------------------------------------------
     // Fees after migration
     // -----------------------------------------------------------------------
 
