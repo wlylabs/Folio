@@ -7,14 +7,16 @@ name: contracts
 #   test      the paris build the chain gets — no network, no secrets
 #   v4        the migration suite against a locally deployed PoolManager, which
 #             needs cancun and so cannot share a profile with the above
-#   fork      the same migration against the real Uniswap v4 on Robinhood Chain,
-#             which needs an RPC and therefore a secret
+#   fork      the recorded PoolManager address, and the same migration, against
+#             the real Uniswap v4 on Robinhood Chain — which needs an RPC and
+#             therefore a secret
 #
 # Only `fork` can be skipped, and only because a fork of someone else's chain is
 # not something a pull request from outside the repository should be able to
-# spend. It still runs on every push to a branch here, which is where it matters:
-# a migrator is pointed at a real PoolManager exactly once, and this is the job
-# that checks the address before that happens.
+# spend. Its address check still runs on every push to a branch here, which is
+# where it matters: a migrator is pointed at a real PoolManager exactly once, and
+# that check is what reads the address before that happens. The full migration it
+# also carries is metered separately — see the job.
 
 on:
   push:
@@ -32,6 +34,12 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/contracts.yml"
+  # Carries the full fork migration, which does not run on ordinary pushes. What
+  # it guards against is Uniswap redeploying underneath us, and a day is a fine
+  # bound on noticing that.
+  schedule:
+    - cron: "17 3 * * *"
+
   workflow_dispatch:
 
 concurrency:
@@ -133,14 +141,37 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # Runs either way. With no RPC the fork tests return early and say so, so
-      # the job stays green and the warning above is the signal — a red job here
-      # would train people to ignore it.
-      - name: Migration suite against live Uniswap v4
+      # Both run either way. With no RPC the fork tests return early and say so,
+      # so the job stays green and the warning above is the signal — a red job
+      # here would train people to ignore it.
+      #
+      # They are split because they cost wildly different amounts of RPC, and
+      # the public endpoint cannot be pinned to a block to make that cheaper: it
+      # keeps roughly 6,000 blocks of state, which at a measured 0.1s block time
+      # is about ten minutes of history. Nothing pinned stays readable, so
+      # Foundry's RPC cache can never be reused and every run pays full traffic.
+      #
+      # The address check is three calls and is the whole reason the fork file
+      # exists, so it stays on every push. The full migration reads state
+      # hundreds of times over, and the logic it exercises is already covered by
+      # the cancun job against a local PoolManager — what it adds is that the
+      # real singleton behaves the same. That is worth a nightly and the default
+      # branch, not every branch push.
+      - name: PoolManager address, against the live chain
         env:
           ROBINHOOD_MAINNET_RPC_URL: ${{ secrets.ROBINHOOD_MAINNET_RPC_URL }}
           FOUNDRY_PROFILE: v4
-        run: forge test --mc FolioMigrationFork -vv
+        run: forge test --mc FolioMigrationFork --mt test_Fork_PoolManagerAddressHoldsAPoolManager -vv
+
+      - name: Full migration against live Uniswap v4
+        if: >-
+          github.ref == 'refs/heads/main'
+          || github.event_name == 'schedule'
+          || github.event_name == 'workflow_dispatch'
+        env:
+          ROBINHOOD_MAINNET_RPC_URL: ${{ secrets.ROBINHOOD_MAINNET_RPC_URL }}
+          FOUNDRY_PROFILE: v4
+        run: forge test --mc FolioMigrationFork --mt test_Fork_FullMigrationAgainstLiveUniswap -vv
 
       - name: Fail if the fork job ran blind on the default branch
         if: steps.rpc.outputs.configured == 'false' && github.ref == 'refs/heads/main'
