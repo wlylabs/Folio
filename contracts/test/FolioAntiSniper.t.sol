@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {Vm} from "forge-std/Vm.sol";
 import {FolioTestBase} from "./helpers/FolioTestBase.sol";
 import {FolioFactory} from "../src/FolioFactory.sol";
 import {FolioToken} from "../src/FolioToken.sol";
@@ -386,6 +387,164 @@ contract FolioAntiSniperTest is FolioTestBase {
         // And it is a launch you can actually buy into, at the cap.
         _buyOn(t, alice, factory.MIN_SNIPER_MAX_ETH_PER_WALLET(), 0);
         assertGt(t.balanceOf(alice), 0);
+        _assertSolventOn(t);
+    }
+
+    // -----------------------------------------------------------------------
+    // What a creator may choose
+    // -----------------------------------------------------------------------
+
+    function _createWith(uint16 window, uint256 cap) private returns (FolioToken) {
+        vm.prank(creator);
+        return FolioToken(factory.createToken("Chosen", "CHS", SUPPLY, 0, window, cap));
+    }
+
+    function test_Creator_InheritsTheDefaultWhenPassingZero() public {
+        FolioToken t = _createWith(0, 0);
+        assertEq(t.sniperWindowSeconds(), WINDOW);
+        assertEq(t.sniperMaxEthPerWallet(), WALLET_CAP);
+    }
+
+    /// Both tightenings, and both actually enforced on the launch afterwards.
+    function test_Creator_MayLengthenTheWindowAndLowerTheCap() public {
+        FolioToken t = _createWith(WINDOW * 2, WALLET_CAP / 4);
+        assertEq(t.sniperWindowSeconds(), WINDOW * 2);
+        assertEq(t.sniperMaxEthPerWallet(), WALLET_CAP / 4);
+
+        // The launch obeys the creator's numbers, not the platform's.
+        uint256 before = alice.balance;
+        _buyOn(t, alice, 1 ether, 0);
+        assertEq(before - alice.balance, WALLET_CAP / 4, "the tighter cap did not bind");
+
+        vm.warp(block.timestamp + WINDOW + 1);
+        assertTrue(t.sniperWindowActive(), "the longer window ended at the platform default");
+        vm.warp(block.timestamp + WINDOW + 1);
+        assertFalse(t.sniperWindowActive());
+        _assertSolventOn(t);
+    }
+
+    function test_Creator_MayTightenOnlyOneSideAtATime() public {
+        FolioToken longer = _createWith(WINDOW * 3, 0);
+        assertEq(longer.sniperWindowSeconds(), WINDOW * 3);
+        assertEq(longer.sniperMaxEthPerWallet(), WALLET_CAP, "the cap should have been inherited");
+
+        FolioToken stricter = _createWith(0, WALLET_CAP / 10);
+        assertEq(stricter.sniperWindowSeconds(), WINDOW, "the window should have been inherited");
+        assertEq(stricter.sniperMaxEthPerWallet(), WALLET_CAP / 10);
+    }
+
+    /// The whole point of the direction rule: no argument makes a launch easier
+    /// to snipe than the platform decided.
+    function test_Creator_CannotShortenTheWindow() public {
+        vm.prank(creator);
+        vm.expectRevert(FolioFactory.SniperWindowBelowDefault.selector);
+        factory.createToken("Loose", "LSE", SUPPLY, 0, WINDOW - 1, 0);
+    }
+
+    function test_Creator_CannotRaiseThePerWalletCap() public {
+        vm.prank(creator);
+        vm.expectRevert(FolioFactory.SniperCapAboveDefault.selector);
+        factory.createToken("Loose", "LSE", SUPPLY, 0, 0, WALLET_CAP + 1);
+    }
+
+    /// Zero is "inherit", not "switch off" — so there is no argument at all that
+    /// removes a window the platform put there.
+    function test_Creator_CannotSwitchTheWindowOff() public {
+        FolioToken t = _createWith(0, 0);
+        assertEq(t.sniperWindowSeconds(), WINDOW, "zero must not have disabled the window");
+        assertTrue(t.sniperWindowActive());
+    }
+
+    function test_Creator_IsStillBoundByThePlatformCeilings() public {
+        // Read before arming the cheatcode: an argument evaluated after
+        // `expectRevert` is itself the "next call", and a view that returns
+        // normally is what the cheatcode would then judge.
+        uint16 tooLong = factory.MAX_SNIPER_WINDOW_SECONDS() + 1;
+        uint256 tooTight = factory.MIN_SNIPER_MAX_ETH_PER_WALLET() - 1;
+
+        vm.prank(creator);
+        vm.expectRevert(FolioFactory.InvalidSniperWindow.selector);
+        factory.createToken("TooLong", "TLG", SUPPLY, 0, tooLong, 0);
+
+        // Below the floor is refused even though it is a tightening, because a
+        // cap no buy can clear is a launch nobody can enter.
+        vm.prank(creator);
+        vm.expectRevert(FolioFactory.InvalidSniperCap.selector);
+        factory.createToken("TooTight", "TTT", SUPPLY, 0, 0, tooTight);
+    }
+
+    /**
+     * A platform that ships the mechanism off still lets a creator turn it on for
+     * their own launch. With no default cap to be under, they name one outright —
+     * the branch that would otherwise refuse them for exceeding zero.
+     */
+    function test_Creator_MayOptInWhenThePlatformHasItOff() public {
+        CurveConfig memory off = _config();
+        off.sniperWindowSeconds = 0;
+        off.sniperMaxEthPerWallet = 0;
+        vm.prank(owner);
+        factory.setDefaultConfig(off);
+
+        FolioToken t = _createWith(60, 0.02 ether);
+        assertEq(t.sniperWindowSeconds(), 60);
+        assertEq(t.sniperMaxEthPerWallet(), 0.02 ether);
+
+        uint256 before = alice.balance;
+        _buyOn(t, alice, 1 ether, 0);
+        assertEq(before - alice.balance, 0.02 ether, "the opted-in cap did not bind");
+        _assertSolventOn(t);
+    }
+
+    /// Turning the window on without naming the cap it needs is the one gap the
+    /// two independent branches can still leave, and it is closed.
+    function test_Creator_CannotOptInWithoutNamingACap() public {
+        CurveConfig memory off = _config();
+        off.sniperWindowSeconds = 0;
+        off.sniperMaxEthPerWallet = 0;
+        vm.prank(owner);
+        factory.setDefaultConfig(off);
+
+        vm.prank(creator);
+        vm.expectRevert(FolioFactory.InvalidSniperCap.selector);
+        factory.createToken("Halfway", "HLF", SUPPLY, 0, 60, 0);
+    }
+
+    /// The creator's numbers are what the launch is frozen to, so they are what
+    /// `TokenCreated` has to carry — a watcher reading the platform default would
+    /// have the wrong terms for this launch.
+    function test_Creator_EmittedConfigIsTheEffectiveOne() public {
+        vm.recordLogs();
+        FolioToken t = _createWith(WINDOW * 2, WALLET_CAP / 2);
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 topic = keccak256(
+            "TokenCreated(address,address,string,string,uint256,(uint256,uint256,uint256,uint16,uint16,uint16,uint256))"
+        );
+        bool found;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] != topic) continue;
+            found = true;
+            (,,, CurveConfig memory cfg) =
+                abi.decode(logs[i].data, (string, string, uint256, CurveConfig));
+            assertEq(cfg.sniperWindowSeconds, WINDOW * 2);
+            assertEq(cfg.sniperMaxEthPerWallet, WALLET_CAP / 2);
+            assertEq(cfg.sniperWindowSeconds, t.sniperWindowSeconds());
+            assertEq(cfg.sniperMaxEthPerWallet, t.sniperMaxEthPerWallet());
+        }
+        assertTrue(found, "TokenCreated not emitted");
+    }
+
+    /// Tightening the window must not disturb the cap-and-threshold clamping the
+    /// four-argument overload already does.
+    function test_Creator_MayTightenTheReserveCapAndTheWindowTogether() public {
+        vm.prank(creator);
+        FolioToken t =
+            FolioToken(factory.createToken("Both", "BTH", SUPPLY, 1 ether, WINDOW * 2, 0.01 ether));
+
+        assertEq(t.maxReserveCap(), 1 ether);
+        assertEq(t.graduationThreshold(), 1 ether, "the threshold should clamp to the cap");
+        assertEq(t.sniperWindowSeconds(), WINDOW * 2);
+        assertEq(t.sniperMaxEthPerWallet(), 0.01 ether);
         _assertSolventOn(t);
     }
 

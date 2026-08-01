@@ -177,6 +177,11 @@ are trimmed and the difference refunded in the same transaction, and the quote
 says so before anything is signed. It caps addresses, not people — the full
 account of what that does and does not stop is in `contracts/README.md`.
 
+A creator can tighten it for their own launch from the create form: a longer
+window, a smaller bite per wallet. Both directions are the protective one, and
+neither can be loosened past what the platform set — the same bargain the
+reserve cap already runs on.
+
 **Paused** is its own state and says so plainly. The factory's emergency stop
 halts buying *and* selling on every launch; the panel disables both and explains
 that holdings are untouched and creator fees are still claimable.

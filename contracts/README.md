@@ -91,6 +91,24 @@ opening a race that most transactions lose after paying gas. Only a wallet with
 nothing left reverts, with `SniperCapReached`. Set the window to zero to switch
 the whole mechanism off; that is what every launch ran under before it existed.
 
+A creator may tighten both terms at creation, the same way they may tighten
+`maxReserveCap`, through the six-argument `createToken`:
+
+| Argument | Zero means | May move |
+| --- | --- | --- |
+| `maxReserveCap` | platform default | down only |
+| `sniperWindowSeconds` | platform default | up only |
+| `sniperMaxEthPerWallet` | platform default | down only |
+
+The directions differ but the rule does not: **no argument to `createToken` can
+make a launch riskier than the platform default.** That is what lets the default
+be read as a guarantee about every launch here rather than a starting point
+somebody might have negotiated away. Zero is "inherit", never "switch off", so
+there is no call that removes a window the platform put there. A platform that
+ships the mechanism off is the one case where a creator names a cap outright —
+there is no default to be under, and `InvalidSniperCap` catches a window turned
+on without one.
+
 **This is not sybil resistance, and nothing on chain could be.** N wallets get N
 caps. What it buys is that taking the opening costs a funded fleet instead of one
 transaction, and that the fleet is legible afterwards in `sniperSpent` and in the

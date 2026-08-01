@@ -186,6 +186,16 @@ export const FOLIO_FACTORY_ABI = [
   },
   {
     "inputs": [],
+    "name": "SniperCapAboveDefault",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "SniperWindowBelowDefault",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "SupplyTooLargeForCurve",
     "type": "error"
   },
@@ -585,6 +595,50 @@ export const FOLIO_FACTORY_ABI = [
     "inputs": [],
     "name": "acceptOwnership",
     "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "name_",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "symbol_",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "wholeSupply",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "maxReserveCap",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint16",
+        "name": "sniperWindowSeconds",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "sniperMaxEthPerWallet",
+        "type": "uint256"
+      }
+    ],
+    "name": "createToken",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
     "stateMutability": "nonpayable",
     "type": "function"
   },

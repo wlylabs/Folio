@@ -50,6 +50,23 @@ import {CurveConfig} from "./types/CurveConfig.sol";
  * ceiling is a lever over people's open positions, and it would buy nothing that
  * {pause} does not already cover.
  *
+ * ## What a creator may choose, and which way it points
+ *
+ * Two of the platform's terms are a floor rather than a fixture, and a creator may
+ * move either of them at creation — in one direction only:
+ *
+ * - **`maxReserveCap`** may be *lowered*, tightening the blast radius of the launch
+ *   the creator is taking the risk on.
+ * - **The opening window** may be *lengthened*, and its per-wallet cap *lowered*.
+ *   Both give the creator's buyers more protection from snipers than the platform
+ *   requires.
+ *
+ * The pattern is the same in both cases and worth stating once: an argument to
+ * {createToken} can only ever make a launch safer than the platform default, never
+ * riskier. That is what lets the default be read as a guarantee about every launch
+ * on the platform, instead of a starting point somebody might have negotiated away.
+ * A creator who wants neither choice passes zero and inherits the default.
+ *
  * ## Ownership cannot be lost, only handed over
  *
  * Transfer is two-step, so a typo cannot orphan the switch — the recipient has to
@@ -191,6 +208,12 @@ contract FolioFactory is Ownable2Step, Pausable, ReentrancyGuard {
     /// @notice A creator-chosen cap above the platform's current default. The cap
     ///         may only ever be tightened, never loosened.
     error ReserveCapAboveDefault();
+    /// @notice A creator-chosen opening window shorter than the platform default.
+    ///         Protection may be added to a launch, never taken off it.
+    error SniperWindowBelowDefault();
+    /// @notice A creator-chosen per-wallet opening cap above the platform default.
+    ///         A higher cap is less protection, so it goes the forbidden way.
+    error SniperCapAboveDefault();
     /// @notice {renounceOwnership} is disabled. See the note on ownership above.
     error RenounceDisabled();
 
@@ -224,7 +247,7 @@ contract FolioFactory is Ownable2Step, Pausable, ReentrancyGuard {
         external
         returns (address token)
     {
-        return _createToken(name_, symbol_, wholeSupply, 0);
+        return _createToken(name_, symbol_, wholeSupply, 0, 0, 0);
     }
 
     /**
@@ -263,7 +286,50 @@ contract FolioFactory is Ownable2Step, Pausable, ReentrancyGuard {
         uint256 wholeSupply,
         uint256 maxReserveCap
     ) external returns (address token) {
-        return _createToken(name_, symbol_, wholeSupply, maxReserveCap);
+        return _createToken(name_, symbol_, wholeSupply, maxReserveCap, 0, 0);
+    }
+
+    /**
+     * @notice Launch a token, choosing the reserve cap *and* the terms of the
+     *         opening window.
+     *
+     * Same bargain as the cap, pointed at the other risk. A creator may hand
+     * their buyers more protection than the platform requires — a longer window,
+     * a smaller per-wallet bite — and may not hand them less. There is no
+     * argument to this function that makes a launch easier to snipe than the
+     * platform default, which is what makes the default a floor rather than a
+     * suggestion.
+     *
+     * A creator whose platform has the mechanism switched off entirely can still
+     * switch it on for their own launch: with no default cap to be under, they
+     * name one outright. The reverse is closed — nothing here reaches zero.
+     *
+     * @param name_ ERC20 name, 1 to `MAX_NAME_LENGTH` bytes.
+     * @param symbol_ ERC20 symbol, 1 to `MAX_SYMBOL_LENGTH` bytes.
+     * @param wholeSupply Total supply in whole tokens, 1 to `MAX_WHOLE_SUPPLY`.
+     * @param maxReserveCap Ceiling on real ETH, in wei. Zero means the platform
+     *        default; see the four-argument overload for the rest of the rules.
+     * @param sniperWindowSeconds How long the per-wallet buy cap should apply
+     *        for, in seconds. Zero means the platform default. Otherwise it must
+     *        be at least the default — the window can be lengthened, never cut —
+     *        and no more than `MAX_SNIPER_WINDOW_SECONDS`.
+     * @param sniperMaxEthPerWallet What one address may spend during that window,
+     *        in wei. Zero means the platform default. Otherwise it must be no more
+     *        than the default when the platform has one, and at least
+     *        `MIN_SNIPER_MAX_ETH_PER_WALLET` either way.
+     * @return token Address of the new launch.
+     */
+    function createToken(
+        string calldata name_,
+        string calldata symbol_,
+        uint256 wholeSupply,
+        uint256 maxReserveCap,
+        uint16 sniperWindowSeconds,
+        uint256 sniperMaxEthPerWallet
+    ) external returns (address token) {
+        return _createToken(
+            name_, symbol_, wholeSupply, maxReserveCap, sniperWindowSeconds, sniperMaxEthPerWallet
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -332,7 +398,9 @@ contract FolioFactory is Ownable2Step, Pausable, ReentrancyGuard {
         string calldata name_,
         string calldata symbol_,
         uint256 wholeSupply,
-        uint256 maxReserveCap
+        uint256 maxReserveCap,
+        uint16 sniperWindowSeconds,
+        uint256 sniperMaxEthPerWallet
     ) private whenNotPaused nonReentrant returns (address token) {
         uint256 nameLength = bytes(name_).length;
         uint256 symbolLength = bytes(symbol_).length;
@@ -357,6 +425,38 @@ contract FolioFactory is Ownable2Step, Pausable, ReentrancyGuard {
             if (config.graduationThreshold > maxReserveCap) {
                 config.graduationThreshold = maxReserveCap;
             }
+        }
+
+        // The opening window moves the same way and for the same reason: a
+        // creator may give their buyers more protection than the platform asks
+        // for, never less. Lengthening the window and lowering the per-wallet
+        // bite are both "more", so those are the only directions open.
+        if (sniperWindowSeconds != 0) {
+            if (sniperWindowSeconds < config.sniperWindowSeconds) {
+                revert SniperWindowBelowDefault();
+            }
+            if (sniperWindowSeconds > MAX_SNIPER_WINDOW_SECONDS) revert InvalidSniperWindow();
+            config.sniperWindowSeconds = sniperWindowSeconds;
+        }
+        if (sniperMaxEthPerWallet != 0) {
+            // When the platform ships the mechanism off there is no default cap
+            // to be under, so a creator switching it on for their own launch
+            // names one outright rather than being refused for exceeding zero.
+            if (
+                config.sniperMaxEthPerWallet != 0
+                    && sniperMaxEthPerWallet > config.sniperMaxEthPerWallet
+            ) {
+                revert SniperCapAboveDefault();
+            }
+            config.sniperMaxEthPerWallet = sniperMaxEthPerWallet;
+        }
+        // Catches the one combination the two branches above can still produce:
+        // a creator who turned a window on without naming the cap it needs.
+        if (
+            config.sniperWindowSeconds != 0
+                && config.sniperMaxEthPerWallet < MIN_SNIPER_MAX_ETH_PER_WALLET
+        ) {
+            revert InvalidSniperCap();
         }
 
         // The opening price in wei per whole token is `virtualEthReserve /
