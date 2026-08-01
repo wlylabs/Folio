@@ -117,6 +117,17 @@ export function explorerAddressUrl(slug: string, address: string): string | null
   return base ? `${base}/address/${address}` : null;
 }
 
+/**
+ * Where the browser can reach a chain's RPC through Folio's own origin.
+ *
+ * `app/api/rpc/[slug]/route.ts` serves it. Relative on purpose: the point of
+ * the route is that it is the same host the page came from, and a reader whose
+ * network cannot reach the RPC directly can still reach that.
+ */
+export function rpcProxyPath(slug: ChainSlug): string {
+  return `/api/rpc/${slug}`;
+}
+
 const clients = new Map<string, PublicClient>();
 
 /** A read-only client for server-side contract reads. Cached per chain. */
