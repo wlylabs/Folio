@@ -56,6 +56,9 @@ export const SUPPORTED_CHAINS = [
       { label: "Coinbase faucet", url: "https://portal.cdp.coinbase.com/products/faucet" },
       { label: "Alchemy faucet", url: "https://www.alchemy.com/faucets/base-sepolia" },
       { label: "Superchain faucet", url: "https://console.optimism.io/faucet" },
+      // No sign-in and no mainnet balance check, which is what the other three
+      // ask for — so it is the one that works for a wallet made this morning.
+      { label: "Zalalena faucet", url: "https://faucet.zalalena.com/base" },
     ],
   },
   {
@@ -119,6 +122,27 @@ export function chainLabel(slug: string | null | undefined): string {
 export function faucetsFor(slug: string | null | undefined): readonly Faucet[] {
   if (!slug) return [];
   return chainBySlug(slug)?.faucets ?? [];
+}
+
+/**
+ * Every network that has a faucet, for the one place that lists them all.
+ *
+ * The faucets used to be printed wherever an empty wallet was noticed — the
+ * trade dock, the launch form — which put a paragraph of links in front of the
+ * button the reader came for. They live in Settings now, so this returns the
+ * whole directory rather than one chain's slice: a reader opening that panel
+ * has not necessarily told us which network they are short on.
+ */
+export function faucetDirectory(): {
+  slug: ChainSlug;
+  name: string;
+  faucets: readonly Faucet[];
+}[] {
+  return SUPPORTED_CHAINS.filter((entry) => entry.faucets.length > 0).map((entry) => ({
+    slug: entry.slug,
+    name: entry.chain.name,
+    faucets: entry.faucets,
+  }));
 }
 
 /** Block explorer link for a transaction, when the chain publishes one. */
