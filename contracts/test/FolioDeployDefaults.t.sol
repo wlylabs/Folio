@@ -46,7 +46,7 @@ contract FolioDeployDefaultsTest is Test {
     /// them. `_validateConfig` runs in the constructor, so this is the whole check.
     function test_Defaults_AreAcceptedByTheFactory() public {
         FolioFactory f = new FolioFactory(owner, shipped);
-        (uint256 virt, uint256 cap, uint256 threshold,,,,) = f.defaultConfig();
+        (uint256 virt, uint256 cap, uint256 threshold,,,,,) = f.defaultConfig();
         assertEq(virt, shipped.virtualEthReserve);
         assertEq(cap, shipped.maxReserveCap);
         assertEq(threshold, shipped.graduationThreshold);

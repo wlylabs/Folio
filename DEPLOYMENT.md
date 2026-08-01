@@ -358,10 +358,18 @@ them with repository *variables* named `FACTORY_VIRTUAL_ETH_RESERVE`,
 since an empty value is not the same as an unset one to `vm.envOr`. On this chain
 they are real amounts — set them.
 
-The last two are the opening-window buy cap, defaulting to 0.1 ETH a wallet for
+The last two are the opening-window buy cap, defaulting to 0.25 ETH a wallet for
 the first 120 seconds of a launch. Setting the window to `0` switches it off.
 Note that the cap is per *address*, not per person — see the honest account of
 what it does and does not stop in `contracts/README.md`.
+
+`FACTORY_MIGRATOR` is separate and defaults to the zero address, meaning launches
+graduate and stay on the curve forever. Setting it to a deployed `FolioMigrator`
+opts every *subsequent* launch into moving its reserve to a Uniswap v4 pool at
+graduation — which also ends the sell-back guarantee for those launches. Deploy
+the migrator first, verify it, and read the migration section of
+`contracts/README.md` before setting this. Launches already created are untouched
+either way: the address is frozen into each one at creation.
 
 Three things the workflow does that are worth knowing when reading a failed run:
 

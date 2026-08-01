@@ -454,7 +454,8 @@ contract FolioFuzzTest is FolioTestBase {
             feeBps: fee,
             priceMoveAlertBps: 10_000,
             sniperWindowSeconds: 0,
-            sniperMaxEthPerWallet: 0
+            sniperMaxEthPerWallet: 0,
+            migrator: address(0)
         });
 
         vm.prank(owner);

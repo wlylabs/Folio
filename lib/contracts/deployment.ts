@@ -54,6 +54,10 @@ type DeploymentRecord = {
      *  is what the zero default below means. */
     sniperWindowSeconds?: number;
     sniperMaxEthPerWallet?: string;
+    /** Absent on records written before migration existed, and zero on any
+     *  platform that has not opted into it. Zero means the curve is terminal:
+     *  it graduates, closes to buys, and keeps the sell-back floor forever. */
+    migrator?: string;
   };
 };
 
@@ -68,6 +72,9 @@ export type CurveConfig = {
   sniperWindowSeconds: number;
   /** Most ETH one address may spend while that window is open, in wei. */
   sniperMaxEthPerWallet: bigint;
+  /** The only address a launch will ever hand its reserve to, or the zero
+   *  address for a platform whose curves are terminal. */
+  migrator: `0x${string}`;
 };
 
 export type FactoryDeployment = {
@@ -156,6 +163,7 @@ function buildDeployment(slug: ChainSlug): FactoryDeployment | null {
       priceMoveAlertBps: record.defaultConfig.priceMoveAlertBps,
       sniperWindowSeconds: record.defaultConfig.sniperWindowSeconds ?? 0,
       sniperMaxEthPerWallet: BigInt(record.defaultConfig.sniperMaxEthPerWallet ?? 0),
+      migrator: address(record.defaultConfig.migrator) ?? ZERO_ADDRESS,
     },
   };
 }

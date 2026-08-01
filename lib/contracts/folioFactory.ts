@@ -46,6 +46,11 @@ export const FOLIO_FACTORY_ABI = [
             "internalType": "uint256",
             "name": "sniperMaxEthPerWallet",
             "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "migrator",
+            "type": "address"
           }
         ],
         "internalType": "struct CurveConfig",
@@ -249,6 +254,11 @@ export const FOLIO_FACTORY_ABI = [
             "internalType": "uint256",
             "name": "sniperMaxEthPerWallet",
             "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "migrator",
+            "type": "address"
           }
         ],
         "indexed": false,
@@ -424,6 +434,11 @@ export const FOLIO_FACTORY_ABI = [
             "internalType": "uint256",
             "name": "sniperMaxEthPerWallet",
             "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "migrator",
+            "type": "address"
           }
         ],
         "indexed": false,
@@ -743,6 +758,11 @@ export const FOLIO_FACTORY_ABI = [
         "internalType": "uint256",
         "name": "sniperMaxEthPerWallet",
         "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "migrator",
+        "type": "address"
       }
     ],
     "stateMutability": "view",
@@ -871,6 +891,11 @@ export const FOLIO_FACTORY_ABI = [
             "internalType": "uint256",
             "name": "sniperMaxEthPerWallet",
             "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "migrator",
+            "type": "address"
           }
         ],
         "internalType": "struct CurveConfig",

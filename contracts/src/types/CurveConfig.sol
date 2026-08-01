@@ -60,6 +60,24 @@ pragma solidity 0.8.26;
  *        the excess refunded, exactly as an over-cap buy is, so the ETH the curve
  *        prices is unchanged and `reserveHealthBps` still reads `10_000` on the
  *        nose. The sell-back guarantee does not know this mechanism exists.
+ * @param migrator The one address a launch will ever hand its reserve to, or zero
+ *        for a launch that can never migrate. Frozen here at creation like
+ *        everything else, and deliberately *not* read from the factory at call
+ *        time: a swappable migrator would be a lever that moves other people's
+ *        money out of a live launch, which is categorically worse than the
+ *        emergency stop the platform already holds.
+ *
+ *        What it does is the subject of `FolioMigrator`, and the part to
+ *        understand before setting this is what it costs. Migration ends the
+ *        sell-back guarantee. The reserve leaves for a Uniswap v4 pool, the curve
+ *        stops quoting, and from then on a holder's exit is whatever the pool
+ *        pays — no floor, and less in total than the curve owed, because an AMM
+ *        position permanently holds both sides. What is bought with that is a
+ *        market that does not end: the curve closes to buys at graduation and
+ *        can only ever fall from there, and a pool cannot.
+ *
+ *        Zero is the honest default for a platform that has not decided. A launch
+ *        created with zero here keeps the curve, the floor, and the dead end.
  */
 struct CurveConfig {
     uint256 virtualEthReserve;
@@ -69,4 +87,5 @@ struct CurveConfig {
     uint16 priceMoveAlertBps;
     uint16 sniperWindowSeconds;
     uint256 sniperMaxEthPerWallet;
+    address migrator;
 }

@@ -58,7 +58,8 @@ abstract contract FolioTestBase is Test {
             // Off by default across the shared suites, so every expectation below
             // is about the curve alone. `FolioAntiSniper.t.sol` overrides it.
             sniperWindowSeconds: 0,
-            sniperMaxEthPerWallet: 0
+            sniperMaxEthPerWallet: 0,
+            migrator: address(0)
         });
     }
 

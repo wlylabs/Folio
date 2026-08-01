@@ -50,7 +50,7 @@ contract FolioSafetyTest is Test {
     bytes32 internal constant PAUSED_TOPIC = keccak256("EmergencyPaused(address,uint256)");
     bytes32 internal constant UNPAUSED_TOPIC = keccak256("EmergencyUnpaused(address,uint256)");
     bytes32 internal constant CONFIG_TOPIC = keccak256(
-        "DefaultConfigUpdated(address,(uint256,uint256,uint256,uint16,uint16,uint16,uint256),uint256)"
+        "DefaultConfigUpdated(address,(uint256,uint256,uint256,uint16,uint16,uint16,uint256,address),uint256)"
     );
     bytes32 internal constant FEES_TOPIC = keccak256("FeesClaimed(address,uint256,uint256)");
     bytes32 internal constant MOVE_TOPIC =
@@ -64,7 +64,8 @@ contract FolioSafetyTest is Test {
             feeBps: FEE_BPS,
             priceMoveAlertBps: ALERT_BPS,
             sniperWindowSeconds: 0,
-            sniperMaxEthPerWallet: 0
+            sniperMaxEthPerWallet: 0,
+            migrator: address(0)
         });
     }
 
@@ -565,7 +566,7 @@ contract FolioSafetyTest is Test {
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
-            "TokenCreated(address,address,string,string,uint256,(uint256,uint256,uint256,uint16,uint16,uint16,uint256))"
+            "TokenCreated(address,address,string,string,uint256,(uint256,uint256,uint256,uint16,uint16,uint16,uint256,address))"
         );
         bool found;
         for (uint256 i = 0; i < logs.length; i++) {

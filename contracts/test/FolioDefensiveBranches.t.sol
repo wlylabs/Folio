@@ -121,7 +121,8 @@ contract FolioDefensiveBranchesTest is FolioTestBase {
             feeBps: 100,
             priceMoveAlertBps: 10_000, // the signal must be *on* to reach the guard
             sniperWindowSeconds: 0,
-            sniperMaxEthPerWallet: 0
+            sniperMaxEthPerWallet: 0,
+            migrator: address(0)
         });
 
         FolioToken odd = FolioToken(

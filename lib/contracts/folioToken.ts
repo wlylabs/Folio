@@ -10,7 +10,17 @@ export const FOLIO_TOKEN_ABI = [
   },
   {
     "inputs": [],
+    "name": "AlreadyMigrated",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "CurveClosed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "CurveMigrated",
     "type": "error"
   },
   {
@@ -131,7 +141,17 @@ export const FOLIO_TOKEN_ABI = [
   },
   {
     "inputs": [],
+    "name": "NoMigrator",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NotCreator",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotGraduated",
     "type": "error"
   },
   {
@@ -141,7 +161,17 @@ export const FOLIO_TOKEN_ABI = [
   },
   {
     "inputs": [],
+    "name": "NotMigrator",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NothingToClaim",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NothingToMigrate",
     "type": "error"
   },
   {
@@ -352,6 +382,37 @@ export const FOLIO_TOKEN_ABI = [
       }
     ],
     "name": "LargePriceMove",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "migrator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "ethOut",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "tokensOut",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "closingPrice",
+        "type": "uint256"
+      }
+    ],
+    "name": "Migrated",
     "type": "event"
   },
   {
@@ -932,6 +993,11 @@ export const FOLIO_TOKEN_ABI = [
             "internalType": "uint256",
             "name": "sniperMaxEthPerWallet",
             "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "migrator",
+            "type": "address"
           }
         ],
         "internalType": "struct CurveConfig",
@@ -985,6 +1051,45 @@ export const FOLIO_TOKEN_ABI = [
   },
   {
     "inputs": [],
+    "name": "migrated",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "migrationPrice",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "migrator",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "name",
     "outputs": [
       {
@@ -1007,6 +1112,24 @@ export const FOLIO_TOKEN_ABI = [
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "releaseForMigration",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "ethOut",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tokensOut",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

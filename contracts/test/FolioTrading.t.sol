@@ -42,7 +42,8 @@ contract FolioTradingTest is Test {
             feeBps: FEE_BPS,
             priceMoveAlertBps: 10_000,
             sniperWindowSeconds: 0,
-            sniperMaxEthPerWallet: 0
+            sniperMaxEthPerWallet: 0,
+            migrator: address(0)
         });
     }
 

@@ -40,7 +40,8 @@ contract FolioAntiSniperTest is FolioTestBase {
             feeBps: FEE_BPS,
             priceMoveAlertBps: 10_000,
             sniperWindowSeconds: WINDOW,
-            sniperMaxEthPerWallet: WALLET_CAP
+            sniperMaxEthPerWallet: WALLET_CAP,
+            migrator: address(0)
         });
     }
 
@@ -368,7 +369,7 @@ contract FolioAntiSniperTest is FolioTestBase {
         vm.prank(owner);
         factory.setDefaultConfig(fine);
 
-        (,,,,, uint16 window, uint256 cap) = factory.defaultConfig();
+        (,,,,, uint16 window, uint256 cap,) = factory.defaultConfig();
         assertEq(window, 0);
         assertEq(cap, 0);
     }
@@ -518,7 +519,7 @@ contract FolioAntiSniperTest is FolioTestBase {
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
-            "TokenCreated(address,address,string,string,uint256,(uint256,uint256,uint256,uint16,uint16,uint16,uint256))"
+            "TokenCreated(address,address,string,string,uint256,(uint256,uint256,uint256,uint16,uint16,uint16,uint256,address))"
         );
         bool found;
         for (uint256 i = 0; i < logs.length; i++) {

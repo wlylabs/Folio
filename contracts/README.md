@@ -17,8 +17,17 @@ Foundry.
 ```
 npm run forge:build     # compile src/
 npm run forge:test      # run test/*.t.sol
+npm run forge:test:v4   # run test-v4/*.t.sol — the migration suite
 npm run forge:gas       # print the create-cost comparison against FolioSale
 ```
+
+The migration suite is a second profile because Uniswap's `PoolManager` is built
+on transient storage and cannot compile at the paris this project ships at. It
+gets its own directory, its own artifacts, and `evm_version = "cancun"`; nothing
+Folio deploys uses transient storage, and `FolioMigrator` builds with everything
+else under the default profile. Set `ROBINHOOD_MAINNET_RPC_URL` and the same
+command also checks the recorded Uniswap addresses against the live chain —
+without it those tests skip and say so.
 
 ## Layout
 
@@ -26,12 +35,15 @@ npm run forge:gas       # print the create-cost comparison against FolioSale
 | --- | --- |
 | `src/FolioFactory.sol` | Deploys launches, holds default curve terms, owns the emergency stop |
 | `src/FolioToken.sol` | The cloned ERC20 + bonding curve, one instance per launch |
+| `src/FolioMigrator.sol` | Moves a graduated launch onto a locked Uniswap v4 pool |
 | `src/types/CurveConfig.sol` | The curve terms a launch is frozen to at creation |
 | `src/interfaces/IFolioFactory.sol` | The slice of the factory a token reads at runtime |
 | `test/FolioFactory.t.sol` | Creating launches: proxies, bounds, owner powers, gas |
 | `test/FolioTrading.t.sol` | The curve: pricing, buy, sell, reserve, reentrancy, ordering |
 | `test/FolioSafety.t.sol` | Pause, ownership, reserve cap, price signal, audit trail |
 | `test/FolioAntiSniper.t.sol` | The opening-window per-wallet buy cap, and its limits |
+| `test-v4/FolioMigration.t.sol` | Migration against a locally deployed v4 `PoolManager` |
+| `test-v4/FolioMigrationFork.t.sol` | The same, against the real v4 on Robinhood Chain |
 | `test/folioSale.test.mjs` | Legacy in-memory-EVM tests for `FolioSale.sol` |
 
 ## How the curve prices a trade
@@ -98,7 +110,40 @@ and nothing ever graduates. It is the number to revisit first if migration to a
 DEX is ever built, because it is that pool's opening depth.
 
 Graduation closes buying and emits `Graduated`. Selling stays open forever, and
-there is no migration path to a DEX in this contract — that is a later stage.
+nothing in `FolioToken` moves the reserve anywhere — unless the launch was created
+with a migrator.
+
+### Migration, and what it costs
+
+A curve that graduates is finished: buys never reopen, so the price can only fall
+from there and everyone can see the threshold coming. `FolioMigrator` is the exit
+from that shape. Once a launch has graduated, anyone may call `migrate(token)`,
+which takes the reserve and pairs it against freshly minted tokens in a full-range
+Uniswap v4 position that this contract holds and has no function to unwind.
+
+The pool opens at exactly the price the curve closed at. `FolioToken` sizes the
+token side as `reserve / closingPrice`, always strictly less than the unsold
+inventory, and the remainder is never minted. Seeding with everything unsold would
+open the pool *below* the closing price — the graduation dump under a new name.
+
+**Migration ends the sell-back guarantee, and that is not a side effect.** On the
+curve, selling every circulating token back returns exactly the reserve. In a pool
+it does not: an AMM position holds both sides at every price, so part of the ETH is
+never reachable by sellers, and at the shipped terms the collective exit falls by
+roughly a quarter. `sell()` reverts with `CurveMigrated` from then on, and
+`getOutstandingSellObligation()` returns zero because the curve no longer owes
+anything — the liability went to the pool with the money.
+
+So it is opt-in and it is frozen per launch. `CurveConfig.migrator` defaults to
+zero, which keeps the floor and the dead end; a launch created with zero can never
+migrate, whoever asks. The address is snapshotted at creation and deliberately not
+read from the factory at call time, because a swappable migrator would be a lever
+that moves other people's money out of a live launch.
+
+Two things the first version deliberately does not do: collect the position's swap
+fees for creators, which needs a hook and a collect path, and a collect path is a
+withdrawal path that deserves its own review; and recover the few thousand wei of
+rounding dust each migration strands in the migrator, for the same reason.
 
 ### The opening window
 

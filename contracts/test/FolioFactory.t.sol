@@ -35,7 +35,7 @@ contract FolioFactoryTest is Test {
     ///      hash — which is the point of spelling it out rather than reading it
     ///      off the contract.
     bytes32 internal constant TOKEN_CREATED_TOPIC = keccak256(
-        "TokenCreated(address,address,string,string,uint256,(uint256,uint256,uint256,uint16,uint16,uint16,uint256))"
+        "TokenCreated(address,address,string,string,uint256,(uint256,uint256,uint256,uint16,uint16,uint16,uint256,address))"
     );
 
     function _config() internal pure returns (CurveConfig memory) {
@@ -46,7 +46,8 @@ contract FolioFactoryTest is Test {
             feeBps: 100,
             priceMoveAlertBps: 10_000,
             sniperWindowSeconds: 0,
-            sniperMaxEthPerWallet: 0
+            sniperMaxEthPerWallet: 0,
+            migrator: address(0)
         });
     }
 
@@ -67,8 +68,10 @@ contract FolioFactoryTest is Test {
             uint16 fee,
             uint16 alertBps,
             uint16 sniperWindow,
-            uint256 sniperCap
+            uint256 sniperCap,
+            address migrator
         ) = factory.defaultConfig();
+        assertEq(migrator, address(0));
         assertEq(virt, 2 ether);
         assertEq(cap, 5 ether);
         assertEq(threshold, 4 ether);

@@ -54,7 +54,8 @@ contract FolioInvariantTest is Test {
             // clock, so a live window would throttle them into a much narrower
             // slice of the state space than the invariants are meant to sweep.
             sniperWindowSeconds: 0,
-            sniperMaxEthPerWallet: 0
+            sniperMaxEthPerWallet: 0,
+            migrator: address(0)
         });
 
         factory = new FolioFactory(owner, config);

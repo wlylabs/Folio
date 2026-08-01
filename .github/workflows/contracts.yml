@@ -1,0 +1,149 @@
+name: contracts
+
+# The contract suites, on every change that can reach them.
+#
+# Three jobs, because they need three different things:
+#
+#   test      the paris build the chain gets — no network, no secrets
+#   v4        the migration suite against a locally deployed PoolManager, which
+#             needs cancun and so cannot share a profile with the above
+#   fork      the same migration against the real Uniswap v4 on Robinhood Chain,
+#             which needs an RPC and therefore a secret
+#
+# Only `fork` can be skipped, and only because a fork of someone else's chain is
+# not something a pull request from outside the repository should be able to
+# spend. It still runs on every push to a branch here, which is where it matters:
+# a migrator is pointed at a real PoolManager exactly once, and this is the job
+# that checks the address before that happens.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "contracts/**"
+      - "foundry.toml"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/contracts.yml"
+  pull_request:
+    paths:
+      - "contracts/**"
+      - "foundry.toml"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/contracts.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: forge test (paris)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # OpenZeppelin and Uniswap both come from npm; foundry.toml remaps into
+      # node_modules rather than vendoring them as submodules.
+      - run: npm ci --no-audit --no-fund
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - run: forge --version
+
+      - name: Build
+        run: forge build --sizes
+
+      - name: Test
+        run: forge test -vv
+
+      - name: Gas report
+        run: forge test --mt test_Gas -vv
+
+  v4:
+    name: forge test (v4, cancun)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Migration suite against a local PoolManager
+        run: forge test -vv
+        env:
+          FOUNDRY_PROFILE: v4
+
+  fork:
+    name: forge test (v4, forked Robinhood Chain)
+    runs-on: ubuntu-latest
+    # A fork needs an RPC, and a secret is not readable from a fork of this
+    # repository. Skipping is the honest outcome there; the job still runs for
+    # every branch pushed here.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Report whether an RPC is configured
+        id: rpc
+        env:
+          ROBINHOOD_MAINNET_RPC_URL: ${{ secrets.ROBINHOOD_MAINNET_RPC_URL }}
+        run: |
+          if [ -z "${ROBINHOOD_MAINNET_RPC_URL}" ]; then
+            echo "::warning::ROBINHOOD_MAINNET_RPC_URL is not set. The fork checks" \
+                 "self-skip, which means the recorded Uniswap v4 addresses are NOT" \
+                 "being verified against the chain. Set the secret before pointing" \
+                 "a migrator at a real PoolManager."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Runs either way. With no RPC the fork tests return early and say so, so
+      # the job stays green and the warning above is the signal — a red job here
+      # would train people to ignore it.
+      - name: Migration suite against live Uniswap v4
+        env:
+          ROBINHOOD_MAINNET_RPC_URL: ${{ secrets.ROBINHOOD_MAINNET_RPC_URL }}
+          FOUNDRY_PROFILE: v4
+        run: forge test --mc FolioMigrationFork -vv
+
+      - name: Fail if the fork job ran blind on the default branch
+        if: steps.rpc.outputs.configured == 'false' && github.ref == 'refs/heads/main'
+        run: |
+          echo "The default branch must not report green on unverified addresses."
+          exit 1

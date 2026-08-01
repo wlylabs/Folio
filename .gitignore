@@ -34,6 +34,10 @@ yarn-error.log*
 # foundry
 contracts/cache/
 contracts/out/
+# The `v4` profile's artifacts. Separate from the paris build above so a cancun
+# compile of the migration suite never overwrites the bytecode that ships.
+contracts/cache-v4/
+contracts/out-v4/
 cache/
 
 # forge script transaction logs. `contracts/cache/<script>/` is where forge

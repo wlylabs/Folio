@@ -176,6 +176,9 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
     /// @notice Price move, in basis points, at which one trade emits
     ///         {LargePriceMove}. Zero disables the signal.
     uint16 public priceMoveAlertBps;
+    /// @notice True once the reserve has been handed to {migrator}. Terminal:
+    ///         the curve stops quoting both ways and never restarts.
+    bool public migrated;
     /// @notice Seconds after {launchedAt} during which {sniperMaxEthPerWallet}
     ///         binds. Zero disables the opening-window cap entirely.
     uint16 public sniperWindowSeconds;
@@ -208,6 +211,19 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
     uint256 public ethReserve;
     /// @notice Fees earned and not yet claimed by the creator, in wei.
     uint256 public feesAccrued;
+
+    /// @notice The one address this launch may ever hand its reserve to, or zero
+    ///         if it can never migrate. Copied at creation and never writable.
+    address public migrator;
+
+    /// @notice Marginal price at the instant of migration, in wei per whole
+    ///         token. Zero until then.
+    /// @dev {currentPrice} returns this once migrated, because the live formula
+    ///      would divide a zeroed reserve and report a price that was never true.
+    ///      It is a closing price, not a live one: after migration the token's
+    ///      price is whatever the pool says, and nothing on this contract tracks
+    ///      it. Read it as "where the curve ended", and go to the pool for now.
+    uint256 public migrationPrice;
 
     /// @notice Most ETH one address may spend on buys while the opening window is
     ///         open, in wei. Never read once the window has closed.
@@ -310,6 +326,23 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
      */
     event SniperClamped(address indexed buyer, uint256 requested, uint256 allowed);
 
+    /**
+     * @notice The reserve left the curve for the migrator. Terminal.
+     *
+     * After this the curve quotes nothing: buys were already closed by
+     * graduation, and selling closes here. Every holder's exit from this point is
+     * the pool the migrator built, at whatever that pool pays.
+     *
+     * @param migrator Who received it — always the address frozen at creation.
+     * @param ethOut The entire reserve, in wei.
+     * @param tokensOut Token units minted to seed the pool's other side, sized so
+     *        the pool opens at `closingPrice` and migration is not itself a jump.
+     * @param closingPrice The curve's last marginal price, wei per whole token.
+     */
+    event Migrated(
+        address indexed migrator, uint256 ethOut, uint256 tokensOut, uint256 closingPrice
+    );
+
     // -----------------------------------------------------------------------
     // Errors
     // -----------------------------------------------------------------------
@@ -345,6 +378,20 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
     ///         by construction; if it ever fires, the curve maths is wrong and the
     ///         trade must not settle.
     error ReserveShortfall(uint256 required, uint256 available);
+    /// @notice Only this launch's frozen `migrator` may call the release.
+    error NotMigrator();
+    /// @notice The launch has no migrator, so its reserve can never leave the
+    ///         curve. This is a permanent property of the launch, not a state.
+    error NoMigrator();
+    /// @notice The curve has not graduated, so there is nothing to migrate yet.
+    error NotGraduated();
+    /// @notice The reserve has already been handed over. Migration is once only.
+    error AlreadyMigrated();
+    /// @notice Graduated with an empty reserve — everyone sold back out before
+    ///         anyone called the migration. There is no liquidity to seed with.
+    error NothingToMigrate();
+    /// @notice The curve has migrated and no longer quotes. Trade on the pool.
+    error CurveMigrated();
     /// @notice Only the creator may claim fees.
     error NotCreator();
     /// @notice There are no accrued fees to claim.
@@ -416,6 +463,7 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         graduationThreshold = config.graduationThreshold;
         sniperWindowSeconds = config.sniperWindowSeconds;
         sniperMaxEthPerWallet = config.sniperMaxEthPerWallet;
+        migrator = config.migrator;
         // The launch is live from here, so this is the instant the opening window
         // is measured from. Truncation to `uint40` is not a concern any deployment
         // will meet: it overflows in the year 36812.
@@ -451,6 +499,10 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
      *      because it moves the curve. Use the quote functions for actual trades.
      */
     function currentPrice() public view returns (uint256) {
+        // The reserve is zero after migration, so the live formula would report a
+        // price the launch never traded at. The closing price is the true last
+        // thing this curve did; the live one now belongs to the pool.
+        if (migrated) return migrationPrice;
         return Math.mulDiv(virtualEthReserve + ethReserve, 10 ** decimals(), curveTokenReserve());
     }
 
@@ -634,6 +686,12 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
      *      not a restatement of it.
      */
     function getOutstandingSellObligation() public view returns (uint256) {
+        // A migrated curve owes nothing: it holds no reserve and refuses every
+        // sell, so there is no obligation left here to measure. The liability
+        // moved to the pool along with the ETH, and this contract is not the
+        // place to read it. Without this the reserve would read as 0% covered
+        // against an obligation nothing can ever call on.
+        if (migrated) return 0;
         uint256 circulating = tokensSold;
         if (circulating == 0) return 0;
         (uint256 grossEth,,) = _quoteSell(circulating);
@@ -748,6 +806,7 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
         whenTradingActive
         returns (uint256 ethOut)
     {
+        if (migrated) revert CurveMigrated();
         if (tokenAmount == 0) revert ZeroTokenAmount();
         // Cannot be reached by a legitimate holder — every token in existence came
         // out of the curve, so no balance can exceed `tokensSold`. Kept so that a
@@ -779,6 +838,73 @@ contract FolioToken is ERC20Upgradeable, ReentrancyGuard {
 
         // --- Interactions. ---
         _sendEth(msg.sender, ethOut);
+    }
+
+    /**
+     * @notice Hand the entire reserve, and the tokens to pair against it, to this
+     *         launch's frozen {migrator}. Callable once, by that address only,
+     *         and only after graduation.
+     *
+     * This is the end of the curve, and of the sell-back guarantee with it.
+     * {sell} reverts with {CurveMigrated} from here on, the reserve is zero, and
+     * every holder's exit becomes whatever the migrator's pool pays. Read
+     * {Migrated} and the note on `migrator` in `CurveConfig` before wiring one up:
+     * total exit value falls, because an AMM position holds both sides forever.
+     * What it buys is a market with no ceiling, where a graduated curve had one.
+     *
+     * The token side is sized so the pool opens at exactly the price the curve
+     * closed at: `reserve / price` units, which is always strictly less than the
+     * curve's unsold inventory, so the remainder is simply never minted. Seeding
+     * with everything unsold instead would open the pool below the closing price
+     * and hand the last buyers an instant loss, which is the dump graduation is
+     * supposed to avoid rather than a migration.
+     *
+     * Whatever the reserve happens to be at this moment is what migrates. Selling
+     * stays open right up to the call, so a launch that graduates and is then
+     * sold back down migrates a smaller pool — smaller, but still opening at the
+     * price the curve left off at.
+     *
+     * @dev Deliberately not automatic on the graduating buy: that would bill one
+     *      unlucky buyer for a pool deployment. Anyone may prompt the migrator,
+     *      which then calls this.
+     * @return ethOut The whole reserve, in wei.
+     * @return tokensOut Token units minted to the migrator.
+     */
+    function releaseForMigration()
+        external
+        nonReentrant
+        returns (uint256 ethOut, uint256 tokensOut)
+    {
+        address to = migrator;
+        if (to == address(0)) revert NoMigrator();
+        if (msg.sender != to) revert NotMigrator();
+        if (migrated) revert AlreadyMigrated();
+        // Migration rides on graduation, so a launch with the threshold disabled
+        // never reaches this — it has no defined moment to close the curve at.
+        if (!graduated) revert NotGraduated();
+
+        ethOut = ethReserve;
+        if (ethOut == 0) revert NothingToMigrate();
+
+        // Read before the state below moves, so it is the price the curve
+        // actually closed at.
+        uint256 closingPrice = currentPrice();
+        tokensOut = Math.mulDiv(ethOut, 10 ** decimals(), closingPrice, Math.Rounding.Floor);
+
+        // --- Effects, all of them, before the one transfer out. ---
+        migrated = true;
+        migrationPrice = closingPrice;
+        ethReserve = 0;
+        // `tokensSold` tracks what has been minted, and these have been. Keeping
+        // it equal to `totalSupply()` is what every supply assertion in the suite
+        // rests on, and the curve is closed either way.
+        tokensSold += tokensOut;
+        _mint(to, tokensOut);
+
+        emit Migrated(to, ethOut, tokensOut, closingPrice);
+
+        // --- Interactions. ---
+        _sendEth(to, ethOut);
     }
 
     /**

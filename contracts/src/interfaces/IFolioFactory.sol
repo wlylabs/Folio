@@ -10,4 +10,10 @@ pragma solidity 0.8.26;
 interface IFolioFactory {
     /// @notice True while the platform-wide emergency stop is engaged.
     function paused() external view returns (bool);
+
+    /// @notice True for tokens this factory created. The way to tell a genuine
+    ///         launch from a clone somebody made of the implementation behind the
+    ///         platform's back — `FolioMigrator` checks it before building a pool
+    ///         for anything.
+    function isFolioToken(address token) external view returns (bool);
 }

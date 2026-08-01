@@ -685,7 +685,8 @@ contract FolioUnitTest is FolioTestBase {
             // The harshest admissible opening window: as long as the factory
             // allows, throttled as hard as it allows.
             sniperWindowSeconds: factory.MAX_SNIPER_WINDOW_SECONDS(),
-            sniperMaxEthPerWallet: factory.MIN_SNIPER_MAX_ETH_PER_WALLET()
+            sniperMaxEthPerWallet: factory.MIN_SNIPER_MAX_ETH_PER_WALLET(),
+            migrator: address(0)
         });
         vm.prank(owner);
         factory.setDefaultConfig(cfg);
@@ -713,7 +714,8 @@ contract FolioUnitTest is FolioTestBase {
             feeBps: 0,
             priceMoveAlertBps: 0,
             sniperWindowSeconds: 0,
-            sniperMaxEthPerWallet: 0
+            sniperMaxEthPerWallet: 0,
+            migrator: address(0)
         });
         vm.prank(owner);
         factory.setDefaultConfig(cfg);

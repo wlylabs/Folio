@@ -849,7 +849,8 @@ contract FolioAdversarialTest is FolioTestBase {
             feeBps: 500,
             priceMoveAlertBps: 100,
             sniperWindowSeconds: 0,
-            sniperMaxEthPerWallet: 0
+            sniperMaxEthPerWallet: 0,
+            migrator: address(0)
         });
         vm.startPrank(owner);
         factory.setDefaultConfig(hostile);

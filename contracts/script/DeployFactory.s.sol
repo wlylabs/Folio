@@ -75,6 +75,10 @@ contract DeployFactory is FolioScript {
         console2.log(
             "  sniperMaxEthPerWallet  : %s ETH", formatEth(config.sniperMaxEthPerWallet)
         );
+        console2.log(
+            "  migrator               : %s",
+            config.migrator == address(0) ? "none (curve is terminal)" : vm.toString(config.migrator)
+        );
 
         // Only when a factory was actually recorded. Every chain gets its
         // record committed before its first deploy, with the addresses left
@@ -231,7 +235,13 @@ contract DeployFactory is FolioScript {
             sniperWindowSeconds: uint16(vm.envOr("FACTORY_SNIPER_WINDOW_SECONDS", uint256(120))),
             sniperMaxEthPerWallet: vm.envOr(
                 "FACTORY_SNIPER_MAX_ETH_PER_WALLET", uint256(0.25 ether)
-            )
+            ),
+            // Off unless a deploy names one. A migrator is the only address that
+            // can ever take a launch's reserve out of the curve, and switching it
+            // on ends the sell-back guarantee for every launch created afterwards
+            // — see `FolioMigrator` and the note in `CurveConfig`. That is a
+            // decision to make on purpose, so the default declines to make it.
+            migrator: vm.envOr("FACTORY_MIGRATOR", address(0))
         });
     }
 }
