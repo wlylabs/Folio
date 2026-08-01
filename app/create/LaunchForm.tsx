@@ -367,7 +367,6 @@ export default function LaunchForm() {
   // the wallet reject the signature — and keep reading it, so ETH that arrives
   // in another tab lands here without a reload.
   const {
-    balance,
     noGas,
     unreadable: gasUnreadable,
     elsewhere: gasElsewhere,
@@ -772,32 +771,24 @@ export default function LaunchForm() {
         </div>
       )}
 
-      {isConnected && chainEntry && (
-        <div
-          className="font-ui"
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "space-between",
-            gap: "var(--sp-3)",
-            padding: "var(--sp-3) 0",
-            borderTop: "1px solid var(--ink)",
-            borderBottom: "1px solid var(--rule)",
-            fontSize: "var(--fs-micro)",
-            color: "var(--ink-soft)",
-          }}
-        >
-          <span>{chainEntry.chain.name}</span>
-          <span className="nums" style={{ fontWeight: 600, color: "var(--ink)" }}>
-            {balance
-              ? `${formatEth(Number(formatUnits(balance.value, balance.decimals)))} ${balance.symbol}`
-              : gasUnreadable
-                ? "balance unavailable"
-                : "checking balance..."}
-          </span>
-        </div>
-      )}
+      {/*
+        No balance is printed for a funded wallet, deliberately.
 
+        The wallet shows that number itself, at the signature, with more
+        authority than this page can borrow — and there is nothing here to
+        decide with it. A launch has no ETH input the way a trade does, where
+        the balance is the ceiling on what you can type; it costs gas, in an
+        amount this screen cannot predict. So the reading that matters is
+        binary, and only one side of it is worth a line: the notice below,
+        which speaks when the wallet cannot pay, or when the balance could not
+        be read at all. Silence here means the launch is payable.
+
+        What the wallet cannot say is kept: it reports the chain it is on,
+        while `useGasBalance` reads the chain this launch deploys to, and gas
+        on the wrong network is invisible from inside the wallet. That, and
+        the fact that a signature comes too late — the avatar has already
+        uploaded by then — is what the `noGas` gate in `submit` is for.
+      */}
       {isConnected && (noGas || gasUnreadable) && (
         <div style={{ marginTop: "var(--sp-4)" }}>
           <GasNotice
