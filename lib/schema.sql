@@ -82,6 +82,19 @@ create policy "anyone may publish a token"
     and supply > 0
     and starting_price > 0
     and contract_address ~ '^0x[0-9a-f]{40}$'
+    and creator_wallet ~ '^0x[0-9a-fA-F]{40}$'
+    -- An avatar is a file this site uploaded to its own storage bucket, and a
+    -- row is free to carry none. What it may not carry is a URL pointing
+    -- anywhere else: the column is rendered into an <img src> on the front
+    -- page, on every listing and in the og:image of both, so an arbitrary
+    -- value is a way to make every reader's browser announce itself to a
+    -- server of the author's choosing. Two other layers refuse the same thing
+    -- — components/Mark.tsx and the img-src directive in
+    -- lib/securityHeaders.js — and this is the one that stops it being stored.
+    and (
+      avatar_url is null
+      or avatar_url ~ '^https://[a-z0-9.-]+/storage/v1/object/public/token-avatars/'
+    )
   );
 
 -- ---------------------------------------------------------------------------
@@ -120,10 +133,42 @@ create policy "delistings are publicly readable"
 
 -- ---------------------------------------------------------------------------
 -- Storage bucket for token avatars.
+--
+-- Uploads are open — publishing a launch is a public act and there is no
+-- account to attach one to — which makes the bucket's own limits the only thing
+-- standing between "anyone may upload an avatar" and "anyone may host anything
+-- here". So they are set rather than left at the default of no limit at all:
+--
+--   file_size_limit      2 MB, the same ceiling app/create/LaunchForm.tsx shows
+--                        the reader. The client's check is a courtesy; this one
+--                        is the rule, because a browser is not where a limit
+--                        can be enforced.
+--   allowed_mime_types   raster images only. Without it the bucket accepts an
+--                        HTML file and serves it back with its own content
+--                        type, which is a stored cross-site scripting page
+--                        hosted on the project's domain — the one place a
+--                        reader has been told is Folio's. SVG is left out for
+--                        the same reason and not by oversight: an SVG is a
+--                        document that may carry script, harmless inside the
+--                        <img> the page draws it in and not harmless at all
+--                        when the link to it is opened directly.
+--
+-- `do update` rather than `do nothing`: a project created before this file
+-- carried the limits has a bucket row with neither, and it should pick them up
+-- on the next run.
 -- ---------------------------------------------------------------------------
-insert into storage.buckets (id, name, public)
-values ('token-avatars', 'token-avatars', true)
-on conflict (id) do nothing;
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'token-avatars',
+  'token-avatars',
+  true,
+  2097152,
+  array['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif']
+)
+on conflict (id) do update
+  set public = excluded.public,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
 
 drop policy if exists "avatars are publicly readable" on storage.objects;
 create policy "avatars are publicly readable"
@@ -133,4 +178,11 @@ create policy "avatars are publicly readable"
 drop policy if exists "anyone may upload an avatar" on storage.objects;
 create policy "anyone may upload an avatar"
   on storage.objects for insert
-  with check (bucket_id = 'token-avatars');
+  with check (
+    bucket_id = 'token-avatars'
+    -- The extension the object is stored under, checked as well as the MIME
+    -- type above: the two are declared separately on the way in, and a file
+    -- claiming image/png while landing at avatar.html is exactly the case
+    -- worth refusing.
+    and storage.extension(name) in ('png', 'jpg', 'jpeg', 'gif', 'webp', 'avif')
+  );

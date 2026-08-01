@@ -71,9 +71,12 @@ export async function GET(request: Request, { params }: { params: { address: str
       },
     });
   } catch (err) {
+    // Logged in full, answered in general: a viem error names the endpoint it
+    // was talking to, and that is the server's business rather than the
+    // caller's. The chart reads the status, not the sentence.
     console.error("Trade history scan failed:", err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : String(err) },
+      { error: "The trade history could not be read right now." },
       { status: 502, headers: { "cache-control": "no-store" } }
     );
   }

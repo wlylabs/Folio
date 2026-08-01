@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { siteUrl } from "./siteUrl";
 import { articleExcerpt } from "./sanitize";
+import { isHttpUrl } from "./url";
 import { shortAddress, type Token } from "./types";
 
 /**
@@ -91,20 +92,11 @@ export function tokenDescription(
 /**
  * Only http(s) URLs are allowed through to og:image.
  *
- * avatar_url arrives from a table anyone holding the public anon key may
- * insert into, and the insert policy does not constrain it. A relative or
- * `javascript:` value would at best resolve to nonsense against metadataBase
- * and at worst throw during metadata resolution, taking the page with it.
+ * Re-exported rather than defined here: components/Mark.tsx needs the same
+ * check in the browser, and this module pulls in the sanitiser. See lib/url.ts
+ * for what the check is guarding against.
  */
-export function isHttpUrl(value: string | null | undefined): value is string {
-  if (!value) return false;
-  try {
-    const { protocol } = new URL(value);
-    return protocol === "http:" || protocol === "https:";
-  } catch {
-    return false;
-  }
-}
+export { isHttpUrl };
 
 type SocialImage = { url: string; width?: number; height?: number; alt: string };
 
