@@ -123,8 +123,9 @@ export default async function HomePage() {
                 marginBottom: "var(--sp-5)",
               }}
             >
-              A launch is one article and one transaction. Testnet ETH from a
-              faucet covers the gas.
+              A launch is one article and one transaction. Gas is all it costs
+              — free from a faucet on the test network, real ETH on Robinhood
+              Chain.
             </p>
             <Link href="/create" className="btn btn--primary">
               Write the first one
@@ -170,11 +171,14 @@ export default async function HomePage() {
           </div>
 
           <div className="notice">
-            <p className="notice__title">This is a testnet edition.</p>
+            <p className="notice__title">Some of this is real money.</p>
             <p style={{ margin: "0 0 var(--sp-3)" }}>
-              Every launch here settles in testnet ETH from a faucet. The tokens
-              carry no value and are not an investment, and the network can be
-              reset out from under them.
+              A launch on Robinhood Chain settles in real ETH: what you spend is
+              spent, and the tokens are not an investment — their price is
+              whatever the curve says at the moment you trade, and it can go to
+              zero. A launch on Base Sepolia settles in free testnet ETH and is
+              a rehearsal. Every listing says which network it is on; check it
+              before you sign.
             </p>
             <p style={{ margin: "0 0 var(--sp-3)" }}>
               A byline is a claim, not a proof. Folio records the wallet that

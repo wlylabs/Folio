@@ -18,7 +18,7 @@ import { pageTitle, socialMetadata } from "@/lib/seo";
 const TITLE = "Launch a token";
 
 const DESCRIPTION =
-  "Write your article, publish it, and the token it describes is minted onto a bonding curve in one transaction. Testnet ETH from a faucet covers the gas.";
+  "Write your article, publish it, and the token it describes is minted onto a bonding curve in one transaction. You pay only the gas on the network you launch on.";
 
 export const metadata: Metadata = {
   title: pageTitle(TITLE),

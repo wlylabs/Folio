@@ -28,7 +28,7 @@ contract FolioScriptRecordTest is Test {
     RecordReader internal reader;
 
     /// @dev The shape `DeployFactory` writes, before it has written anything.
-    string internal constant PLACEHOLDER = '{"network":"robinhood-testnet","chainId":46630,'
+    string internal constant PLACEHOLDER = '{"network":"robinhood-mainnet","chainId":4663,'
         '"factory":"","implementation":"","owner":"","lastToken":""}';
 
     /// @dev The same record after a deploy landed.

@@ -8,7 +8,7 @@ import {CurveConfig} from "../src/types/CurveConfig.sol";
 
 /**
  * @title DeployFactory
- * @notice Deploys `FolioFactory` to either supported testnet and records the
+ * @notice Deploys `FolioFactory` to either supported chain and records the
  *         result in `deployments/<network>.json`.
  *
  * The factory's constructor deploys the shared `FolioToken` implementation, so
@@ -23,13 +23,19 @@ import {CurveConfig} from "../src/types/CurveConfig.sol";
  *   --rpc-url base-sepolia --broadcast --verify -vvv
  * ```
  *
- * The same script, unmodified, deploys to Robinhood Chain Testnet — the chain
- * is chosen by `--rpc-url` alone, and every chain-shaped value (record path,
- * explorer, banner) comes from the {NetworkProfile} the guard resolved. The
- * bytecode is identical on both: nothing here reads `block.chainid`, and
+ * The same script, unmodified, deploys to Robinhood Chain — the chain is chosen
+ * by `--rpc-url` alone, and every chain-shaped value (record path, explorer,
+ * banner) comes from the {NetworkProfile} the guard resolved. The bytecode is
+ * identical on both: nothing here reads `block.chainid`, and
  * `evm_version = "paris"` keeps the opcode set to what both chains run.
  * Robinhood verifies through Blockscout rather than Etherscan, so its deploy
  * takes two extra flags — see DEPLOYMENT.md.
+ *
+ * Robinhood Chain is a mainnet. `--rpc-url robinhood-mainnet` spends real ETH
+ * on gas and puts a factory in front of real buyers, so the confirmation banner
+ * is the last thing between the decision and the broadcast: read the chain id
+ * on it. Run the whole thing against `base-sepolia` first — the deploy is
+ * cheap enough to rehearse and expensive enough to regret.
  *
  * Re-running deploys a *second, independent* factory. That is intentional —
  * nothing here mutates a live factory — but it means the JSON record is
@@ -40,9 +46,14 @@ import {CurveConfig} from "../src/types/CurveConfig.sol";
  * ## Curve terms
  *
  * The starting `CurveConfig` is read from the environment with the defaults
- * below, all of which are `FolioFactory`-admissible. They are testnet numbers:
- * a 2 ETH virtual reserve, a 5 ETH blast radius, graduation at 4 ETH, 1% per
- * leg, and a price-move alert at a doubling. `setDefaultConfig` can retune them
+ * below, all of which are `FolioFactory`-admissible. They are testnet numbers,
+ * chosen when both target chains handed out their ETH for free: a 2 ETH virtual
+ * reserve, a 5 ETH blast radius, graduation at 4 ETH, 1% per leg, and a
+ * price-move alert at a doubling. On Robinhood Chain those are real amounts and
+ * the defaults are almost certainly not what you want — set
+ * `FACTORY_VIRTUAL_ETH_RESERVE`, `FACTORY_MAX_RESERVE_CAP` and
+ * `FACTORY_GRADUATION_THRESHOLD` deliberately for a mainnet deploy. The banner
+ * prints all five before anything is signed. `setDefaultConfig` can retune them
  * afterwards for future launches without redeploying.
  */
 contract DeployFactory is FolioScript {

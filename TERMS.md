@@ -1,9 +1,9 @@
 # Terms of Service — Folio
 
-**Status: DRAFT — Testnet Only**
-*This document is a starting point and has NOT been reviewed by a legal professional. It must be reviewed by a lawyer before being used for a platform handling real-value transactions (mainnet).*
+**Status: DRAFT — NOT REVIEWED BY A LAWYER**
+*This document is a starting point and has NOT been reviewed by a legal professional. It was written for a testnet-only platform. The Platform now supports a mainnet network, where transactions carry real financial value, and this document must be reviewed by a lawyer familiar with digital asset regulation in the relevant jurisdictions before the Platform is operated on that basis or opened to the public.*
 
-Last updated: 2026-07-31
+Last updated: 2026-08-01
 
 ---
 
@@ -11,7 +11,12 @@ Last updated: 2026-07-31
 
 By accessing or using Folio ("Platform," "we," "the Service"), you ("User") agree to be bound by these Terms of Service. If you do not agree, do not use the Platform.
 
-This Platform currently operates on **testnet** networks (Base Sepolia / Robinhood Chain Testnet). Tokens and transactions on testnet networks **have no real financial value**.
+This Platform operates on two networks, and which one a Token is on determines whether real money is involved:
+
+- **Robinhood Chain** (chain id 4663) is a **mainnet**. Transactions there are settled in real ETH, are irreversible, and **have real financial value**. Fees, gas and any funds spent buying a Token are real and are not refundable by the Platform.
+- **Base Sepolia** (chain id 84532) is a **testnet**. Tokens and transactions there use test ETH obtained free from a faucet and **have no real financial value**; the network may be reset at any time by its operators.
+
+Every listing on the Platform names the network its Token was launched on. Users are responsible for checking that network before signing any transaction.
 
 ## 2. Description of Service
 
@@ -78,4 +83,4 @@ Questions about these Terms of Service can be directed to: [wly38347@gmail.com](
 
 ---
 
-*Developer note: This document is an initial AI-assisted draft for testnet-stage development purposes. Before this platform is used with real-value transactions (mainnet) or opened to the public at scale, this document MUST be reviewed by a legal professional familiar with digital asset regulation in your target jurisdiction(s).*
+*Developer note: This document is an initial AI-assisted draft, written while the platform was testnet-only. It has been updated to describe the mainnet network the platform now supports, but that update is a factual correction, not a legal review — the threshold this note originally set ("before real-value transactions") has now been crossed. Before the platform is operated on mainnet in earnest or opened to the public at scale, this document MUST be reviewed by a legal professional familiar with digital asset regulation in your target jurisdiction(s).*

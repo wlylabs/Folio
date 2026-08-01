@@ -51,24 +51,24 @@ runs = 2_000
 depth = 256
 fail_on_revert = true
 
-# Two testnets and nothing else.
+# Two chains and nothing else.
 #
-#   base-sepolia       84532   where the live factory is
-#   robinhood-testnet  46630   Robinhood Chain Testnet, the port target
+#   base-sepolia       84532   free ETH, where a change is rehearsed
+#   robinhood-mainnet   4663   Robinhood Chain, real ETH, where Folio launches
 #
-# Both are chains whose ETH is free, which is the whole reason they are the two
-# that resolve. There is deliberately no mainnet alias in this file — not for
-# Base, not for Robinhood, not for Ethereum — so nothing here names a network
-# where a mistake costs money. The scripts enforce the same rule at runtime:
+# One of these costs money to get wrong, which is the reason the other is still
+# here: nothing should reach 4663 that has not already run on 84532. No third
+# alias — not Base mainnet, not Ethereum — so nothing here names a network
+# nobody chose. The scripts enforce the same list at runtime:
 # `FolioScript.onlySupportedNetwork` reverts on any chain id without a
 # `NetworkProfile`, so a hand-typed `--rpc-url` cannot route a deploy somewhere
-# real either. Adding a chain means adding it in both places.
+# unlisted either. Adding a chain means adding it in both places.
 #
 # The alias names match the `deployments/<alias>.json` stems, so `--rpc-url
-# robinhood-testnet` and `deployments/robinhood-testnet.json` cannot drift.
+# robinhood-mainnet` and `deployments/robinhood-mainnet.json` cannot drift.
 [rpc_endpoints]
 base-sepolia = "${BASE_SEPOLIA_RPC_URL}"
-robinhood-testnet = "${ROBINHOOD_TESTNET_RPC_URL}"
+robinhood-mainnet = "${ROBINHOOD_MAINNET_RPC_URL}"
 
 # Verification. The two chains do not use the same kind of explorer, so they do
 # not verify the same way.
@@ -88,7 +88,7 @@ robinhood-testnet = "${ROBINHOOD_TESTNET_RPC_URL}"
 # command line as well — see DEPLOYMENT.md for the full command.
 [etherscan]
 base-sepolia = { key = "${BASESCAN_API_KEY}", chain = 84532 }
-robinhood-testnet = { key = "${BLOCKSCOUT_API_KEY}", chain = 46630, url = "https://explorer.testnet.chain.robinhood.com/api/" }
+robinhood-mainnet = { key = "${BLOCKSCOUT_API_KEY}", chain = 4663, url = "https://robinhoodchain.blockscout.com/api/" }
 
 [fmt]
 line_length = 100

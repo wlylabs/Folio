@@ -19,7 +19,7 @@
     "slither": "slither .",
     "slither:report": "slither . --checklist --markdown-root . > slither-report.md",
     "deploy:base-sepolia": "forge script contracts/script/DeployFactory.s.sol:DeployFactory --rpc-url base-sepolia --broadcast --verify -vvv",
-    "deploy:robinhood-testnet": "forge script contracts/script/DeployFactory.s.sol:DeployFactory --rpc-url robinhood-testnet --broadcast --verify --verifier blockscout --verifier-url https://explorer.testnet.chain.robinhood.com/api/ -vvv",
+    "deploy:robinhood-mainnet": "forge script contracts/script/DeployFactory.s.sol:DeployFactory --rpc-url robinhood-mainnet --broadcast --verify --verifier blockscout --verifier-url https://robinhoodchain.blockscout.com/api/ -vvv",
     "folio:create": "forge script contracts/script/CreateToken.s.sol:CreateToken --rpc-url base-sepolia --broadcast -vvv",
     "folio:buy": "forge script contracts/script/Buy.s.sol:Buy --rpc-url base-sepolia --broadcast -vvv",
     "folio:sell": "forge script contracts/script/Sell.s.sol:Sell --rpc-url base-sepolia --broadcast -vvv",

@@ -1,4 +1,4 @@
-# Folio — Testnet Token Launchpad
+# Folio — Token Launchpad
 
 Every token launch is published as an article. Built with Next.js,
 wagmi/RainbowKit, Supabase.
@@ -16,12 +16,20 @@ its own `deployments/<chain>.json`, written by
 only module that reads them, so re-deploying is a one-file change and adding a
 network is one record plus an entry in `SUPPORTED_CHAINS` (`lib/chains.ts`).
 
-Folio runs on more than one testnet at a time. Every listing stores the chain it
+Folio runs on more than one network at a time. Every listing stores the chain it
 was launched on, so a token page reads, prices and trades against the network it
 actually lives on rather than a global default; the create form asks which
 network to launch on when more than one has a factory.
 
-Still a testnet project, and one thing is worth knowing before you rely on it:
+The two supported networks are **Robinhood Chain** (4663, mainnet, real ETH) and
+**Base Sepolia** (84532, testnet, faucet ETH). They behave identically in the
+app and differently in every way that matters to a wallet, which is why the
+network is printed on the listing, in the trade panel and in the deploy script's
+confirmation banner. `deployments/robinhood-mainnet.json` ships with an empty
+`factory`, so nothing launches there until a deploy fills it in — see
+[DEPLOYMENT.md](DEPLOYMENT.md) section 4.
+
+One thing is worth knowing before you rely on any of it:
 `creator_wallet` is a **claim, not a proof**. The browser talks to Supabase with
 the public anon key, which carries no wallet identity, so anyone could insert a
 row attributing a launch to someone else's address. Verifying authorship needs
@@ -29,13 +37,14 @@ signature-based auth (Sign-In With Ethereum minting a Supabase JWT), which isn't
 implemented here. Row-level security in `lib/schema.sql` blocks client-side
 updates and deletes, so existing listings can't be tampered with.
 
-`TERMS.md` and `PRIVACY.md` hold draft policies covering the testnet stage, and
-`/terms` and `/privacy` render those two files directly — the markdown at the
-repo root is the only copy. Both are unreviewed drafts, so both pages carry a
-"Draft — pending legal review" badge; clearing `draft` in `lib/legal.ts`
-removes it. Governing law in the terms is still a placeholder — it depends on
-where the operator is domiciled — and a lawyer has to look at both documents
-before this runs against real value or real users.
+`TERMS.md` and `PRIVACY.md` hold draft policies, and `/terms` and `/privacy`
+render those two files directly — the markdown at the repo root is the only
+copy. Both are unreviewed drafts, so both pages carry a "Draft — pending legal
+review" badge; clearing `draft` in `lib/legal.ts` removes it. Governing law in
+the terms is still a placeholder — it depends on where the operator is
+domiciled. The terms now describe the mainnet network rather than promising
+testnet-only, but that is a factual correction, not a review: a lawyer has to
+look at both documents before this is operated against real value or real users.
 
 One gap worth knowing about, because the privacy policy implies otherwise: the
 consent banner gates Folio's own analytics, and there are none yet, but
@@ -64,8 +73,10 @@ third-party request does happen before the reader has answered the banner.
 5. Run `lib/schema.sql` in Supabase's SQL editor. It creates the `tokens` table,
    the avatar storage bucket, and the row-level security policies.
 6. `npm run dev` → Codespaces gives you a forwarded URL to preview in browser.
-7. Get testnet ETH from a faucet for the network you're launching on —
-   deploying costs gas. The faucet links for each chain are in `lib/chains.ts`.
+7. Fund the wallet on the network you're launching on — deploying costs gas.
+   Base Sepolia has faucets (linked from `lib/chains.ts` and the settings
+   panel); Robinhood Chain is a mainnet and has none, so that ETH has to be
+   bridged or bought. Develop against Base Sepolia.
 
 The app boots without `.env.local` and shows a setup notice instead of crashing,
 so you can check the UI before wiring up Supabase.
@@ -193,7 +204,7 @@ Two things about how it is wired matter more than they look:
   scales with it, which turns a 9px label into a 5px one on a phone. The high,
   the low and the price now are printed around the plot instead — to four
   significant figures, because `formatEth`'s six decimal places cannot tell two
-  curve prices apart down where testnet launches live.
+  curve prices apart down where a young launch's price lives.
 
 Under the chart is the trade tape: side, size, trader and how long ago, each row
 linking to the transaction. It doubles as the chart's table view, and hovering a
@@ -315,10 +326,10 @@ compiler — only edits to a `.sol` file do.
 - **Addresses are stored lowercased** so URL lookups are case-insensitive.
 - **The front page explains itself below the feed.** How a launch works, the
   curve terms the factory would hand the next one (read from
-  `deployments/<chain>.json`, never written into the copy), and what a
-  testnet edition does and doesn't promise. Those sections are not conditional
-  on the feed being empty — an edition with one listing needs them as much as an
-  edition with none.
+  `deployments/<chain>.json`, never written into the copy), and what the site
+  does and doesn't promise — including which network settles in real ETH. Those
+  sections are not conditional on the feed being empty: a site with one listing
+  needs them as much as one with none.
 
 ## Possible next steps
 

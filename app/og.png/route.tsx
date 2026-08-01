@@ -53,7 +53,7 @@ export function GET() {
             A masthead rule, not a date line: nothing here should assert a
             founding year or anything else that would need maintaining.
           */}
-          <span>Testnet edition</span>
+          <span>{SITE_NAME}</span>
           <span>The listing is the article</span>
         </div>
 

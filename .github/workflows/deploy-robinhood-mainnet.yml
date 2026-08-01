@@ -1,40 +1,60 @@
-# Deploys `FolioFactory` to Robinhood Chain Testnet from CI, using repository
-# secrets for the deployer key and the RPC endpoint.
+# Deploys `FolioFactory` to Robinhood Chain — mainnet — from CI, using
+# repository secrets for the deployer key and the RPC endpoint.
 #
 # This is `deploy-base-sepolia.yml` for the other chain. Everything structural
 # is the same on purpose — same script, same bytecode, same gates — so the two
 # files stay readable side by side and a change to one is obvious in the other.
 # What differs is listed under "What is different from Base Sepolia" below.
 #
+# ## This one spends real money
+#
+# Robinhood Chain (4663) is a mainnet. A run here pays real ETH for gas and
+# leaves a factory that real buyers can trade against; there is no faucet and no
+# redo. `FOLIO_SKIP_CONFIRM=true` is set below because a workflow has no stdin,
+# which means the interactive confirmation every local deploy gets does not
+# happen here. Two things stand in for it:
+#
+#   1. the `robinhood-mainnet` GitHub Environment, which is where required
+#      reviewers belong — add them, this is the gate;
+#   2. the `confirm` input below, which must be typed exactly.
+#
+# Deploy to Base Sepolia first. Same script, same bytecode, free ETH; a change
+# that has not run there has no business running here.
+#
 # ## Manual trigger only
 #
 # There is deliberately no `push` or `schedule` trigger. Re-running this
 # workflow deploys a *second, independent* factory and overwrites
-# `deployments/robinhood-testnet.json` — the previous address then survives only
-# in git history and in the run's artifact. That is a decision a person makes,
-# not something a merge to a branch should cause.
+# `deployments/robinhood-mainnet.json` — the previous address then survives only
+# in git history and in the run's artifact, while the factory it names stays
+# live on chain holding whatever reserves it holds. That is a decision a person
+# makes, not something a merge to a branch should cause.
 #
 # ## Required configuration
 #
-# Secrets, on the `robinhood-testnet` environment (Settings -> Environments):
+# Secrets, on the `robinhood-mainnet` environment (Settings -> Environments):
 #
-#   DEPLOYER_PRIVATE_KEY       0x-prefixed 32-byte hex. A THROWAWAY testnet key —
-#                              `vm.envUint` needs the 0x prefix. Must hold
-#                              Robinhood Chain Testnet ETH for gas, from
-#                              https://faucet.testnet.chain.robinhood.com
-#   ROBINHOOD_TESTNET_RPC_URL  Resolves the `robinhood-testnet` alias in
+#   DEPLOYER_PRIVATE_KEY       0x-prefixed 32-byte hex — `vm.envUint` needs the
+#                              prefix. This key holds real ETH and ends up
+#                              owning the factory's emergency stop, so it is not
+#                              the throwaway key the testnet workflows use. Fund
+#                              it with the deploy cost and no more.
+#   ROBINHOOD_MAINNET_RPC_URL  Resolves the `robinhood-mainnet` alias in
 #                              foundry.toml. The public endpoint works and is
 #                              rate-limited.
 #
-# A separate environment from `base-sepolia`, not a shared one, even though the
-# deployer key is likely the same string: environments are where the reviewer
-# list lives, and the two chains are not equally consequential to deploy to.
+# A separate environment from `base-sepolia`, not a shared one, and this is
+# where that separation earns itself: environments are where the reviewer list
+# lives, and the two chains are not equally consequential to deploy to.
 #
-# Optional repository variables (Settings -> Variables), all wei, all falling
-# back to the script's testnet defaults when unset:
+# Optional repository variables (Settings -> Variables), all wei:
 #
 #   FACTORY_VIRTUAL_ETH_RESERVE, FACTORY_MAX_RESERVE_CAP,
 #   FACTORY_GRADUATION_THRESHOLD, FACTORY_FEE_BPS, FACTORY_PRICE_MOVE_ALERT_BPS
+#
+# Unset, these fall back to the script's defaults — 2 ETH virtual reserve, 5 ETH
+# cap, graduation at 4 ETH — which were chosen when every supported chain handed
+# out its ETH for free. On this chain they are real amounts. Set them.
 #
 # ## What is different from Base Sepolia
 #
@@ -42,7 +62,7 @@
 #    not on Etherscan's v2 API at all, so `--verify` alone verifies nothing:
 #    `--verifier blockscout` selects the provider and `--verifier-url` points at
 #    this chain's instance, `/api/` suffix included. `foundry.toml` already
-#    carries that URL under `[etherscan] robinhood-testnet`, but the *provider*
+#    carries that URL under `[etherscan] robinhood-mainnet`, but the *provider*
 #    is a command-line choice, which is why the flags are still here.
 #
 # 2. **No API key is required to verify.** Blockscout does not ask for one, so
@@ -50,30 +70,34 @@
 #    verification on. `BLOCKSCOUT_API_KEY` exists in `.env.example` only because
 #    foundry.toml wants the field, and this workflow never reads it.
 #
-# 3. **The RPC URL is checked against the chain before anything is signed.**
-#    Chain registries disagree about whether the public endpoint carries a
-#    trailing `/rpc`, and a secret that answers HTML instead of JSON-RPC is
-#    invisible until a run fails somewhere confusing. See the preflight step.
+# 3. **The RPC URL is checked against the chain before anything is signed.** A
+#    secret that answers HTML instead of JSON-RPC, or that points at the testnet,
+#    is invisible until a run fails somewhere confusing — or, worse here, until
+#    it succeeds against the wrong chain. See the preflight step.
 #
 # ## The network guard still applies
 #
 # `FolioScript.onlySupportedNetwork` reverts on any chain id without a
 # `NetworkProfile` during the local simulation, before anything is signed. A
 # wrong RPC URL in the secret fails the run rather than deploying somewhere
-# real. The preflight below is not a replacement for that guard — it is there to
-# fail in one readable line instead of inside a simulation trace.
+# nobody chose. The preflight below is not a replacement for that guard — it is
+# there to fail in one readable line instead of inside a simulation trace.
 
-name: Deploy — Robinhood Chain Testnet
+name: Deploy — Robinhood Chain (mainnet)
 
 on:
   workflow_dispatch:
     inputs:
+      confirm:
+        description: "Type 'deploy to mainnet' to confirm real funds are being spent"
+        type: string
+        required: true
       verify:
         description: "Verify the contracts on Blockscout"
         type: boolean
         default: true
       commit_record:
-        description: "Commit deployments/robinhood-testnet.json back to this branch"
+        description: "Commit deployments/robinhood-mainnet.json back to this branch"
         type: boolean
         default: true
       factory_owner:
@@ -86,28 +110,43 @@ permissions: {}
 # Never cancel a run that may already have broadcast a transaction: the record
 # of what was deployed is written after the broadcast returns.
 concurrency:
-  group: deploy-robinhood-testnet
+  group: deploy-robinhood-mainnet
   cancel-in-progress: false
 
 env:
   # One definition, used by the deploy step and by the preflight that checks the
-  # chain answers to it. 46630 is Robinhood Chain Testnet; `FolioScript` will not
-  # deploy to anything else.
-  EXPECTED_CHAIN_ID: "46630"
-  EXPLORER: "https://explorer.testnet.chain.robinhood.com"
+  # chain answers to it. 4663 is Robinhood Chain mainnet; 46630 is its testnet,
+  # and the two are one keystroke apart, which is the whole reason the preflight
+  # compares against this rather than trusting the secret's name.
+  EXPECTED_CHAIN_ID: "4663"
+  EXPLORER: "https://robinhoodchain.blockscout.com"
 
 jobs:
   deploy:
     name: Deploy FolioFactory
     runs-on: ubuntu-latest
-    # Gate approvals and scope the secrets. Create this environment even if you
-    # add no reviewers — the secrets above are read from it.
-    environment: robinhood-testnet
+    # Gate approvals and scope the secrets. Add required reviewers here: with
+    # FOLIO_SKIP_CONFIRM set, this is the human gate on a mainnet broadcast.
+    environment: robinhood-mainnet
     permissions:
       # Only for the commit-back step. Everything else is read-only.
       contents: write
 
     steps:
+      # First, before the checkout even: a mistyped confirmation should cost
+      # nothing but a few seconds.
+      - name: Confirm intent
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [ "${CONFIRM}" != "deploy to mainnet" ]; then
+            echo "The confirmation input must read exactly: deploy to mainnet" >&2
+            echo "Got: '${CONFIRM}'. Nothing was signed." >&2
+            exit 1
+          fi
+          echo "Confirmed — deploying to Robinhood Chain mainnet (4663)."
+
       # `submodules: recursive` pulls contracts/lib/forge-std, which the
       # remappings in foundry.toml point at.
       - name: Checkout
@@ -140,15 +179,15 @@ jobs:
       - name: Check required secrets
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
-          ROBINHOOD_TESTNET_RPC_URL: ${{ secrets.ROBINHOOD_TESTNET_RPC_URL }}
+          ROBINHOOD_MAINNET_RPC_URL: ${{ secrets.ROBINHOOD_MAINNET_RPC_URL }}
         run: |
           set -euo pipefail
           missing=()
           [ -n "${DEPLOYER_PRIVATE_KEY}" ] || missing+=("DEPLOYER_PRIVATE_KEY")
-          [ -n "${ROBINHOOD_TESTNET_RPC_URL}" ] || missing+=("ROBINHOOD_TESTNET_RPC_URL")
+          [ -n "${ROBINHOOD_MAINNET_RPC_URL}" ] || missing+=("ROBINHOOD_MAINNET_RPC_URL")
           if [ ${#missing[@]} -gt 0 ]; then
             printf 'Missing secret: %s\n' "${missing[@]}" >&2
-            echo "Set them on the 'robinhood-testnet' environment." >&2
+            echo "Set them on the 'robinhood-mainnet' environment." >&2
             exit 1
           fi
           case "${DEPLOYER_PRIVATE_KEY}" in
@@ -157,32 +196,31 @@ jobs:
           esac
 
       # The endpoint is asked what chain it is before the deploy asks it to sign
-      # anything. A URL that answers HTML, 404s, or belongs to another chain
-      # fails here — in one line naming what it answered — rather than inside a
-      # simulation trace. The RPC URL itself is never printed: it may carry an
-      # API key.
+      # anything. A URL that answers HTML, 404s, or belongs to another chain —
+      # the testnet included — fails here, in one line naming what it answered,
+      # rather than inside a simulation trace. The RPC URL itself is never
+      # printed: it may carry an API key.
       - name: Preflight — the RPC is the chain it claims to be
         env:
-          ROBINHOOD_TESTNET_RPC_URL: ${{ secrets.ROBINHOOD_TESTNET_RPC_URL }}
+          ROBINHOOD_MAINNET_RPC_URL: ${{ secrets.ROBINHOOD_MAINNET_RPC_URL }}
         run: |
           set -euo pipefail
-          if ! actual="$(cast chain-id --rpc-url "${ROBINHOOD_TESTNET_RPC_URL}" 2>&1)"; then
+          if ! actual="$(cast chain-id --rpc-url "${ROBINHOOD_MAINNET_RPC_URL}" 2>&1)"; then
             echo "The RPC endpoint did not answer a chain id:" >&2
             echo "${actual}" >&2
-            echo "Some chain registries list this endpoint with a trailing /rpc — try that form." >&2
             exit 1
           fi
           if [ "${actual}" != "${EXPECTED_CHAIN_ID}" ]; then
-            echo "ROBINHOOD_TESTNET_RPC_URL is chain ${actual}, expected ${EXPECTED_CHAIN_ID}." >&2
-            echo "Nothing was signed. Fix the secret on the 'robinhood-testnet' environment." >&2
+            echo "ROBINHOOD_MAINNET_RPC_URL is chain ${actual}, expected ${EXPECTED_CHAIN_ID}." >&2
+            echo "Nothing was signed. Fix the secret on the 'robinhood-mainnet' environment." >&2
             exit 1
           fi
-          echo "Chain id ${actual} — Robinhood Chain Testnet."
+          echo "Chain id ${actual} — Robinhood Chain mainnet."
 
       - name: Build
         run: forge build
 
-      # The contracts that are about to hold testnet ETH get the same gate as a
+      # The contracts that are about to hold real ETH get the same gate as a
       # pull request. Cheap next to a broadcast, and the only check between a
       # bad commit and a deployed factory.
       - name: Test
@@ -191,6 +229,9 @@ jobs:
       # Only non-empty values are exported. Setting FACTORY_FEE_BPS to an empty
       # string is not the same as leaving it unset: `vm.envOr` returns its
       # default only for the latter, and fails to parse the former.
+      #
+      # The defaults being inherited here are testnet-shaped. What this step
+      # prints is the last chance to notice that before the broadcast.
       - name: Assemble factory configuration
         env:
           FACTORY_OWNER: ${{ inputs.factory_owner }}
@@ -211,6 +252,8 @@ jobs:
             if [ -n "${value}" ]; then
               echo "${name}=${value}" >> "$GITHUB_ENV"
               echo "Overriding ${name}=${value}"
+            else
+              echo "${name} not set — the script's default applies."
             fi
           done
 
@@ -221,8 +264,8 @@ jobs:
       - name: Fingerprint existing deployment record
         run: |
           set -euo pipefail
-          if [ -f deployments/robinhood-testnet.json ]; then
-            echo "RECORD_HASH_BEFORE=$(sha256sum deployments/robinhood-testnet.json | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          if [ -f deployments/robinhood-mainnet.json ]; then
+            echo "RECORD_HASH_BEFORE=$(sha256sum deployments/robinhood-mainnet.json | cut -d' ' -f1)" >> "$GITHUB_ENV"
           else
             echo "RECORD_HASH_BEFORE=none" >> "$GITHUB_ENV"
           fi
@@ -236,9 +279,10 @@ jobs:
         continue-on-error: true
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
-          ROBINHOOD_TESTNET_RPC_URL: ${{ secrets.ROBINHOOD_TESTNET_RPC_URL }}
+          ROBINHOOD_MAINNET_RPC_URL: ${{ secrets.ROBINHOOD_MAINNET_RPC_URL }}
           # `confirm()` blocks on `vm.prompt` otherwise, and a workflow has no
-          # stdin — the run would hang until it timed out.
+          # stdin — the run would hang until it timed out. The environment's
+          # reviewers and the `confirm` input are what replace it here.
           FOLIO_SKIP_CONFIRM: "true"
         run: |
           set -euo pipefail
@@ -247,7 +291,7 @@ jobs:
             verify_flags=(--verify --verifier blockscout --verifier-url "${EXPLORER}/api/")
           fi
           forge script contracts/script/DeployFactory.s.sol:DeployFactory \
-            --rpc-url robinhood-testnet \
+            --rpc-url robinhood-mainnet \
             --broadcast \
             "${verify_flags[@]}" \
             -vvv
@@ -257,12 +301,12 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          if [ ! -f deployments/robinhood-testnet.json ]; then
+          if [ ! -f deployments/robinhood-mainnet.json ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No deployment record was written."
             exit 0
           fi
-          after="$(sha256sum deployments/robinhood-testnet.json | cut -d' ' -f1)"
+          after="$(sha256sum deployments/robinhood-mainnet.json | cut -d' ' -f1)"
           if [ "${after}" = "${RECORD_HASH_BEFORE:-none}" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "Deployment record is unchanged — this run deployed nothing."
@@ -270,8 +314,8 @@ jobs:
           fi
           {
             echo "changed=true"
-            echo "factory=$(jq -r .factory deployments/robinhood-testnet.json)"
-            echo "implementation=$(jq -r .implementation deployments/robinhood-testnet.json)"
+            echo "factory=$(jq -r .factory deployments/robinhood-mainnet.json)"
+            echo "implementation=$(jq -r .implementation deployments/robinhood-mainnet.json)"
           } >> "$GITHUB_OUTPUT"
 
       # Kept even on failure: if the broadcast landed but a later step did not,
@@ -280,9 +324,9 @@ jobs:
         if: always() && steps.record.outputs.changed == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: robinhood-testnet-deployment-${{ github.run_id }}
+          name: robinhood-mainnet-deployment-${{ github.run_id }}
           path: |
-            deployments/robinhood-testnet.json
+            deployments/robinhood-mainnet.json
             broadcast/
           if-no-files-found: warn
 
@@ -294,7 +338,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "## FolioFactory deployed to Robinhood Chain Testnet"
+            echo "## FolioFactory deployed to Robinhood Chain (mainnet)"
             echo
             echo "| | Address | Blockscout |"
             echo "|---|---|---|"
@@ -307,10 +351,10 @@ jobs:
               echo "> and if so re-run it with \`forge verify-contract --verifier blockscout\`."
               echo
             fi
-            echo "### deployments/robinhood-testnet.json"
+            echo "### deployments/robinhood-mainnet.json"
             echo
             echo '```json'
-            cat deployments/robinhood-testnet.json
+            cat deployments/robinhood-mainnet.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -327,12 +371,12 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add deployments/robinhood-testnet.json
+          git add deployments/robinhood-mainnet.json
           if git diff --cached --quiet; then
             echo "Nothing to commit."
             exit 0
           fi
-          git commit -m "chore: record Robinhood Chain Testnet factory ${{ steps.record.outputs.factory }}"
+          git commit -m "chore: record Robinhood Chain factory ${{ steps.record.outputs.factory }}"
           if ! git push origin "HEAD:${{ github.ref_name }}"; then
             echo "::warning::Could not push the deployment record to ${{ github.ref_name }} — the branch is likely protected. Download it from this run's artifact and commit it manually."
           fi

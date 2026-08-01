@@ -25,12 +25,15 @@ export const SITE_NAME = "Folio";
 export const SITE_TAGLINE = "Every token, told as a story";
 
 /**
- * The site-level description. It says what the thing is and that it settles in
- * testnet ETH; it promises nothing about price or return, which is the same
- * line the terms hold.
+ * The site-level description. It says what the thing is and nothing about
+ * price or return, which is the same line the terms hold.
+ *
+ * It no longer says "testnet". It cannot: a launch on Robinhood Chain settles
+ * in real ETH, and a description that promised otherwise would be wrong in the
+ * one direction that costs a reader money.
  */
 export const SITE_DESCRIPTION =
-  "A testnet token launchpad where every listing is an article. Write the piece, publish it, and the token it describes is minted onto a bonding curve that quotes both sides of the trade from the page itself.";
+  "A token launchpad where every listing is an article. Write the piece, publish it, and the token it describes is minted onto a bonding curve that quotes both sides of the trade from the page itself.";
 
 /** Built at /og.png by app/og.png/route.tsx. Prerendered, so serving it is free. */
 export const DEFAULT_OG_IMAGE = "/og.png";

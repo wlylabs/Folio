@@ -19,7 +19,7 @@ export const runtime = "nodejs";
  * looking at one, so flipping the selector is instant and costs no request.
  *
  * Set `COINGECKO_API_KEY` to use a Pro plan's higher limits. Without it the
- * public endpoint is used, which is what a testnet launchpad needs.
+ * public endpoint is used, which is enough at this traffic.
  */
 
 /** How long a fetched price is served as fresh, in ms. */

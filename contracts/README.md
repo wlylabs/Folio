@@ -196,8 +196,9 @@ git submodule update --init --recursive
 ```
 
 `evm_version` is pinned to **paris**: no PUSH0, no transient storage, no MCOPY.
-Robinhood Chain's EVM revision isn't known yet and nothing here needs a newer
-opcode, so the bytecode stays portable.
+Robinhood Chain's EVM revision hasn't been confirmed against a deploy, and
+nothing here needs a newer opcode, so the bytecode stays portable — which is
+worth more on a mainnet than the ~2% it costs on the one-off factory deploy.
 
 ## Getting a compiler in a sandbox
 

@@ -1,6 +1,6 @@
 # Privacy Policy — Folio
 
-**Status: DRAFT — Testnet Only**
+**Status: DRAFT — NOT REVIEWED BY A LAWYER**
 *This document is a starting point and has NOT been reviewed by a legal or privacy professional. It must be reviewed before being used for a platform with real users at scale.*
 
 Last updated: 2026-07-31

@@ -10,14 +10,21 @@ import { CONTACT_EMAIL } from "@/lib/contact";
  * With more than one network live it names the count rather than one of them:
  * "Base Sepolia" on a page showing a Robinhood token would be a wrong answer to
  * exactly the question this line exists to answer. The token page names its own
- * chain, and /about lists them all.
+ * chain — and says whether that chain is a testnet — and /about lists them all.
+ *
+ * The line used to read "Testnet edition", which was the answer to the second
+ * half of that question while every supported network was a testnet. It is not
+ * any more, so the network's own name carries it, marked when it is a test
+ * network and left plain when the ETH is real.
  */
 export default function Footer() {
+  const entry = chainBySlug(FACTORY_DEPLOYMENTS[0]?.chain ?? DEFAULT_CHAIN_SLUG);
   const chain =
     FACTORY_DEPLOYMENTS.length > 1
       ? `${FACTORY_DEPLOYMENTS.length} networks`
-      : chainBySlug(FACTORY_DEPLOYMENTS[0]?.chain ?? DEFAULT_CHAIN_SLUG)?.chain.name ??
-        DEFAULT_CHAIN_SLUG;
+      : entry
+        ? `${entry.chain.name}${entry.chain.testnet ? " · testnet" : ""}`
+        : DEFAULT_CHAIN_SLUG;
 
   return (
     <footer
@@ -38,7 +45,7 @@ export default function Footer() {
           gap: "var(--sp-3)",
         }}
       >
-        <p className="eyebrow">Folio · Testnet edition · {chain}</p>
+        <p className="eyebrow">Folio · {chain}</p>
 
         <nav className="footer__links" aria-label="Site">
           <Link href="/about">About</Link>

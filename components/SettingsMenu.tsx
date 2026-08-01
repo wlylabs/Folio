@@ -126,8 +126,10 @@ export default function SettingsMenu() {
             <h2 className="eyebrow">Test ETH</h2>
             <FaucetDirectory />
             <p className="settings__note">
-              Folio runs on testnets, so gas is free — but it has to be claimed
-              on the same network the token is on.
+              Testnet gas is free, but it has to be claimed on the same network
+              the token is on — and only the test networks below hand it out.
+              Gas on Robinhood Chain is real ETH you already hold; nothing here
+              gives it away, and anything that offers to is not a faucet.
             </p>
           </section>
 
@@ -152,7 +154,7 @@ export default function SettingsMenu() {
               <a href={`mailto:${CONTACT_EMAIL}`}>Contact</a>
             </nav>
             <p className="settings__meta">
-              Testnet edition ·{" "}
+              Launching on{" "}
               {FACTORY_DEPLOYMENTS.length > 1
                 ? FACTORY_DEPLOYMENTS.map((d) => chainLabel(d.chain)).join(" · ")
                 : chainLabel(FACTORY_DEPLOYMENTS[0]?.chain ?? DEFAULT_CHAIN_SLUG)}
