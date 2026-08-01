@@ -11,7 +11,7 @@ import { useSyncExternalStore } from "react";
  * not hold for WalletConnect, where the set of chains a session may speak for
  * is fixed at the moment the wallet approves the pairing. A wallet that
  * approved Folio on Ethereum Mainnet alone has given the page a session that
- * *cannot* carry Base Sepolia, however many times it is asked: the switch
+ * *cannot* carry Robinhood Chain, however many times it is asked: the switch
  * request is refused, or accepted and then never reported back, and the reader
  * is returned to the same wrong network with nothing to show for the trip.
  *

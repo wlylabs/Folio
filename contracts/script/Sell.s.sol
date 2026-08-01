@@ -12,7 +12,7 @@ import {FolioToken} from "../src/FolioToken.sol";
  * ```
  * source .env
  * SELL_BPS=5000 forge script contracts/script/Sell.s.sol:Sell \
- *   --rpc-url base-sepolia --broadcast -vvv
+ *   --rpc-url robinhood-mainnet --broadcast -vvv
  * ```
  *
  * Two ways to say how much:
@@ -25,9 +25,8 @@ import {FolioToken} from "../src/FolioToken.sol";
  *
  * The ETH figure printed is the wallet's measured balance delta *plus* the gas
  * the transaction burned, so it reports what the curve paid rather than what
- * the wallet netted after fees. Both numbers are shown, because on a testnet
- * the difference between them is the entire reason a sell can look like it lost
- * money.
+ * the wallet netted after fees. Both numbers are shown, because the difference
+ * between them is the entire reason a sell can look like it lost money.
  */
 contract Sell is FolioScript {
     /// @notice `SELL_BPS` above 100%.

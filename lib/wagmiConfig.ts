@@ -83,7 +83,7 @@ const relaylessWallets = [
  *
  * Everything wagmi proposes is *optional*: it passes `optionalChains` and no
  * `chains`, so the proposal carries no required namespace at all. A wallet that
- * has never heard of Base Sepolia is free to approve the session anyway, on
+ * has never heard of Robinhood Chain is free to approve the session anyway, on
  * whatever networks it does have — and it does, because the connect sheet in
  * most phone wallets is an approve button, not a network picker. What comes
  * back is a session whose namespaces name only Ethereum Mainnet, which is a
@@ -95,14 +95,15 @@ const relaylessWallets = [
  * no more silent landing on mainnet. And @walletconnect/ethereum-provider then
  * takes the session's chain id from this list rather than from whichever
  * account the wallet happened to return first, which is the other half of how
- * a Base Sepolia pairing used to come back reporting chain 1.
+ * a Robinhood Chain pairing used to come back reporting chain 1.
  *
  * The cost is real and worth stating plainly: a wallet without this chain now
  * declines the connection outright, where before it produced a connection that
  * merely did not work. That is the better failure — it happens in the wallet,
  * at the moment of asking, instead of three screens later — but it is still a
- * failure, and the wallets that hide test networks behind a setting are exactly
- * the ones readers arrive with. WalletHandoff says so on the way past, and the
+ * failure, and the wallets that have never added an Orbit chain like this one
+ * are exactly the ones readers arrive with. WalletHandoff says so on the way
+ * past, and the
  * route it offers (open Folio inside the wallet's own browser) does not involve
  * a pairing at all.
  *
@@ -113,7 +114,9 @@ const relaylessWallets = [
  *
  * Only this chain is required. The rest of SUPPORTED_CHAINS stays in the
  * optional namespace, so a wallet that has them approves them too and a token
- * on the other network still trades without a second pairing.
+ * on another network still trades without a second pairing. There is one
+ * supported chain today, which makes the required set and the optional set the
+ * same single network.
  */
 const requiredChainSetting =
   process.env.NEXT_PUBLIC_WALLETCONNECT_REQUIRED_CHAIN || DEFAULT_CHAIN_SLUG;

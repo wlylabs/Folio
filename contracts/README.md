@@ -2,10 +2,12 @@
 
 Two generations live here side by side.
 
-**`FolioSale.sol`** is what is deployed on Base Sepolia today: a dependency-free
-ERC20 that runs its own fixed-price sale, deployed in full per launch. The app
-still reads it, so it stays until the frontend moves over. Its toolchain is
-unchanged — `npm run compile:contracts`, `npm test`.
+**`FolioSale.sol`** is the retired generation: a dependency-free ERC20 that runs
+its own fixed-price sale, deployed in full per launch. What was deployed of it
+lives on Base Sepolia, which Folio no longer supports, so those listings are no
+longer reachable from the app — the code and its toolchain stay because the
+frontend still carries the reader for them (`npm run compile:contracts`,
+`npm test`).
 
 **`src/`** is the replacement: a factory that stamps out launches as EIP-1167
 minimal proxies, each running a constant-product bonding curve with buying,

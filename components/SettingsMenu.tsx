@@ -7,7 +7,6 @@ import { useAccount } from "wagmi";
 import WalletButton from "@/components/WalletButton";
 import WalletHandoff from "@/components/WalletHandoff";
 import CurrencySelector from "@/components/CurrencySelector";
-import { FaucetDirectory } from "@/components/Faucet";
 import { DEFAULT_CHAIN_SLUG, chainLabel } from "@/lib/chains";
 import { FACTORY_DEPLOYMENTS } from "@/lib/contracts/deployment";
 import { CONSENT_EVENT, readConsent, writeConsent, type ConsentChoice } from "@/lib/consent";
@@ -116,23 +115,12 @@ export default function SettingsMenu() {
           </section>
 
           {/*
-            The only place faucets are listed. Every action on Folio costs gas
-            and a fresh wallet has none, so these links used to be reprinted at
-            each point of failure — which on a phone meant a paragraph of them
-            sitting on top of the article. One panel, every network, reachable
-            from every page.
+            No faucet section, and there should not be one. This panel used to
+            list the test networks that handed out free ETH; Folio runs on
+            Robinhood Chain alone now, where gas is real ETH the reader already
+            holds. Nothing here can give it away, and anything that offers to is
+            not a faucet.
           */}
-          <section className="settings__group">
-            <h2 className="eyebrow">Test ETH</h2>
-            <FaucetDirectory />
-            <p className="settings__note">
-              Testnet gas is free, but it has to be claimed on the same network
-              the token is on — and only the test networks below hand it out.
-              Gas on Robinhood Chain is real ETH you already hold; nothing here
-              gives it away, and anything that offers to is not a faucet.
-            </p>
-          </section>
-
           <section className="settings__group">
             <h2 className="eyebrow">Cookies</h2>
             <ConsentControl />

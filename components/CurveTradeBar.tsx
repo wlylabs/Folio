@@ -10,7 +10,7 @@ import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
 import WalletButton from "@/components/WalletButton";
 import WalletHandoff from "@/components/WalletHandoff";
 import FiatValue from "@/components/FiatValue";
-import { GasNotice, fixedChainWayOut } from "@/components/Faucet";
+import { GasNotice, fixedChainWayOut } from "@/components/GasNotice";
 import { useTradeDensity } from "@/components/useTradeDensity";
 import { useGasBalance } from "@/components/useGasBalance";
 import { classifyTxError } from "@/lib/txErrors";
@@ -105,8 +105,8 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
   const debouncedSpend = useDebounced(spendWei, 300);
   const debouncedSell = useDebounced(sellUnits, 300);
 
-  // Polls itself, so test ETH claimed from a faucet in another tab shows up
-  // here without a reload. See useGasBalance.
+  // Polls itself, so ETH that arrives in another tab shows up here without a
+  // reload. See useGasBalance.
   const {
     balance: ethBalance,
     noGas,

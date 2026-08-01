@@ -11,10 +11,11 @@ import { serverSupabase } from "@/lib/supabaseAdmin";
 /**
  * Backfills the listings table from every factory's `TokenCreated` log.
  *
- * One scan per configured chain, each with its own cursor: a launch on
- * Robinhood Chain and a launch on Base Sepolia are two logs on two networks,
- * and a run that only ever read one of them would leave the other's listings
- * invisible forever.
+ * One scan per configured chain, each with its own cursor: two launches on two
+ * networks are two logs, and a run that only ever read one of them would leave
+ * the other's listings invisible forever. Robinhood Chain is the only chain
+ * configured today, so that is one scan — the loop is what keeps it correct if
+ * a second is ever added.
  *
  * The chain is where launches actually happen. The create page writes its own
  * row the moment it sees the event, which covers the common case, but it is not

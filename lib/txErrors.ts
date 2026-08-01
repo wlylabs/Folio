@@ -20,6 +20,18 @@
  * reaches a component, and the name is the part that survives.
  */
 
+import { DEFAULT_CHAIN_SLUG, chainBySlug } from "@/lib/chains";
+
+/**
+ * The network to name in a wrong-chain message.
+ *
+ * Read from the chain registry rather than written out, because this used to
+ * spell a network name that stopped being true the moment the chain list
+ * changed — and a message telling a reader to switch to a network Folio no
+ * longer supports is worse than one that says nothing.
+ */
+const TARGET_NETWORK = chainBySlug(DEFAULT_CHAIN_SLUG)?.chain.name ?? "the right network";
+
 export type TxErrorKind = "cancelled" | "reverted" | "network" | "unknown";
 
 export type TxError = {
@@ -145,7 +157,7 @@ export function classifyTxError(err: unknown): TxError {
     return {
       kind: "reverted",
       reason: "InsufficientFunds",
-      message: "Not enough ETH in your wallet to cover this plus gas. Top up from a faucet.",
+      message: "Not enough ETH in your wallet to cover this plus gas. Fund it and try again.",
     };
   }
 
@@ -164,7 +176,7 @@ export function classifyTxError(err: unknown): TxError {
     return {
       kind: "network",
       reason: "ChainMismatch",
-      message: "Your wallet is on a different network. Switch it to Base Sepolia and try again.",
+      message: `Your wallet is on a different network. Switch it to ${TARGET_NETWORK} and try again.`,
     };
   }
 

@@ -16,7 +16,7 @@ import {FolioToken} from "../src/FolioToken.sol";
  * source .env
  * TOKEN_NAME="Midnight Kettle" TOKEN_SYMBOL=KETL TOKEN_SUPPLY=1000000 \
  * forge script contracts/script/CreateToken.s.sol:CreateToken \
- *   --rpc-url base-sepolia --broadcast -vvv
+ *   --rpc-url robinhood-mainnet --broadcast -vvv
  * ```
  *
  * `TOKEN_MAX_RESERVE_CAP` is optional and, when set, may only *tighten* the
@@ -31,7 +31,7 @@ contract CreateToken is FolioScript {
     function run() external onlySupportedNetwork returns (FolioToken token) {
         FolioFactory factory = loadFactory();
 
-        string memory name = vm.envOr("TOKEN_NAME", string("Folio Testnet Launch"));
+        string memory name = vm.envOr("TOKEN_NAME", string("Folio Launch"));
         string memory symbol = vm.envOr("TOKEN_SYMBOL", string("FOLIO"));
         uint256 supply = vm.envOr("TOKEN_SUPPLY", uint256(1_000_000));
         uint256 cap = vm.envOr("TOKEN_MAX_RESERVE_CAP", uint256(0));

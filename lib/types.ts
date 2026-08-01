@@ -121,7 +121,7 @@ export function formatAmount(value: number | null | undefined): string {
 }
 
 /**
- * An ETH figure at a length a person can read. Testnet prices run to several
+ * An ETH figure at a length a person can read. Curve prices run to several
  * decimal places, so this keeps enough of them to distinguish 0.0002 from
  * 0.00019 without printing all eighteen.
  */

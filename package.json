@@ -18,14 +18,13 @@
     "forge:gas": "forge test --mt test_Gas -vv",
     "slither": "slither .",
     "slither:report": "slither . --checklist --markdown-root . > slither-report.md",
-    "deploy:base-sepolia": "forge script contracts/script/DeployFactory.s.sol:DeployFactory --rpc-url base-sepolia --broadcast --verify -vvv",
     "deploy:robinhood-mainnet": "forge script contracts/script/DeployFactory.s.sol:DeployFactory --rpc-url robinhood-mainnet --broadcast --verify --verifier blockscout --verifier-url https://robinhoodchain.blockscout.com/api/ -vvv",
-    "folio:create": "forge script contracts/script/CreateToken.s.sol:CreateToken --rpc-url base-sepolia --broadcast -vvv",
-    "folio:buy": "forge script contracts/script/Buy.s.sol:Buy --rpc-url base-sepolia --broadcast -vvv",
-    "folio:sell": "forge script contracts/script/Sell.s.sol:Sell --rpc-url base-sepolia --broadcast -vvv",
-    "folio:reserve": "forge script contracts/script/CheckReserve.s.sol:CheckReserve --rpc-url base-sepolia",
-    "folio:pause": "forge script contracts/script/Pause.s.sol:Pause --rpc-url base-sepolia --broadcast -vvv",
-    "folio:unpause": "forge script contracts/script/Unpause.s.sol:Unpause --rpc-url base-sepolia --broadcast -vvv"
+    "folio:create": "forge script contracts/script/CreateToken.s.sol:CreateToken --rpc-url robinhood-mainnet --broadcast -vvv",
+    "folio:buy": "forge script contracts/script/Buy.s.sol:Buy --rpc-url robinhood-mainnet --broadcast -vvv",
+    "folio:sell": "forge script contracts/script/Sell.s.sol:Sell --rpc-url robinhood-mainnet --broadcast -vvv",
+    "folio:reserve": "forge script contracts/script/CheckReserve.s.sol:CheckReserve --rpc-url robinhood-mainnet",
+    "folio:pause": "forge script contracts/script/Pause.s.sol:Pause --rpc-url robinhood-mainnet --broadcast -vvv",
+    "folio:unpause": "forge script contracts/script/Unpause.s.sol:Unpause --rpc-url robinhood-mainnet --broadcast -vvv"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.1.5",

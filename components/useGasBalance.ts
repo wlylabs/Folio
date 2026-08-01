@@ -12,7 +12,7 @@ const FUNDED_MS = 30_000;
  * ...and one the page believes is empty.
  *
  * Faster, because that is the reading that costs the most when it is wrong:
- * it disables every button and puts the faucet notice up. Still slower than
+ * it disables every button and puts the no-gas notice up. Still slower than
  * the quote polling beside it, since a balance only moves when the reader
  * does something.
  */
@@ -22,7 +22,7 @@ const EMPTY_MS = 6_000;
  * ...and the other chains, once the target one has come back empty.
  *
  * Slower than either, because this answers a question that only changes when
- * the reader claims again somewhere else: it is a diagnosis, not a gate.
+ * the reader funds a wallet somewhere else: it is a diagnosis, not a gate.
  */
 const ELSEWHERE_MS = 30_000;
 
@@ -43,31 +43,30 @@ export type FundsElsewhere = {
 /**
  * The connected wallet's native balance, kept current on its own.
  *
- * A faucet claim happens somewhere this page cannot see: another tab, or a
- * phone, while this tab sits in front of the reader untouched. Nothing in
- * wagmi tells us the ETH landed, and the only refetch the trade bar used to
- * run was after a transaction — which is exactly the transaction an empty
- * wallet cannot send. So the claim confirmed on the explorer while Folio went
- * on showing 0 ETH and refusing to trade, with no way out but a reload.
+ * ETH arrives somewhere this page cannot see: another tab, or a phone, while
+ * this tab sits in front of the reader untouched. Nothing in wagmi tells us it
+ * landed, and the only refetch the trade bar used to run was after a
+ * transaction — which is exactly the transaction an empty wallet cannot send.
+ * So the transfer confirmed on the explorer while Folio went on showing 0 ETH
+ * and refusing to trade, with no way out but a reload.
  *
  * Polling closes that. `refetchOnWindowFocus` covers the common shape of it —
- * claim in the next tab, come back — and the interval covers the rest, where
+ * fund from the next tab, come back — and the interval covers the rest, where
  * the reader never leaves this tab at all. Neither runs while the tab is
  * hidden: `refetchIntervalInBackground` stays off, and focus is what wakes it.
  *
  * `noGas` is deliberately false while the first read is still in flight. An
  * unknown balance is not an empty one, and treating it as empty would flash
- * the faucet notice at everybody on load.
+ * the no-gas notice at everybody on load.
  *
  * Polling only ever cures a stale read, though, and the report that prompted
- * the rest of this hook was not stale: the explorer showed the claim landing,
+ * the rest of this hook was not stale: the explorer showed the money landing,
  * the wallet showed the ETH, and Folio went on saying zero however often it
  * asked. It was asking a different question. `chainId` here is the *token's*
  * chain, not whichever one the wallet happens to be on, and every supported
  * chain spends something called ETH — so funding the wrong one looks identical
  * to a transfer that never arrived. `elsewhere` and `unreadable` exist to tell
- * those apart, because a bare zero cannot. That mattered when the wrong chain
- * cost a faucet claim; it matters more now that one of them is a mainnet.
+ * those apart, because a bare zero cannot.
  */
 export function useGasBalance({ address, chainId }: Options) {
   const config = useConfig();
@@ -99,9 +98,16 @@ export function useGasBalance({ address, chainId }: Options) {
    * The same address on every other supported chain, read only once this one
    * has come back empty.
    *
-   * Two extra round trips, on the one screen where they buy something no
-   * amount of re-reading the target chain can: which chain the money actually
-   * went to. Gated on `noGas` so a funded wallet never pays for them.
+   * Extra round trips, on the one screen where they buy something no amount of
+   * re-reading the target chain can: which chain the money actually went to.
+   * Gated on `noGas` so a funded wallet never pays for them.
+   *
+   * Robinhood Chain is currently the only supported network, so `others` is
+   * empty, no query is issued and `elsewhere` is always null — the diagnosis
+   * costs nothing while there is nowhere else to look. It is written against
+   * SUPPORTED_CHAINS rather than a hardcoded pair so that it starts answering
+   * again the moment a second network is added, which is also why the callers
+   * still render the `elsewhere` branch.
    */
   const others = SUPPORTED_CHAINS.filter((entry) => entry.chain.id !== chainId);
   const sweep = useQueries({

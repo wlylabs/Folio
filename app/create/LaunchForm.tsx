@@ -25,7 +25,7 @@ import { useRouter } from "next/navigation";
 import WalletButton from "@/components/WalletButton";
 import WalletHandoff from "@/components/WalletHandoff";
 import FiatValue from "@/components/FiatValue";
-import { GasNotice } from "@/components/Faucet";
+import { GasNotice } from "@/components/GasNotice";
 import { useGasBalance } from "@/components/useGasBalance";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { FOLIO_FACTORY_ABI } from "@/lib/contracts/folioFactory";
@@ -179,8 +179,8 @@ type Errors = Partial<Record<keyof FormState | "avatar", string>>;
 /**
  * @param config the curve terms of the chain being launched on. Passed in
  *        rather than read from a module constant: the caps differ per factory,
- *        and validating a Robinhood launch against Base Sepolia's ceiling would
- *        reject a legal supply or accept an illegal one.
+ *        and validating a launch against another chain's ceiling would reject a
+ *        legal supply or accept an illegal one.
  */
 function validate(form: FormState, avatar: File | null, config: CurveConfig | undefined): Errors {
   const errors: Errors = {};
@@ -293,8 +293,8 @@ export default function LaunchForm() {
 
   // Launching costs gas, and a wallet that has never touched this network has
   // none. Read the balance up front so the form can say so instead of letting
-  // the wallet reject the signature — and keep reading it, so a claim made in
-  // the faucet tab lands here without a reload.
+  // the wallet reject the signature — and keep reading it, so ETH that arrives
+  // in another tab lands here without a reload.
   const {
     balance,
     noGas,
@@ -314,10 +314,11 @@ export default function LaunchForm() {
    * makes, aimed by the balance sweep rather than by the creator guessing
    * which network their ETH is on.
    *
-   * Worth being deliberate about now that the chains are not equivalent: the
-   * press moves the launch to where the money is, which can mean moving it from
-   * a testnet to a mainnet or back. The button names the chain it would switch
-   * to, and the chain picker sits next to it either way.
+   * Worth being deliberate about, because the press moves the launch to
+   * wherever the money is and every chain Folio supports spends real ETH. The
+   * button names the chain it would switch to, and the chain picker sits next
+   * to it either way. With Robinhood Chain the only supported network the
+   * sweep finds nothing and none of this renders — see useGasBalance.
    *
    * When there is no factory there, the honest answer is the other one. A
    * creator who knows their ETH is on the other network will otherwise go
@@ -398,7 +399,7 @@ export default function LaunchForm() {
     if (noGas) {
       setFailure({
         title: `No ${chainEntry.chain.nativeCurrency.symbol} to pay gas with`,
-        body: `This wallet holds nothing on ${chainEntry.chain.name}, and launching costs gas. Claim some from the faucets in Settings, then try again.`,
+        body: `This wallet holds nothing on ${chainEntry.chain.name}, and launching costs gas. Fund it on ${chainEntry.chain.name}, then try again.`,
       });
       return;
     }

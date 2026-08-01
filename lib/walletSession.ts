@@ -53,8 +53,8 @@ type MaybeSessionProvider = {
  * a chain in there, and `wallet_switchEthereumChain` for one that isn't is
  * refused by the wallet or dropped on the floor. So this is how the page tells
  * "the reader's wallet is parked on the wrong network" (fixable with a switch)
- * apart from "this session can never speak for Base Sepolia" (fixable only by
- * pairing again). See lib/walletChainReach.ts.
+ * apart from "this session can never speak for Robinhood Chain" (fixable only
+ * by pairing again). See lib/walletChainReach.ts.
  *
  * Empty for a connector with no session at all, which is every connector that
  * is not WalletConnect — callers must read that as "no answer", not as "no
@@ -76,7 +76,7 @@ export async function walletConnectChainIds(
   const namespaces = (provider as MaybeSessionProvider | undefined)?.session?.namespaces;
   if (!namespaces) return [];
 
-  // Accounts are CAIP-10 — `eip155:84532:0x…` — and the namespace key is
+  // Accounts are CAIP-10 — `eip155:4663:0x…` — and the namespace key is
   // sometimes the bare `eip155` and sometimes chain-scoped, so every entry is
   // read rather than one looked up by name.
   const ids = new Set<number>();
