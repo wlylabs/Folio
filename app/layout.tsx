@@ -4,6 +4,7 @@ import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import CookieBanner from "@/components/CookieBanner";
 import { siteUrl } from "@/lib/siteUrl";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import {
   pageTitle,
   socialMetadata,
@@ -88,7 +89,26 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${display.variable} ${text.variable} ${ui.variable}`}
+      // The boot script below writes `data-theme` and `color-scheme` onto this
+      // element before React ever sees it, which is exactly the kind of
+      // difference hydration is built to complain about. It is deliberate, and
+      // the warning is the only thing suppressed — the attributes are not
+      // rendered here, so React has nothing to disagree with afterwards.
+      suppressHydrationWarning
     >
+      <head>
+        {/*
+          The palette, chosen before the first paint.
+
+          It has to be inline and it has to be here: a reader who asked for the
+          dark page and gets a full-brightness flash of paper first has been
+          told their setting does not work, whatever happens a frame later.
+          React cannot run this early, so a few lines of plain script do — see
+          lib/theme.ts, which owns both this string and the storage key it
+          reads.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body>
         <a className="skip-link" href="#main">
           Skip to content

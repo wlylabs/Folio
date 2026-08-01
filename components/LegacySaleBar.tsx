@@ -271,7 +271,7 @@ export default function LegacySaleBar({
             <button
               type="button"
               role="tab"
-              className="tab"
+              className="tab tab--buy"
               aria-selected={side === "buy"}
               onClick={() => setSide("buy")}
             >
@@ -280,7 +280,7 @@ export default function LegacySaleBar({
             <button
               type="button"
               role="tab"
-              className="tab"
+              className="tab tab--sell"
               aria-selected={side === "sell"}
               onClick={() => setSide("sell")}
             >
@@ -372,14 +372,16 @@ export default function LegacySaleBar({
                 />
 
                 <div className="trade-row__action">
+                  {/* Green to buy, red to sell — the same pair the curve panel
+                      uses, so the two panels cannot teach opposite habits. */}
                   {walletWaking ? (
-                    <button type="button" className="btn btn--primary btn--block" disabled data-busy>
+                    <button type="button" className="btn btn--buy btn--block" disabled data-busy>
                       Reconnecting wallet...
                     </button>
                   ) : isConnected ? (
                     <button
                       type="button"
-                      className="btn btn--primary btn--block"
+                      className="btn btn--buy btn--block"
                       onClick={handleBuy}
                       disabled={buyDisabled}
                       // Separates "waiting on your wallet" from the other reasons
@@ -420,13 +422,13 @@ export default function LegacySaleBar({
 
                 <div className="trade-row__action">
                   {walletWaking ? (
-                    <button type="button" className="btn btn--primary btn--block" disabled data-busy>
+                    <button type="button" className="btn btn--sell btn--block" disabled data-busy>
                       Reconnecting wallet...
                     </button>
                   ) : isConnected ? (
                     <button
                       type="button"
-                      className="btn btn--primary btn--block"
+                      className="btn btn--sell btn--block"
                       onClick={handleSell}
                       disabled={sellDisabled}
                       data-busy={pending || undefined}

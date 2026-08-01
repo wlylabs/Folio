@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from "react";
 import type { Trade } from "@/lib/tradeHistory";
+import { priceMove, type MoveDirection } from "@/lib/priceWindow";
 import { formatEthPrice, formatRelativeTime, formatTokens } from "@/lib/types";
 
 /**
  * The price a launch's curve has actually held, drawn from its own event log.
  *
- * Four decisions carry this chart:
+ * Five decisions carry this chart:
  *
  * **It steps, it does not slope.** A constant-product curve only moves when
  * somebody trades against it. Between two trades the marginal price is a flat
@@ -31,9 +32,12 @@ import { formatEthPrice, formatRelativeTime, formatTokens } from "@/lib/types";
  * instead, to enough significant figures to tell them apart — which the site's
  * usual six-decimal ETH format cannot do down here.
  *
- * One series, so there is no legend — the panel heading names the line — and no
- * palette to choose: ink on paper, with buy and sell carried by filled and
- * hollow markers and repeated as words in the tape below, never by colour.
+ * **The line is coloured by the window, and by nothing else.** Green if the
+ * price ended the selected range above the dashed line it opened at, red if
+ * below — the one convention worth borrowing from a broker, because it answers
+ * at a glance the question the reader came with. Buy and sell keep their filled
+ * and hollow markers and their words in the tape below: side and direction are
+ * two different facts, and neither one is ever left to a colour alone.
  */
 
 /** The drawing surface, in user units. The SVG scales; these do not. */
@@ -49,23 +53,36 @@ const PLOT_H = H - INSET * 2;
 export default function PriceChart({
   trades,
   symbol,
+  baseline,
+  spanLabel,
   onSelect,
 }: {
-  /** Oldest first. */
+  /** Oldest first, already cut to the selected window. */
   trades: Trade[];
   symbol: string;
-  /** Called with the hovered trade, so a caller can highlight it in the tape. */
+  /** The price the window opened at, drawn as the line the move is measured
+   *  from. Null when there is nothing to measure against. */
+  baseline?: number | null;
+  /** How the window names itself in the alternative text — "past day". */
+  spanLabel?: string;
+  /** Called with the hovered trade, so a caller can highlight it in the tape
+   *  and re-point the quote above the chart at it. */
   onSelect?: (trade: Trade | null) => void;
 }) {
   const [hover, setHover] = useState<number | null>(null);
 
-  const model = useMemo(() => buildModel(trades), [trades]);
+  const open = baseline ?? null;
+  const model = useMemo(() => buildModel(trades, open), [trades, open]);
 
   if (!model) return null;
 
-  const { points, low, high, yHigh, yLow, xLabels } = model;
+  const { points, low, high, yHigh, yLow, yOpen, xLabels } = model;
   const active = hover === null ? null : points[hover];
   const last = points[points.length - 1];
+
+  // The window's direction, which is the only thing that colours anything here.
+  const move = priceMove(open, last.trade.price);
+  const direction: MoveDirection = move?.direction ?? "flat";
 
   function moveTo(index: number | null) {
     setHover(index);
@@ -87,12 +104,22 @@ export default function PriceChart({
   }
 
   return (
-    <div className="chart">
+    <div
+      className={`chart${direction === "flat" ? "" : ` chart--${direction}`}`}
+    >
       {/*
         The y-axis, written out. Three numbers say what a labelled axis would,
-        and stay legible at any width.
+        and stay legible at any width. "Open" is the dashed line in the plot —
+        printed rather than labelled inside the SVG, for the same reason as the
+        rest of this row.
       */}
       <dl className="chart__scale">
+        {open !== null && (
+          <div>
+            <dt>Open</dt>
+            <dd>{formatEthPrice(open)}</dd>
+          </div>
+        )}
         <div>
           <dt>High</dt>
           <dd>{formatEthPrice(high)}</dd>
@@ -101,16 +128,17 @@ export default function PriceChart({
           <dt>Low</dt>
           <dd>{formatEthPrice(low)}</dd>
         </div>
-        <div>
-          <dt>Now</dt>
-          <dd>{formatEthPrice(last.trade.price)} ETH</dd>
-        </div>
       </dl>
 
       <div className="chart__plot">
-        <svg className="chart__svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={summary(trades, symbol)}>
+        <svg
+          className="chart__svg"
+          viewBox={`0 0 ${W} ${H}`}
+          role="img"
+          aria-label={summary(trades, symbol, open, spanLabel)}
+        >
           <title>{`$${symbol} price on the curve`}</title>
-          <desc>{summary(trades, symbol)}</desc>
+          <desc>{summary(trades, symbol, open, spanLabel)}</desc>
 
           {/*
             Two solid hairlines at the high and the low — the values printed
@@ -130,13 +158,33 @@ export default function PriceChart({
             />
           ))}
 
+          {/*
+            The opening price, and the one line here that *is* a threshold, so
+            it is the one that gets dashed: everything drawn above it is a gain
+            over the window and everything below it a loss. The y-domain always
+            includes it, so it cannot fall off the top or bottom of its own
+            chart.
+          */}
+          {yOpen !== null && (
+            <line
+              x1={INSET}
+              x2={W - INSET}
+              y1={yOpen}
+              y2={yOpen}
+              stroke="var(--rule-strong)"
+              strokeWidth={1}
+              strokeDasharray="4 4"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+
           {/* A wash, not a block: it reads as "under the line". */}
-          <path d={areaPath(points)} fill="var(--ink)" opacity={0.06} />
+          <path d={areaPath(points)} fill="var(--series)" opacity={0.08} />
 
           <path
             d={linePath(points)}
             fill="none"
-            stroke="var(--ink)"
+            stroke="var(--series)"
             strokeWidth={2}
             strokeLinejoin="round"
             strokeLinecap="round"
@@ -152,12 +200,22 @@ export default function PriceChart({
               cx={p.x}
               cy={p.y}
               r={hover === i ? 5 : 3.5}
-              fill={p.trade.side === "buy" ? "var(--ink)" : "var(--paper-raised)"}
-              stroke="var(--ink)"
+              fill={p.trade.side === "buy" ? "var(--series)" : "var(--paper-raised)"}
+              stroke="var(--series)"
               strokeWidth={2}
               vectorEffect="non-scaling-stroke"
             />
           ))}
+
+          {/*
+            The price now, at the right edge where the last step runs out. It is
+            the one mark on this chart that is not history — nothing has traded
+            since, so this is what the curve is quoting at this second — and the
+            slow pulse is the whole of how it says so. Reduced motion stops it
+            and leaves the dot drawn.
+          */}
+          <circle className="chart__live" cx={W - INSET} cy={last.y} r={4} fill="var(--series)" />
+          <circle cx={W - INSET} cy={last.y} r={2.5} fill="var(--series)" />
 
           {/* Crosshair. Vertical only — a horizontal one on a stepped line
               points at a price the tooltip already spells out. */}
@@ -197,7 +255,9 @@ export default function PriceChart({
             }}
             role="status"
           >
-            <b>{active.trade.side === "buy" ? "Bought" : "Sold"}</b>{" "}
+            <b className={`tip__side--${active.trade.side}`}>
+              {active.trade.side === "buy" ? "Bought" : "Sold"}
+            </b>{" "}
             {formatTokens(active.trade.tokens)} ${symbol}
             <br />
             {formatEthPrice(active.trade.eth)} ETH · {formatEthPrice(active.trade.price)} each
@@ -223,21 +283,32 @@ type Point = { x: number; y: number; trade: Trade };
  * The x-axis is time when every trade has a timestamp; otherwise it falls back
  * to even spacing by trade, which is visibly approximate. Inventing a timestamp
  * for a block whose header didn't load would not be.
+ *
+ * The opening price joins the y-domain even when no trade reached it, because
+ * it is the line the whole chart is read against: a window that only ever
+ * traded below its open must still show the open, or the reader is looking at a
+ * loss with nothing on screen saying so.
  */
-function buildModel(trades: Trade[]) {
+function buildModel(trades: Trade[], open: number | null) {
   if (trades.length === 0) return null;
 
   const prices = trades.map((t) => t.price);
   if (prices.some((p) => !Number.isFinite(p))) return null;
 
+  const usableOpen = open !== null && Number.isFinite(open) && open > 0 ? open : null;
+  const domain = usableOpen === null ? prices : [...prices, usableOpen];
+
   const low = Math.min(...prices);
   const high = Math.max(...prices);
+  const yFloor = Math.min(...domain);
+  const yCeiling = Math.max(...domain);
 
   // A launch whose price never moved still deserves a line rather than a
   // divide-by-zero, so a flat history gets a band around its one price.
-  const pad = high > low ? (high - low) * 0.15 : Math.max(high * 0.15, Number.MIN_VALUE);
-  const yMin = low - pad;
-  const ySpan = high + pad - yMin || 1;
+  const pad =
+    yCeiling > yFloor ? (yCeiling - yFloor) * 0.15 : Math.max(yCeiling * 0.15, Number.MIN_VALUE);
+  const yMin = yFloor - pad;
+  const ySpan = yCeiling + pad - yMin || 1;
   const toY = (price: number) => INSET + PLOT_H - ((price - yMin) / ySpan) * PLOT_H;
 
   const stamps = trades.map((t) => t.timestamp);
@@ -263,7 +334,15 @@ function buildModel(trades: Trade[]) {
     ? [formatRelativeTime(tStart), "now"]
     : [`${trades.length} trades back`, "latest"];
 
-  return { points, low, high, yHigh: toY(high), yLow: toY(low), xLabels };
+  return {
+    points,
+    low,
+    high,
+    yHigh: toY(high),
+    yLow: toY(low),
+    yOpen: usableOpen === null ? null : toY(usableOpen),
+    xLabels,
+  };
 }
 
 /**
@@ -288,15 +367,27 @@ function areaPath(points: Point[]): string {
 }
 
 /** What a screen reader is told the picture shows. */
-function summary(trades: Trade[], symbol: string): string {
+function summary(
+  trades: Trade[],
+  symbol: string,
+  open: number | null,
+  spanLabel?: string
+): string {
   const first = trades[0];
   const last = trades[trades.length - 1];
-  const move = first.price > 0 ? ((last.price - first.price) / first.price) * 100 : 0;
+  const from = open ?? first.price;
+  const move = priceMove(from, last.price);
+  const period = spanLabel ? `over the ${spanLabel}` : `across the last ${trades.length} trades`;
+
+  const shape = move
+    ? move.direction === "flat"
+      ? "unchanged"
+      : `${move.direction} ${Math.abs(move.percent).toFixed(1)}%`
+    : "with nothing to compare against";
 
   return (
-    `$${symbol} price across the last ${trades.length} trade${trades.length === 1 ? "" : "s"}: ` +
-    `${formatEthPrice(first.price)} ETH to ${formatEthPrice(last.price)} ETH, ` +
-    `${move >= 0 ? "up" : "down"} ${Math.abs(move).toFixed(1)}%. ` +
+    `$${symbol} price ${period}, over ${trades.length} trade${trades.length === 1 ? "" : "s"}: ` +
+    `${formatEthPrice(from)} ETH to ${formatEthPrice(last.price)} ETH, ${shape}. ` +
     `Every trade is listed below the chart.`
   );
 }
