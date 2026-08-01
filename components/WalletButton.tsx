@@ -1,9 +1,12 @@
 "use client";
 
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { ConnectButton, useConnectModal } from "@rainbow-me/rainbowkit";
 import { useEffect, useState } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useDisconnect } from "wagmi";
+import { chainBySlug } from "@/lib/chains";
+import { usePreferredChainSlug } from "@/lib/preferredChain";
 import { shortAddress } from "@/lib/types";
+import { useChainReach } from "@/lib/walletChainReach";
 import { hasStoredWalletConnectSession } from "@/lib/walletSession";
 
 type Variant = "menu" | "block";
@@ -30,6 +33,9 @@ export default function WalletButton({
   onOpenModal?: () => void;
 }) {
   const pending = useHandoffPending();
+  const reach = useChainReach();
+  const repair = useSessionRepair();
+  const wanted = chainBySlug(usePreferredChainSlug())?.chain.name;
 
   return (
     <ConnectButton.Custom>
@@ -72,6 +78,35 @@ export default function WalletButton({
               }
 
               if (chain.unsupported) {
+                // A session that cannot carry a chain Folio supports has no
+                // network to pick, so the chain modal is a door onto a wall.
+                // Offer the one thing that changes the answer instead — see
+                // lib/walletChainReach.ts.
+                if (reach === "unreachable") {
+                  return (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onOpenModal?.();
+                          repair();
+                        }}
+                        className="btn btn--block btn--alert"
+                      >
+                        Reconnect wallet
+                      </button>
+                      <p className="wallet-note">
+                        Your wallet approved Folio on a network it doesn&apos;t use —
+                        wallets open on Ethereum Mainnet, and the approval fixed the
+                        connection there. Reconnecting asks for{" "}
+                        {wanted ?? "the right network"} again. If your wallet still
+                        won&apos;t offer it, turn on test networks in the wallet, or open
+                        this page in the wallet&apos;s own browser.
+                      </p>
+                    </>
+                  );
+                }
+
                 return (
                   <button
                     type="button"
@@ -129,6 +164,42 @@ export default function WalletButton({
       }}
     </ConnectButton.Custom>
   );
+}
+
+/**
+ * Throw away a WalletConnect session that cannot reach a supported chain, and
+ * ask for a new one.
+ *
+ * Both halves are needed, and in this order. Disconnecting is what clears the
+ * session from storage: until it is gone, wagmi keeps adopting it on every page
+ * load — it holds accounts, so it looks authorized — and the reader lands back
+ * on the same wrong network without ever having asked to. Only then is a fresh
+ * pairing proposed, and a fresh proposal is the only place the chains Folio
+ * wants are named.
+ *
+ * The modal cannot be opened in the same breath: RainbowKit withholds
+ * `openConnectModal` while a wallet is connected, so the call has to wait for
+ * wagmi to report the disconnection. Hence the flag and the effect. If it is
+ * still withheld by then, nothing opens and the button now reads "Connect
+ * wallet" — one press behind, which is a worse outcome than intended and not a
+ * broken one.
+ */
+function useSessionRepair(): () => void {
+  const { disconnectAsync } = useDisconnect();
+  const { openConnectModal } = useConnectModal();
+  const { status } = useAccount();
+  const [reopen, setReopen] = useState(false);
+
+  useEffect(() => {
+    if (!reopen || status !== "disconnected") return;
+    setReopen(false);
+    openConnectModal?.();
+  }, [reopen, status, openConnectModal]);
+
+  return () => {
+    setReopen(true);
+    void disconnectAsync().catch(() => setReopen(false));
+  };
 }
 
 /**
