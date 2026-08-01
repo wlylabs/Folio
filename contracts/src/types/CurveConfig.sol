@@ -36,6 +36,30 @@ pragma solidity 0.8.26;
  *        note on that event in `FolioToken`. Zero disables the signal. The move is
  *        measured against the lower of the two prices, so a doubling and a halving
  *        both read `10_000` and one threshold covers both directions.
+ * @param sniperWindowSeconds How long after creation the per-wallet buy cap below
+ *        applies, in seconds. Zero disables the whole mechanism, and is the
+ *        setting every launch had before it existed. Bounded by
+ *        `MAX_SNIPER_WINDOW_SECONDS` in the factory.
+ * @param sniperMaxEthPerWallet The most ETH one address may spend on buys while
+ *        that window is open, in wei, summed across however many buys it makes.
+ *        Ignored entirely once the window closes, and meaningless when
+ *        `sniperWindowSeconds` is zero.
+ *
+ *        This is the anti-sniper layer, and it is worth being exact about what it
+ *        does and does not achieve. It bounds what any *one address* can take off
+ *        the opening of the curve, where the price is lowest and a bot that is
+ *        first in line would otherwise be free to take as much as it liked. It
+ *        does not bound what one *person* can take, because nothing on chain can:
+ *        an operator willing to fund N wallets gets N times the cap. What it buys
+ *        is that they must pay for those wallets, and that the resulting holder
+ *        distribution is visible to everyone reading the token — a snipe stops
+ *        being a single silent transaction and becomes a fleet somebody has to
+ *        build and cannot hide.
+ *
+ *        Deliberately kept outside the curve. A buy over the cap is clamped and
+ *        the excess refunded, exactly as an over-cap buy is, so the ETH the curve
+ *        prices is unchanged and `reserveHealthBps` still reads `10_000` on the
+ *        nose. The sell-back guarantee does not know this mechanism exists.
  */
 struct CurveConfig {
     uint256 virtualEthReserve;
@@ -43,4 +67,6 @@ struct CurveConfig {
     uint256 graduationThreshold;
     uint16 feeBps;
     uint16 priceMoveAlertBps;
+    uint16 sniperWindowSeconds;
+    uint256 sniperMaxEthPerWallet;
 }

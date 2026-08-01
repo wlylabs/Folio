@@ -71,6 +71,10 @@ contract DeployFactory is FolioScript {
         console2.log("  graduationThreshold    : %s ETH", formatEth(config.graduationThreshold));
         console2.log("  feeBps                 : %s", formatBps(config.feeBps));
         console2.log("  priceMoveAlertBps      : %s", formatBps(config.priceMoveAlertBps));
+        console2.log("  sniperWindowSeconds    : %s", vm.toString(config.sniperWindowSeconds));
+        console2.log(
+            "  sniperMaxEthPerWallet  : %s ETH", formatEth(config.sniperMaxEthPerWallet)
+        );
 
         // Only when a factory was actually recorded. Every chain gets its
         // record committed before its first deploy, with the addresses left
@@ -198,7 +202,14 @@ contract DeployFactory is FolioScript {
             maxReserveCap: vm.envOr("FACTORY_MAX_RESERVE_CAP", uint256(5 ether)),
             graduationThreshold: vm.envOr("FACTORY_GRADUATION_THRESHOLD", uint256(4 ether)),
             feeBps: uint16(vm.envOr("FACTORY_FEE_BPS", uint256(100))),
-            priceMoveAlertBps: uint16(vm.envOr("FACTORY_PRICE_MOVE_ALERT_BPS", uint256(10_000)))
+            priceMoveAlertBps: uint16(vm.envOr("FACTORY_PRICE_MOVE_ALERT_BPS", uint256(10_000))),
+            // Two minutes at 0.1 ETH a wallet. Against a 4 ETH graduation that caps
+            // any single address at 2.5% of the whole curve while the launch is
+            // being discovered, which is the window a bot's edge lives in, and
+            // leaves room for an ordinary opening buy. Set the window to zero to
+            // turn the mechanism off.
+            sniperWindowSeconds: uint16(vm.envOr("FACTORY_SNIPER_WINDOW_SECONDS", uint256(120))),
+            sniperMaxEthPerWallet: vm.envOr("FACTORY_SNIPER_MAX_ETH_PER_WALLET", uint256(0.1 ether))
         });
     }
 }

@@ -295,6 +295,8 @@ type LaunchArgs = {
     graduationThreshold: bigint;
     feeBps: number;
     priceMoveAlertBps: number;
+    sniperWindowSeconds: number;
+    sniperMaxEthPerWallet: bigint;
   };
 };
 

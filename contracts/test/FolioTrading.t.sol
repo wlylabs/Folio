@@ -40,7 +40,9 @@ contract FolioTradingTest is Test {
             maxReserveCap: 5 ether,
             graduationThreshold: 4 ether,
             feeBps: FEE_BPS,
-            priceMoveAlertBps: 10_000
+            priceMoveAlertBps: 10_000,
+            sniperWindowSeconds: 0,
+            sniperMaxEthPerWallet: 0
         });
     }
 

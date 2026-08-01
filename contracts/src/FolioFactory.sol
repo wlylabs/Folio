@@ -85,6 +85,16 @@ contract FolioFactory is Ownable2Step, Pausable, ReentrancyGuard {
     /// @notice Floor on a non-zero `priceMoveAlertBps`. A threshold below this would
     ///         fire on essentially every trade, which is not a signal.
     uint16 public constant MIN_PRICE_MOVE_ALERT_BPS = 100;
+    /// @notice Ceiling on the opening-window length, in seconds.
+    /// @dev The window exists to cover the minutes a launch is being discovered,
+    ///      not to ration it. An hour is already far past the point where a cap
+    ///      stops deterring bots and starts being the reason humans cannot buy.
+    uint16 public constant MAX_SNIPER_WINDOW_SECONDS = 1 hours;
+    /// @notice Floor on the per-wallet opening cap when a window is configured.
+    /// @dev Guards the pairing that would otherwise be legal and useless: a live
+    ///      window with a cap so small no buy clears it, which is a launch nobody
+    ///      can enter until the window expires.
+    uint256 public constant MIN_SNIPER_MAX_ETH_PER_WALLET = 0.0001 ether;
 
     // -----------------------------------------------------------------------
     // State
@@ -170,6 +180,11 @@ contract FolioFactory is Ownable2Step, Pausable, ReentrancyGuard {
     error InvalidReserveCap();
     error InvalidGraduationThreshold();
     error InvalidPriceMoveAlert();
+    /// @notice An opening window longer than `MAX_SNIPER_WINDOW_SECONDS`.
+    error InvalidSniperWindow();
+    /// @notice A live opening window paired with a per-wallet cap below
+    ///         `MIN_SNIPER_MAX_ETH_PER_WALLET`.
+    error InvalidSniperCap();
     error SupplyTooLargeForCurve();
     /// @notice A creator-chosen cap below `MIN_RESERVE_CAP`.
     error ReserveCapTooLow();
@@ -380,6 +395,18 @@ contract FolioFactory is Ownable2Step, Pausable, ReentrancyGuard {
         // enough to mean something when it fires.
         if (config.priceMoveAlertBps != 0 && config.priceMoveAlertBps < MIN_PRICE_MOVE_ALERT_BPS) {
             revert InvalidPriceMoveAlert();
+        }
+        // Zero disables the opening-window cap, and is what every launch made
+        // before the mechanism existed ran with. A live window needs a cap a real
+        // buy can clear, or it is a launch that refuses everyone until it expires.
+        if (config.sniperWindowSeconds > MAX_SNIPER_WINDOW_SECONDS) {
+            revert InvalidSniperWindow();
+        }
+        if (
+            config.sniperWindowSeconds != 0
+                && config.sniperMaxEthPerWallet < MIN_SNIPER_MAX_ETH_PER_WALLET
+        ) {
+            revert InvalidSniperCap();
         }
     }
 }

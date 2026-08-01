@@ -30,9 +30,12 @@ contract FolioFactoryTest is Test {
 
     uint256 internal constant SUPPLY = 1_000_000;
 
-    /// @dev keccak of the TokenCreated signature, for log matching.
+    /// @dev keccak of the TokenCreated signature, for log matching. The trailing
+    ///      tuple is `CurveConfig`, so adding a field to that struct changes this
+    ///      hash — which is the point of spelling it out rather than reading it
+    ///      off the contract.
     bytes32 internal constant TOKEN_CREATED_TOPIC = keccak256(
-        "TokenCreated(address,address,string,string,uint256,(uint256,uint256,uint256,uint16,uint16))"
+        "TokenCreated(address,address,string,string,uint256,(uint256,uint256,uint256,uint16,uint16,uint16,uint256))"
     );
 
     function _config() internal pure returns (CurveConfig memory) {
@@ -41,7 +44,9 @@ contract FolioFactoryTest is Test {
             maxReserveCap: 5 ether,
             graduationThreshold: 4 ether,
             feeBps: 100,
-            priceMoveAlertBps: 10_000
+            priceMoveAlertBps: 10_000,
+            sniperWindowSeconds: 0,
+            sniperMaxEthPerWallet: 0
         });
     }
 
@@ -55,13 +60,22 @@ contract FolioFactoryTest is Test {
 
     function test_Constructor_SetsOwnerAndConfig() public view {
         assertEq(factory.owner(), owner);
-        (uint256 virt, uint256 cap, uint256 threshold, uint16 fee, uint16 alertBps) =
-            factory.defaultConfig();
+        (
+            uint256 virt,
+            uint256 cap,
+            uint256 threshold,
+            uint16 fee,
+            uint16 alertBps,
+            uint16 sniperWindow,
+            uint256 sniperCap
+        ) = factory.defaultConfig();
         assertEq(virt, 2 ether);
         assertEq(cap, 5 ether);
         assertEq(threshold, 4 ether);
         assertEq(fee, 100);
         assertEq(alertBps, 10_000);
+        assertEq(sniperWindow, 0);
+        assertEq(sniperCap, 0);
         assertEq(factory.tokenCount(), 0);
     }
 

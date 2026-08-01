@@ -51,7 +51,11 @@
 # Optional repository variables (Settings -> Variables), all wei:
 #
 #   FACTORY_VIRTUAL_ETH_RESERVE, FACTORY_MAX_RESERVE_CAP,
-#   FACTORY_GRADUATION_THRESHOLD, FACTORY_FEE_BPS, FACTORY_PRICE_MOVE_ALERT_BPS
+#   FACTORY_GRADUATION_THRESHOLD, FACTORY_FEE_BPS, FACTORY_PRICE_MOVE_ALERT_BPS,
+#   FACTORY_SNIPER_WINDOW_SECONDS, FACTORY_SNIPER_MAX_ETH_PER_WALLET
+#
+# The last two are the opening-window buy cap: 120 seconds at 0.1 ETH a wallet
+# by default. A window of 0 switches it off.
 #
 # Unset, these fall back to the script's defaults — 2 ETH virtual reserve, 5 ETH
 # cap, graduation at 4 ETH — which were chosen back when Folio had a chain that
@@ -246,6 +250,8 @@ jobs:
           FACTORY_GRADUATION_THRESHOLD: ${{ vars.FACTORY_GRADUATION_THRESHOLD }}
           FACTORY_FEE_BPS: ${{ vars.FACTORY_FEE_BPS }}
           FACTORY_PRICE_MOVE_ALERT_BPS: ${{ vars.FACTORY_PRICE_MOVE_ALERT_BPS }}
+          FACTORY_SNIPER_WINDOW_SECONDS: ${{ vars.FACTORY_SNIPER_WINDOW_SECONDS }}
+          FACTORY_SNIPER_MAX_ETH_PER_WALLET: ${{ vars.FACTORY_SNIPER_MAX_ETH_PER_WALLET }}
         run: |
           set -euo pipefail
           for name in FACTORY_OWNER \
@@ -253,7 +259,9 @@ jobs:
                       FACTORY_MAX_RESERVE_CAP \
                       FACTORY_GRADUATION_THRESHOLD \
                       FACTORY_FEE_BPS \
-                      FACTORY_PRICE_MOVE_ALERT_BPS; do
+                      FACTORY_PRICE_MOVE_ALERT_BPS \
+                      FACTORY_SNIPER_WINDOW_SECONDS \
+                      FACTORY_SNIPER_MAX_ETH_PER_WALLET; do
             value="${!name-}"
             if [ -n "${value}" ]; then
               echo "${name}=${value}" >> "$GITHUB_ENV"

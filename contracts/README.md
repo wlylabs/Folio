@@ -31,6 +31,7 @@ npm run forge:gas       # print the create-cost comparison against FolioSale
 | `test/FolioFactory.t.sol` | Creating launches: proxies, bounds, owner powers, gas |
 | `test/FolioTrading.t.sol` | The curve: pricing, buy, sell, reserve, reentrancy, ordering |
 | `test/FolioSafety.t.sol` | Pause, ownership, reserve cap, price signal, audit trail |
+| `test/FolioAntiSniper.t.sol` | The opening-window per-wallet buy cap, and its limits |
 | `test/folioSale.test.mjs` | Legacy in-memory-EVM tests for `FolioSale.sol` |
 
 ## How the curve prices a trade
@@ -43,7 +44,8 @@ circulating supply at all times.
 | Function | Direction | Includes fee? |
 | --- | --- | --- |
 | `getBuyPrice(tokenAmount)` | tokens → ETH to send | yes, rounded up |
-| `getBuyQuote(ethIn)` | ETH → tokens, spend, refund | yes; mirrors `buy` exactly |
+| `getBuyQuote(ethIn)` | ETH → tokens, spend, refund | yes; mirrors `buy` for `msg.sender` |
+| `getBuyQuoteFor(ethIn, buyer)` | the same, for a named buyer | yes; what a frontend should call |
 | `getSellPrice(tokenAmount)` | tokens → ETH received | yes, net of fee |
 
 All of them are `view`, and the two quote functions run the same internal maths
@@ -72,6 +74,33 @@ virtual reserve to 6 ETH makes it 2.8x. Nothing in `FolioToken.sol` changes.
 
 Graduation closes buying and emits `Graduated`. Selling stays open forever, and
 there is no migration path to a DEX in this contract — that is a later stage.
+
+### The opening window
+
+The first buyer gets the lowest price the curve will ever offer. That is the
+curve working, and it is also what a bot watching for `TokenCreated` is there to
+collect. `sniperWindowSeconds` and `sniperMaxEthPerWallet` bound it: for that many
+seconds after creation, any one address may spend at most that much across all
+its buys. The shipped default is **0.1 ETH a wallet for 120 seconds**, which
+against a 4 ETH graduation caps a single address at 2.5% of the whole curve
+during the minutes a launch is being discovered.
+
+A buy over the remaining allowance is trimmed and the excess refunded — the same
+clamp-and-refund the reserve ceiling uses, because reverting would make every
+opening a race that most transactions lose after paying gas. Only a wallet with
+nothing left reverts, with `SniperCapReached`. Set the window to zero to switch
+the whole mechanism off; that is what every launch ran under before it existed.
+
+**This is not sybil resistance, and nothing on chain could be.** N wallets get N
+caps. What it buys is that taking the opening costs a funded fleet instead of one
+transaction, and that the fleet is legible afterwards in `sniperSpent` and in the
+holder list. `test_Sybil_EachWalletGetsItsOwnCap` exists to keep that limitation
+a tested fact rather than a caveat someone can quietly drop.
+
+It sits outside the curve, like the fees. Clamped ETH is refunded before anything
+is priced, so `k`, the reserve and the sell-back guarantee never see it, and
+`reserveHealthBps()` still reads exactly `10_000`. The cost is about 417 gas on a
+warm buy, paid whether or not a launch has a window configured.
 
 ## The safety layer
 

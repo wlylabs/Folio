@@ -346,9 +346,15 @@ No verification secret: Blockscout needs no API key, so turning the run's
 The curve terms default to the same numbers the script uses. Override any of
 them with repository *variables* named `FACTORY_VIRTUAL_ETH_RESERVE`,
 `FACTORY_MAX_RESERVE_CAP`, `FACTORY_GRADUATION_THRESHOLD`, `FACTORY_FEE_BPS`,
-`FACTORY_PRICE_MOVE_ALERT_BPS`; only the ones you set are passed through, since
-an empty value is not the same as an unset one to `vm.envOr`. On this chain they
-are real amounts — set them.
+`FACTORY_PRICE_MOVE_ALERT_BPS`, `FACTORY_SNIPER_WINDOW_SECONDS`,
+`FACTORY_SNIPER_MAX_ETH_PER_WALLET`; only the ones you set are passed through,
+since an empty value is not the same as an unset one to `vm.envOr`. On this chain
+they are real amounts — set them.
+
+The last two are the opening-window buy cap, defaulting to 0.1 ETH a wallet for
+the first 120 seconds of a launch. Setting the window to `0` switches it off.
+Note that the cap is per *address*, not per person — see the honest account of
+what it does and does not stop in `contracts/README.md`.
 
 Three things the workflow does that are worth knowing when reading a failed run:
 

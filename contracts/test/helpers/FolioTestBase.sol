@@ -54,7 +54,11 @@ abstract contract FolioTestBase is Test {
             maxReserveCap: 5 ether,
             graduationThreshold: 4 ether,
             feeBps: FEE_BPS,
-            priceMoveAlertBps: 10_000
+            priceMoveAlertBps: 10_000,
+            // Off by default across the shared suites, so every expectation below
+            // is about the curve alone. `FolioAntiSniper.t.sol` overrides it.
+            sniperWindowSeconds: 0,
+            sniperMaxEthPerWallet: 0
         });
     }
 
