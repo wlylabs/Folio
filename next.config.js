@@ -1,6 +1,39 @@
+const { securityHeaders } = require("./lib/securityHeaders");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // `X-Powered-By: Next.js` on every response, naming the framework and
+  // nothing else useful. It tells an attacker which advisories to try first
+  // and tells a reader nothing at all.
+  poweredByHeader: false,
+  async headers() {
+    return [
+      {
+        // Every response, including the static assets and the API routes.
+        // lib/securityHeaders.js explains each header and how to loosen the
+        // content policy without deleting it.
+        source: "/:path*",
+        headers: securityHeaders(),
+      },
+      {
+        /*
+         * The service worker, which is the one file whose staleness is
+         * self-perpetuating: a browser that serves sw.js from its own HTTP
+         * cache is serving the old rules for deciding what to cache. The
+         * registration asks for `updateViaCache: "none"` as well — this is the
+         * half that does not depend on the page getting that far.
+         */
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          // A worker registered for "/" may only be served from "/". Saying so
+          // explicitly costs nothing and makes the scope legible.
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+    ];
+  },
   async redirects() {
     return [
       {

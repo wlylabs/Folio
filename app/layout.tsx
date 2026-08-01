@@ -3,8 +3,9 @@ import Providers from "./providers";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import CookieBanner from "@/components/CookieBanner";
+import AppStatus from "@/components/AppStatus";
 import { siteUrl } from "@/lib/siteUrl";
-import { THEME_BOOT_SCRIPT } from "@/lib/theme";
+import { BOOT_SCRIPT } from "@/lib/boot";
 import {
   pageTitle,
   socialMetadata,
@@ -53,6 +54,23 @@ export const metadata: Metadata = {
   title: pageTitle(SITE_TAGLINE),
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
+  // Emits <link rel="manifest">. The manifest itself is app/manifest.ts.
+  manifest: "/manifest.webmanifest",
+  /*
+   * iOS reads none of the manifest. An installed copy there takes its name,
+   * its window and its status bar from these three tags alone.
+   *
+   * `statusBarStyle: "default"` is the one that looks wrong and is right: the
+   * two alternatives paint the status bar a fixed colour, and this page has two
+   * palettes. Left alone, iOS draws the bar over the page's own background,
+   * which is the paper the reader chose — and with `viewportFit: "cover"`
+   * below, the masthead already keeps its text clear of it.
+   */
+  appleWebApp: {
+    capable: true,
+    title: SITE_NAME,
+    statusBarStyle: "default",
+  },
   // These are the defaults a route inherits when it declares no openGraph of
   // its own. A route that declares one replaces this wholesale — Next does not
   // merge the two — which is why every page below builds its block with
@@ -98,16 +116,16 @@ export default function RootLayout({
     >
       <head>
         {/*
-          The palette, chosen before the first paint.
+          The palette and everything else that has to be settled before the
+          first paint.
 
           It has to be inline and it has to be here: a reader who asked for the
           dark page and gets a full-brightness flash of paper first has been
           told their setting does not work, whatever happens a frame later.
           React cannot run this early, so a few lines of plain script do — see
-          lib/theme.ts, which owns both this string and the storage key it
-          reads.
+          lib/boot.ts, which owns this string and explains each thing it does.
         */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: BOOT_SCRIPT }} />
       </head>
       <body>
         <a className="skip-link" href="#main">
@@ -120,15 +138,24 @@ export default function RootLayout({
             <Footer />
           </div>
           {/*
-           * Outside .app-frame: the banner is fixed to the viewport, not part
-           * of the page's column.
+           * Outside .app-frame: everything in here is fixed to the viewport,
+           * not part of the page's column.
+           *
+           * Both of these speak from the bottom edge, and either can be on
+           * screen while the other is, so they share one stack rather than
+           * being layered on top of each other. Order is deliberate: a strip
+           * reporting that the connection is gone sits above the one asking
+           * about cookies, because only one of the two is urgent.
            *
            * When analytics is added, mount it here and gate it on
            * hasAnalyticsConsent() from lib/consent.ts — re-checking on the
            * CONSENT_EVENT, so a reader who accepts gets it without a reload
            * and one who declines never loads the script at all.
            */}
-          <CookieBanner />
+          <div className="edge-stack">
+            <AppStatus />
+            <CookieBanner />
+          </div>
         </Providers>
       </body>
     </html>

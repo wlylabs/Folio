@@ -49,6 +49,28 @@ import { formatBps, formatEth, shortAddress } from "@/lib/types";
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
 /**
+ * The image types the storage bucket accepts, which is what makes this list
+ * worth keeping in step rather than loosening — see the bucket's
+ * `allowed_mime_types` in lib/schema.sql, which is where the rule actually
+ * lives. Checking it here too is not duplication for its own sake: it is the
+ * difference between "Avatar must be a PNG…" under the field and a storage
+ * error from Supabase after the reader has filled in the whole form.
+ *
+ * `image/svg+xml` is absent deliberately. An SVG is a document that can carry
+ * script — inert inside the <img> a listing draws it in, and not inert at all
+ * when someone opens the public storage link to it directly.
+ */
+const AVATAR_EXTENSIONS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/avif": "avif",
+};
+
+const AVATAR_TYPES = Object.keys(AVATAR_EXTENSIONS);
+
+/**
  * A billion tokens, the memecoin convention. It is only a default — the field
  * takes anything the factory will accept, and the curve prices whatever supply
  * you choose against the same starting reserve, so a bigger supply is a smaller
@@ -300,8 +322,11 @@ function validate(form: FormState, avatar: File | null, config: CurveConfig | un
   else if (title.length > 200) errors.articleTitle = "Keep the headline under 200 characters.";
 
   if (avatar) {
-    if (!avatar.type.startsWith("image/")) errors.avatar = "Avatar must be an image.";
-    else if (avatar.size > MAX_AVATAR_BYTES) errors.avatar = "Avatar must be under 2 MB.";
+    if (!AVATAR_TYPES.includes(avatar.type)) {
+      errors.avatar = "Avatar must be a PNG, JPEG, GIF, WebP or AVIF image.";
+    } else if (avatar.size > MAX_AVATAR_BYTES) {
+      errors.avatar = "Avatar must be under 2 MB.";
+    }
   }
 
   return errors;
@@ -428,8 +453,17 @@ export default function LaunchForm() {
   };
 
   async function uploadAvatar(file: File, owner: string): Promise<string> {
-    const ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
-    const path = `${owner.toLowerCase()}/${Date.now()}.${ext || "png"}`;
+    /*
+     * The extension comes from the type, not from the name.
+     *
+     * A filename is whatever the reader's disk says it is — "logo.html", or no
+     * extension at all — and it used to be carried straight through into the
+     * object's path. The bucket's insert policy now checks that extension
+     * (lib/schema.sql), so deriving it from the type the file was validated as
+     * is both the honest name for the object and the one that will be accepted.
+     */
+    const ext = AVATAR_EXTENSIONS[file.type] ?? "png";
+    const path = `${owner.toLowerCase()}/${Date.now()}.${ext}`;
 
     const { error } = await supabase.storage
       .from("token-avatars")
@@ -932,7 +966,9 @@ export default function LaunchForm() {
           <Field label="Token avatar" hint="Optional, max 2 MB" error={errors.avatar} wide>
             <input
               type="file"
-              accept="image/*"
+              // The same list the bucket enforces, so the file picker offers
+              // only files that will be accepted.
+              accept={AVATAR_TYPES.join(",")}
               disabled={busy}
               onChange={(e) => {
                 setAvatar(e.target.files?.[0] ?? null);

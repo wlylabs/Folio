@@ -204,6 +204,38 @@
 }
 
 /* ==========================================================================
+   Boot
+
+   The frame between "the browser has the HTML" and "the page is on screen".
+
+   `data-booting` is put on <html> by lib/boot.ts and taken off two animation
+   frames later, and while it is there this page does not move. That is worth
+   spelling out, because the things it holds still are things that only ever
+   happen on a reload:
+
+    - The scroll position. A browser restores it on refresh, and with
+      `scroll-behavior: smooth` below, it *animates* down to it — the page opens
+      at the top and scrolls itself to where the reader was, every time. There is
+      no reader who asked for that.
+    - Every transition. Anything whose final colour, position or size is settled
+      by script rather than by the server — the palette, the masthead's own
+      layout — would otherwise be watched crossfading into place.
+
+   It is a floor, not a ceiling: entrance animations are left alone, because an
+   element that arrives after the page has settled *should* read as arriving.
+   ========================================================================== */
+
+:root[data-booting] {
+  scroll-behavior: auto !important;
+}
+
+:root[data-booting] *,
+:root[data-booting] *::before,
+:root[data-booting] *::after {
+  transition: none !important;
+}
+
+/* ==========================================================================
    Base
    ========================================================================== */
 
@@ -216,6 +248,16 @@
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
+  /*
+   * The same paper the body is painted in.
+   *
+   * The body's background propagates to the canvas, so this looks redundant and
+   * is not: it is what the browser paints over the area a rubber-band scroll
+   * pulls into view, and what the installed app paints behind the page while a
+   * route is still being fetched. Without it, an overscroll on the night page
+   * shows a band of white at the top of the screen.
+   */
+  background: var(--paper);
 }
 
 body {
@@ -558,6 +600,30 @@ p {
 .nav-link[aria-current="page"] {
   color: var(--ink);
   font-weight: 600;
+}
+
+/*
+ * The reader's own page, before the page knows whether they have one.
+ *
+ * wagmi is configured for SSR, so every page is rendered as though no wallet
+ * were connected and the stored session is revived a few hundred milliseconds
+ * into the client's life. Left alone, that means the masthead gains a link and
+ * everything to its right slides sideways, on every reload, for every reader
+ * who has ever connected — the jump that reads as the page glitching.
+ *
+ * So the space is held instead, from a hint the boot script reads before the
+ * first paint (lib/walletHint.ts). The word is drawn but not shown, which is
+ * what makes the reservation exactly the right width; components/Nav.tsx swaps
+ * it for the real link the moment wagmi answers, and the hint is rewritten so
+ * a reader who has disconnected stops holding space they no longer need.
+ */
+.nav-link--held {
+  display: none;
+  visibility: hidden;
+}
+
+:root[data-wallet] .nav-link--held {
+  display: inline-flex;
 }
 
 /* ==========================================================================
@@ -2704,6 +2770,43 @@ p {
 }
 
 /* ==========================================================================
+   The bottom edge
+
+   Two things speak from down here — the connection and update strip
+   (components/AppStatus.tsx) and the consent question — and either can be on
+   screen while the other is. So the edge is one stack rather than two fixed
+   elements discovering each other at runtime: the container is what is pinned,
+   the strips inside it are ordinary blocks, and the last one carries the
+   shadow and the safe-area padding for the whole pile.
+   ========================================================================== */
+
+.edge-stack {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  /* The strips inside it are; the gaps between them are not. Without this the
+     stack would swallow clicks along the bottom of every page it is empty on. */
+  pointer-events: none;
+  box-shadow: var(--shadow-lift);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--paper-raised);
+}
+
+/* Nothing pinned means nothing drawn: an empty stack must not leave a strip of
+   raised paper and a shadow along the bottom of the window. */
+.edge-stack:empty {
+  display: none;
+}
+
+.edge-stack > * {
+  pointer-events: auto;
+}
+
+/* ==========================================================================
    Cookie consent
 
    A strip on the bottom edge, not a modal. It asks a question; it does not
@@ -2711,15 +2814,8 @@ p {
    ========================================================================== */
 
 .consent {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 40;
   background: var(--paper-raised);
   border-top: 1px solid var(--ink);
-  box-shadow: var(--shadow-lift);
-  padding-bottom: env(safe-area-inset-bottom);
   /* It arrives a beat after the page, once the effect has read localStorage.
      Sliding it up off the edge is what stops that beat from looking like the
      layout jumped. */
@@ -2762,5 +2858,86 @@ p {
 
   .consent__actions .btn {
     flex: 1 1 0;
+  }
+}
+
+/* ==========================================================================
+   Status strip
+
+   What the page says about itself: the connection is gone, or a newer build is
+   installed and waiting. Same edge and same construction as the consent strip
+   above, one weight quieter — it reports a state rather than asking a question.
+   ========================================================================== */
+
+.status-strip {
+  background: var(--paper-sunk);
+  border-top: 1px solid var(--ink);
+  --surface-in-from: 100%;
+  animation: surface-in var(--dur-slow) var(--ease) both;
+}
+
+.status-strip__inner {
+  width: 100%;
+  max-width: var(--shell);
+  margin-inline: auto;
+  padding: var(--sp-3) var(--gutter);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+}
+
+.status-strip__copy {
+  margin: 0;
+  flex: 1 1 18rem;
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.status-strip__copy strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/*
+ * A square, not a dot: the same figure the settings button uses for a
+ * connected wallet, in the ink of whatever it is reporting. It is decoration —
+ * every strip states its condition in words, and the mark is aria-hidden.
+ */
+.status-strip__mark {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--ink-muted);
+}
+
+.status-strip__mark--offline {
+  background: var(--down);
+}
+
+/* ==========================================================================
+   Installed
+
+   Folio on a home screen has no address bar, which takes two things with it:
+   the padding that kept the masthead clear of a notch, and any indication of
+   where the reader is. The first is worth restoring; the second is what the
+   masthead has always been.
+   ========================================================================== */
+
+@media (display-mode: standalone) {
+  .navbar {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /*
+   * There is no browser to rubber-band against, so overscroll has nothing to
+   * reveal but the page pulling away from its own edges — and on iOS, a
+   * downward drag at the top of a standalone app is what reloads it, losing
+   * an unsigned form in the process.
+   */
+  body {
+    overscroll-behavior-y: none;
   }
 }

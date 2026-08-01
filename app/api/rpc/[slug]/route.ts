@@ -34,8 +34,13 @@ export const runtime = "nodejs";
  * never through this, so refusing writes costs Folio nothing and means a
  * stranger who finds this URL cannot use it to push transactions or spend an
  * endpoint's write quota. It is still an open relay for reads: the origin check
- * below only keeps other *websites* from scripting it, and rate limiting, if
- * this ever needs it, belongs at the edge.
+ * below only keeps other *websites* from scripting it.
+ *
+ * Three limits keep that openness from being worth exploiting — an allowlist of
+ * read methods, a cap on how large a body may be, and a per-caller count for
+ * the minute. All three are described where they are defined. None of them is a
+ * substitute for rate limiting at the edge, which is the only place a request
+ * can be refused before it costs anything to receive.
  */
 
 /**
@@ -79,6 +84,46 @@ const ALLOWED = new Set([
  */
 const MAX_BATCH = 20;
 
+/**
+ * How large a request body may be before it is refused, unread.
+ *
+ * A JSON-RPC read is small — the largest thing Folio sends is an `eth_call`
+ * carrying calldata, which is hundreds of bytes. Without a cap, `request.json()`
+ * will happily buffer whatever arrives, and "whatever arrives" is chosen by
+ * whoever found this URL. 64 KiB is orders of magnitude above any real call and
+ * far below anything worth calling an attack.
+ *
+ * The check is on the stream rather than on `content-length`, because a header
+ * is a claim and the body is the fact.
+ */
+const MAX_BODY_BYTES = 64 * 1024;
+
+/**
+ * Requests one address may make, and the window they are counted over.
+ *
+ * This is a courtesy limit, not a security boundary, and the difference matters:
+ * the counter lives in one server instance's memory, so a platform running
+ * several of them enforces this several times over, and a cold start forgets
+ * everything. What it does do is stop a single script from turning Folio's
+ * origin into a free, unmetered front end for someone else's RPC quota — which
+ * is the realistic abuse of a relay that answers reads to anyone.
+ *
+ * Real rate limiting belongs at the edge, where the request has not yet cost a
+ * function invocation. This is what is available from inside the function.
+ */
+const RATE_LIMIT = 120;
+const RATE_WINDOW_MS = 60_000;
+
+/** Callers seen in the current window, and how many calls each has made. */
+const seen = new Map<string, { count: number; resetAt: number }>();
+
+/**
+ * Callers tracked at once. The map is process-wide and lives as long as the
+ * instance, so it evicts rather than growing — an address that falls off the
+ * end simply starts a fresh window, which is the harmless direction to fail.
+ */
+const MAX_TRACKED = 5_000;
+
 /** Upstream is allowed this long before we give up on it. */
 const TIMEOUT_MS = 12_000;
 
@@ -108,9 +153,18 @@ export async function POST(request: Request, { params }: { params: { slug: strin
     return rpcError(-32600, "Cross-origin requests are not accepted here.", 403);
   }
 
+  if (rateLimited(request)) {
+    return rpcError(-32005, "Too many requests to this relay. Try again shortly.", 429);
+  }
+
+  const raw = await readCapped(request.body, MAX_BODY_BYTES);
+  if (raw === null) {
+    return rpcError(-32600, "Request body is too large for this relay.", 413);
+  }
+
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(raw);
   } catch {
     return rpcError(-32700, "Body is not JSON.", 400);
   }
@@ -179,6 +233,72 @@ function rpcError(code: number, message: string, status: number) {
     { jsonrpc: "2.0", id: null, error: { code, message } },
     { status, headers: { "cache-control": "no-store" } }
   );
+}
+
+/**
+ * The body as text, or null if it is larger than the cap.
+ *
+ * Read a chunk at a time so an oversized body is refused while it is still
+ * being sent, rather than after it has all been held in memory. The stream is
+ * cancelled on the way out, which is what tells the client to stop.
+ */
+async function readCapped(
+  body: ReadableStream<Uint8Array> | null,
+  max: number
+): Promise<string | null> {
+  if (!body) return "";
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let size = 0;
+  let text = "";
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      size += value.byteLength;
+      if (size > max) {
+        await reader.cancel();
+        return null;
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    return text + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/**
+ * Whether this caller has had its allowance for the minute.
+ *
+ * The address comes from `x-forwarded-for`, which is a header and therefore a
+ * claim — anyone can send one. That is fine for what this is: the leftmost
+ * entry is written by the platform's own proxy in front of this code, and a
+ * caller who forges it only ever moves themselves into a different bucket. It
+ * is not an identity, and nothing but this counter treats it as one.
+ */
+function rateLimited(request: Request): boolean {
+  const forwarded = request.headers.get("x-forwarded-for");
+  const caller = forwarded?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
+
+  const now = Date.now();
+  const entry = seen.get(caller);
+
+  if (!entry || now > entry.resetAt) {
+    if (seen.size >= MAX_TRACKED) {
+      // Oldest insertion first, which is close enough to oldest window.
+      const oldest = seen.keys().next();
+      if (!oldest.done) seen.delete(oldest.value);
+    }
+    seen.set(caller, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return false;
+  }
+
+  entry.count += 1;
+  return entry.count > RATE_LIMIT;
 }
 
 /** Whether an `Origin` header names the same host this request arrived on. */

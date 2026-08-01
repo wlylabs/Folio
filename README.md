@@ -251,12 +251,55 @@ point on the chart highlights its row.
 
 Everything the UI is made of lives in `app/globals.css` as custom properties —
 which is what makes the night palette a re-pointing of about twenty tokens
-rather than a second stylesheet. `lib/theme.ts` owns the vocabulary and the
-boot script that puts `data-theme` on `<html>` before the first paint;
+rather than a second stylesheet. `lib/theme.ts` owns the vocabulary;
+`lib/boot.ts` owns the script that runs before the first paint;
 `components/ThemeProvider.tsx` keeps it in step with the settings panel, other
 tabs and the operating system. The default is `system`, and the wallet modal
 follows along — `lib/walletTheme.ts` carries both palettes, because a wallet
 list in full daylight opened from a dark page is the whole illusion gone.
+
+### What happens on a reload
+
+Four things are settled by `lib/boot.ts` in the document head, before the
+browser paints anything, because each one is a visible fault if it is settled a
+frame later instead:
+
+- **the palette**, on `data-theme` and `color-scheme`;
+- **`theme-color`**, which on a phone is the address bar above the page and the
+  gesture strip below it — the largest surface on the screen the stylesheet
+  cannot reach;
+- **a booting mark**, cleared two animation frames later, which holds every CSS
+  transition and the page's smooth scrolling still while the first paint is
+  assembled. A reload restores the scroll position, and with smooth scrolling
+  on the document the browser *animates* down to it — a stutter on every
+  refresh;
+- **a wallet hint** (`lib/walletHint.ts`), so the masthead holds the space for
+  the reader's own link while wagmi revives a stored session, rather than
+  gaining a link and reflowing a beat after the page is on screen. It is a
+  guess about layout and never an authority on the connection: wagmi still
+  decides that, and the hint is rewritten every time it answers.
+
+### Installing it
+
+Folio is a progressive web app. `app/manifest.ts` describes it, the icons are
+drawn at build time from the same mark as the favicon (`lib/appIcon.tsx`), and
+`public/sw.js` is the service worker.
+
+The offer to install is in the settings panel and nowhere else — no banner, no
+interstitial — which is what `lib/installPrompt.ts` catches
+`beforeinstallprompt` for. `components/AppStatus.tsx` registers the worker and
+owns the two things the page says about itself from the bottom edge: that the
+connection is gone, and that a newer build is installed and waiting for a
+reload it does not take by itself.
+
+The worker's caching rules are shaped by one question asked of every request:
+can this be stale without lying? `/api/*` and every non-GET request are never
+cached at all, because a cached price is not an old price but a wrong one.
+Pages are network-first and only come from cache once the network has already
+failed — with the offline strip on screen saying so. Build output under
+`/_next/static/` is cache-first, since its names carry a content hash. Nothing
+cross-origin is touched. `app/offline/page.tsx` is what a reader gets for a
+page the worker has never seen.
 
 Two colours reach controls, and only inside a trade panel: green to buy, red to
 sell. Everywhere else the primary action is ink, because everywhere else there
@@ -386,12 +429,66 @@ compiler — only edits to a `.sol` file do.
   matching Tiptap's output. Stored bodies are untrusted — they arrive through
   the public anon key.
 - **Addresses are stored lowercased** so URL lookups are case-insensitive.
+- **An avatar URL is refused in three places.** The column is written through
+  the public anon key and read into an `<img src>` on the feed, the listing and
+  both of their share cards, so an arbitrary value is a way to make every
+  reader's browser announce itself to a server the author chose. The insert
+  policy in `lib/schema.sql` refuses to store one that does not point at this
+  project's own storage bucket, `components/Mark.tsx` draws the monogram
+  instead of an `<img>` for anything that is not plainly an http(s) URL, and
+  the `img-src` directive stops the browser fetching it either way.
 - **The front page explains itself below the feed.** How a launch works, the
   curve terms the factory would hand the next one (read from
   `deployments/<chain>.json`, never written into the copy), and what the site
   does and doesn't promise — including which network settles in real ETH. Those
   sections are not conditional on the feed being empty: a site with one listing
   needs them as much as one with none.
+
+## Security of the web app
+
+The contracts have their own review — `npm run slither` and section 2 of
+DEPLOYMENT.md. This is the other half: the site in front of them.
+
+**Headers.** `lib/securityHeaders.js` builds them and `next.config.js` applies
+them to every response. The Content-Security-Policy is assembled from the
+environment rather than written out flat, so a deploy pointed at a different
+Supabase project or a dedicated RPC does not get a policy that blocks its own
+database. It allows inline scripts and says why in a comment worth reading
+before changing it: Next's App Router serves inline bootstrap scripts whose
+content differs per render, so covering them means either a per-request nonce —
+which would opt every prerendered route in this app into dynamic rendering — or
+this. Script from another origin still cannot execute at all. Alongside it:
+`nosniff`, `strict-origin-when-cross-origin` referrers, a `Permissions-Policy`
+that switches off features this page has no use for (leaving WebHID alone, so
+hardware wallets keep working), `same-origin-allow-popups` isolation, and HSTS
+in production. `frame-ancestors` allows Safe's app and refuses everything else,
+because the Safe connector only works inside a frame.
+
+Two escape hatches exist because a policy that cannot be verified gets deleted
+instead: `CSP_REPORT_ONLY=1` reports violations without enforcing any, and
+`CSP_EXTRA_ORIGINS` adds hosts. Both are documented in `.env.example`. Verify a
+new connector on a preview deploy with the first, then turn it off.
+
+**Untrusted input.** Everything a stranger can write arrives through the public
+Supabase anon key, and every consumer treats it that way. Article bodies are
+allowlist-sanitised on render (`lib/sanitize.ts`). Avatar URLs are constrained
+by the insert policy, the component and the policy header. The storage bucket
+carries a size limit and an image-only MIME allowlist, and no SVG — an SVG is a
+document that can carry script, harmless in an `<img>` and not harmless when
+the public link to it is opened directly.
+
+**The endpoints.** `/api/rpc/<chain>` forwards a fixed list of read methods,
+refuses cross-origin scripting, caps the body it will read and counts calls per
+caller per minute. `/api/indexer` compares its bearer token with a timing-safe
+comparison over two hashes. Neither returns an exception's message to the
+caller — those go to the log, because a thrown RPC or Postgres error names
+endpoints and occasionally carries a key.
+
+**What is not solved.** `creator_wallet` is a claim, not an authenticated fact:
+the anon key carries no wallet identity, and proving it needs Sign-In With
+Ethereum issuing a Supabase JWT. Everything that decides what a creator may do
+reads `creator()` from the contract instead. The in-process rate limiter is
+per-instance and best-effort; real rate limiting belongs at the edge.
 
 ## Possible next steps
 

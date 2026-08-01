@@ -8,6 +8,7 @@ import WalletButton from "@/components/WalletButton";
 import WalletHandoff from "@/components/WalletHandoff";
 import CurrencySelector from "@/components/CurrencySelector";
 import ThemeSelector from "@/components/ThemeSelector";
+import InstallControl from "@/components/InstallControl";
 import { DEFAULT_CHAIN_SLUG, chainLabel } from "@/lib/chains";
 import { FACTORY_DEPLOYMENTS } from "@/lib/contracts/deployment";
 import { CONSENT_EVENT, readConsent, writeConsent, type ConsentChoice } from "@/lib/consent";
@@ -119,6 +120,12 @@ export default function SettingsMenu() {
             <h2 className="eyebrow">Display currency</h2>
             <CurrencySelector />
           </section>
+
+          {/* The offer to install, in the one place a reader goes looking for
+              things they can decide. It brings its own heading, because it
+              renders nothing at all — heading included — once Folio is the app
+              they are already in. */}
+          <InstallControl />
 
           {/*
             No faucet section, and there should not be one. This panel used to

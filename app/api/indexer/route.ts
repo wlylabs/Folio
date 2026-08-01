@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { syncLaunches } from "@/lib/indexer";
 import { hasServiceRole } from "@/lib/supabaseAdmin";
@@ -40,8 +41,13 @@ export async function GET(request: Request) {
   const secret = process.env.INDEXER_SECRET;
   if (secret) {
     const header = request.headers.get("authorization");
-    if (header !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!matchesSecret(header, `Bearer ${secret}`)) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        // A 401 that a CDN is free to cache is a 401 served to the next caller
+        // who does hold the secret.
+        { status: 401, headers: { "cache-control": "no-store" } }
+      );
     }
   }
 
@@ -61,13 +67,37 @@ export async function GET(request: Request) {
       { status: result.error ? 500 : 200 }
     );
   } catch (err) {
+    // The detail goes to the log, which the operator can read, rather than
+    // into the response, which anyone can. A thrown RPC or Postgres error
+    // carries endpoints, table names and occasionally a URL with a key in it.
     console.error("Indexer run failed:", err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : String(err) },
-      { status: 500 }
+      { error: "The indexer run failed. See the server log for the reason." },
+      { status: 500, headers: { "cache-control": "no-store" } }
     );
   }
 }
 
 /** Same work, for callers that would rather POST — a webhook, usually. */
 export const POST = GET;
+
+/**
+ * Whether a presented credential is the expected one, in time that does not
+ * depend on how much of it was right.
+ *
+ * `===` on two strings stops at the first byte that differs, and the time it
+ * took to stop is a measurement an attacker can make — repeatedly, from a
+ * network they control, one byte at a time. It is a slow attack and a real
+ * one, and the fix is a comparison that always reads both values to the end.
+ *
+ * The hash is what makes that possible: `timingSafeEqual` throws on inputs of
+ * different lengths, and refusing early on a length mismatch would leak the
+ * length. Two SHA-256 digests are always 32 bytes, whatever went into them.
+ */
+function matchesSecret(presented: string | null, expected: string): boolean {
+  if (!presented) return false;
+
+  const a = createHash("sha256").update(presented).digest();
+  const b = createHash("sha256").update(expected).digest();
+  return timingSafeEqual(a, b);
+}

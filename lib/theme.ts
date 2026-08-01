@@ -37,6 +37,26 @@ export const DEFAULT_THEME: ThemePreference = "system";
 /** The media query that answers for `system`. */
 export const DARK_QUERY = "(prefers-color-scheme: dark)";
 
+/**
+ * The paper colour of each palette, as a literal.
+ *
+ * It is the one value in this file that duplicates something in
+ * app/globals.css — `--paper`, in both blocks — and it has to, because the two
+ * places that need it cannot read a stylesheet: `<meta name="theme-color">`,
+ * which is what a phone paints its address bar and its gesture area with, and
+ * the manifest's `theme_color`/`background_color`, which is what the operating
+ * system paints the splash screen and the task-switcher card with. app/og.png
+ * carries the same copy for the same reason.
+ *
+ * Keep the three in step. A drift here is not subtle: it is a band of the wrong
+ * colour along the top of every phone that has the site installed.
+ */
+export const THEME_CANVAS: Record<ResolvedTheme, string> = {
+  light: "#f7f6f2",
+  dark: "#0d0d0c",
+};
+
+
 export const THEME_OPTIONS: readonly { value: ThemePreference; label: string }[] = [
   { value: "system", label: "System" },
   { value: "light", label: "Day" },
@@ -96,27 +116,23 @@ export function resolveTheme(preference: ThemePreference): ResolvedTheme {
  * between navigations. Both are set together, always, because a page whose
  * scrollbar is the wrong theme is the one detail that gives away that dark mode
  * was bolted on.
+ *
+ * `theme-color` is the third of the same kind, and the largest: on a phone it is
+ * the address bar above the page and the gesture strip below it. Left unset, a
+ * reader on the night page gets a full-width band of the browser's own colour
+ * top and bottom — and on a reload, that band changes colour a beat after the
+ * page does, which is the flash this is here to remove.
  */
 export function applyTheme(theme: ResolvedTheme): void {
   const root = document.documentElement;
   root.dataset.theme = theme;
   root.style.colorScheme = theme;
-}
 
-/**
- * The same work, as a string, for a <script> in the document head.
- *
- * It has to run before the first paint. React cannot do that — the earliest it
- * can set an attribute is hydration, which is several hundred milliseconds and
- * one full-brightness flash of paper too late for a reader who asked for the
- * dark one. So the boot script reads the stored answer synchronously in the
- * head, and the provider below only ever agrees with what it already did.
- *
- * Everything it touches is in a try/catch: this runs before anything else on
- * the page, and a storage exception here would take the whole document with it.
- */
-export const THEME_BOOT_SCRIPT = `(function(){try{var p=localStorage.getItem(${JSON.stringify(
-  THEME_KEY
-)});var t=(p==="light"||p==="dark")?p:(window.matchMedia&&window.matchMedia(${JSON.stringify(
-  DARK_QUERY
-)}).matches?"dark":"light");var r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t;}catch(e){}})();`;
+  let meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.setAttribute("name", "theme-color");
+    document.head.appendChild(meta);
+  }
+  meta.setAttribute("content", THEME_CANVAS[theme]);
+}
