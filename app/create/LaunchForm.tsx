@@ -772,7 +772,15 @@ export default function LaunchForm() {
         </div>
       )}
 
-      {isConnected && chainEntry && (
+      {/*
+        The funded case, and only the funded case. A number here is the one
+        confirmation that the signature ahead can be paid for, and nothing else
+        on the page says it. An empty wallet, a failed read and a read still in
+        flight are the notice's to report — it says the same thing with the
+        reason, the address and a way to press again, so a second line above it
+        is an echo rather than a reading.
+      */}
+      {isConnected && chainEntry && balance && balance.value > 0n && (
         <div
           className="font-ui"
           style={{
@@ -789,11 +797,7 @@ export default function LaunchForm() {
         >
           <span>{chainEntry.chain.name}</span>
           <span className="nums" style={{ fontWeight: 600, color: "var(--ink)" }}>
-            {balance
-              ? `${formatEth(Number(formatUnits(balance.value, balance.decimals)))} ${balance.symbol}`
-              : gasUnreadable
-                ? "balance unavailable"
-                : "checking balance..."}
+            {formatEth(Number(formatUnits(balance.value, balance.decimals)))} {balance.symbol}
           </span>
         </div>
       )}
