@@ -265,6 +265,30 @@ compiler — only edits to a `.sol` file do.
   `WalletSessionSync` adopts the approved session across the first seconds the
   tab is visible again, however it got there, and the wallet button reads
   "Connecting…" while it does.
+- **When that round trip cannot be made, Folio offers the other way in.**
+  Pairing from a phone browser needs WalletConnect's relay, a wallet that
+  recognises the chain in the proposal, and something to hand the reader back —
+  and when any of it fails the reader is told "not supported" by an app that is
+  not this one. `components/WalletHandoff.tsx` sits under the connect button as
+  one quiet line, and opens into links that load the current page inside
+  MetaMask's, Coinbase Wallet's or Trust's own browser, plus a copy-link for
+  every wallet not on that list. There the page runs where the wallet already
+  is: `window.ethereum` is present, the connection is local, and there is no app
+  switch to survive. It hides itself entirely where it is not needed — a desktop
+  with an extension, or a page already opened inside a wallet browser. The same
+  component is the answer for a deployment with no
+  `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, which additionally stops the connect
+  modal from listing wallets that cannot pair at all (`lib/wagmiConfig.ts`).
+- **The trade panel has a compact setting, and it is the phone's default.** Buy
+  and sell are drawn from the same three parts in the same order — amount, quick
+  sizes (`0.01/0.05/0.1 ETH` and the curve's ceiling; `25/50/75%` and Max), then
+  the button — so switching tabs changes the numbers and nothing else. Compact
+  keeps those and folds the slippage presets and the curve's accounting behind
+  "Details", with the slippage in force printed in the line that stays, so
+  nothing is hidden silently. The choice is remembered
+  (`components/useTradeDensity.ts`); unanswered, it comes from the screen, since
+  the dock covers the article on a phone and sits in the rail beside it on a
+  desktop.
 - **A wallet that connects on the wrong chain is moved, not scolded.** Wallets
   open on Ethereum mainnet, which Folio does not support, so a fresh connection
   used to land straight on "Wrong network". The connect request now names the

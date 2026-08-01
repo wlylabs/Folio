@@ -23,6 +23,7 @@ import {
 } from "viem";
 import { useRouter } from "next/navigation";
 import WalletButton from "@/components/WalletButton";
+import WalletHandoff from "@/components/WalletHandoff";
 import FiatValue from "@/components/FiatValue";
 import { GasNotice } from "@/components/Faucet";
 import { useGasBalance } from "@/components/useGasBalance";
@@ -668,6 +669,11 @@ export default function LaunchForm() {
             Nothing is published until you approve the transaction.
           </p>
           <WalletButton variant="block" />
+          {/* The way in for a phone that cannot pair from a browser tab.
+              Renders nothing when the button above is enough. */}
+          <div style={{ marginTop: "var(--sp-3)" }}>
+            <WalletHandoff />
+          </div>
         </div>
       )}
 

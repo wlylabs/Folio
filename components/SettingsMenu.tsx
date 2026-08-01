@@ -5,11 +5,11 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAccount } from "wagmi";
 import WalletButton from "@/components/WalletButton";
+import WalletHandoff from "@/components/WalletHandoff";
 import CurrencySelector from "@/components/CurrencySelector";
 import { FaucetDirectory } from "@/components/Faucet";
 import { DEFAULT_CHAIN_SLUG, chainLabel } from "@/lib/chains";
 import { FACTORY_DEPLOYMENTS } from "@/lib/contracts/deployment";
-import { hasWalletConnectProjectId } from "@/lib/wagmiConfig";
 import { CONSENT_EVENT, readConsent, writeConsent, type ConsentChoice } from "@/lib/consent";
 import { CONTACT_EMAIL } from "@/lib/contact";
 
@@ -100,17 +100,14 @@ export default function SettingsMenu() {
                 trade from an article.
               </p>
             )}
-            {!isConnected && !hasWalletConnectProjectId && (
-              // Without a project ID there is no relay, so a phone wallet can
-              // show the approval and still never reach this page. Say that
-              // here rather than leaving it as a silent failure that looks like
-              // a broken site.
-              <p className="settings__note">
-                This deployment has no WalletConnect project ID, so phone
-                wallets can&apos;t connect — use a browser-extension wallet, or
-                set <code>NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID</code>.
-              </p>
-            )}
+            {/*
+              The other way in, for a phone that cannot pair from a browser tab
+              — including the case this panel used to describe in prose, a
+              deployment with no WalletConnect project ID. It says the same
+              thing and hands over a link that works. Renders nothing when the
+              connect button is enough.
+            */}
+            <WalletHandoff />
           </section>
 
           <section className="settings__group">

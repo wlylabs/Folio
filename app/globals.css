@@ -856,6 +856,69 @@ p {
   letter-spacing: -0.01em;
 }
 
+/*
+ * The wallet handoff: the way into a wallet's own browser, for a phone where
+ * connecting from a browser tab does not work. See components/WalletHandoff.
+ *
+ * One quiet line until it is asked for. It sits under a Connect button that
+ * most readers will never have trouble with, and a paragraph about app links
+ * printed above the fold would be an answer to a question nobody had yet.
+ */
+.handoff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.handoff__trigger {
+  align-self: flex-start;
+  padding: 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--rule-strong);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .handoff__trigger:hover {
+    color: var(--ink);
+    border-bottom-color: var(--ink);
+  }
+}
+
+.handoff__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  animation: line-in var(--dur) var(--ease) both;
+}
+
+.handoff__note {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.handoff__note code {
+  font-size: 0.95em;
+  word-break: break-all;
+}
+
+/* A chip that is a link. Same control, minus the underline every anchor on the
+   site otherwise carries, and with the thumb height a phone needs. */
+.chip--link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding-inline: 0.75rem;
+  text-decoration: none;
+}
+
 /* ==========================================================================
    Forms
    ========================================================================== */
@@ -2058,6 +2121,50 @@ html[data-dock] body {
 }
 
 /*
+ * The curve panel's own form: amount, quick sizes, button.
+ *
+ * Stacked, where the legacy panel beside it puts the field and the button on
+ * one line. The difference is the row of sizes: squeezed into a shared line the
+ * chips wrapped one to a row and the column grew four rows tall, which left the
+ * button floating against the middle of them. Full width each, in the order
+ * they are used — decide the amount, then press.
+ */
+.trade-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.trade-form__amount {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+/*
+ * A tablet, where the dock still spans the window: a button the width of the
+ * screen reads as a banner rather than a control, so the two halves go back
+ * side by side. Below this the stack is right; above 64rem the dock is a narrow
+ * rail and the stack is right again.
+ */
+@media (min-width: 40rem) and (max-width: 63.999rem) {
+  .trade-form {
+    flex-direction: row;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .trade-form__amount {
+    flex: 1 1 14rem;
+  }
+
+  .trade-form__action {
+    flex: 0 1 16rem;
+  }
+}
+
+/*
  * The action wraps onto its own line rather than squeezing — "Connect wallet"
  * does not fit beside the amount inside the desktop rail, and a two-line
  * button reads as a mistake in a way a stacked one does not.
@@ -2065,6 +2172,59 @@ html[data-dock] body {
 .trade-row__action {
   flex: 1 1 11rem;
   min-width: 0;
+}
+
+/* Sizes wrap rather than scroll: four chips fit a phone at this size, and a row
+   that scrolled would hide the last one behind an edge nobody swipes. */
+.trade-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+/*
+ * The line that always survives, and the control that decides what is under it.
+ * Baseline-aligned so the toggle sits on the same line as the first line of the
+ * quote rather than centred against a summary that wrapped to three.
+ */
+.trade-summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+}
+
+.trade-summary .trade-foot {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* A view control, at the weight of one: it must not read as a third thing to
+   press on a panel whose other two spend money. */
+.trade-summary__toggle {
+  flex: 0 0 auto;
+  font-size: var(--fs-eyebrow);
+  color: var(--ink-muted);
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .trade-summary__toggle:hover {
+    color: var(--ink);
+    border-bottom-color: var(--ink);
+  }
+}
+
+/* Slippage and the curve's accounting, behind "Details". `hidden` does the
+   hiding; this is only the spacing for when it is not. */
+.trade-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.trade-details[hidden] {
+  display: none;
 }
 
 .trade-foot {
