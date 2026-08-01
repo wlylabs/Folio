@@ -183,6 +183,42 @@ export default function LaunchForm() {
     refetch: refetchBalance,
   } = useGasBalance({ address, chainId: chainEntry?.chain.id });
 
+  /**
+   * What to tell a creator whose gas turned out to be on another chain.
+   *
+   * The launch is the one screen where finding the money elsewhere can be good
+   * news: nothing has been signed yet, so if Folio has a factory on the chain
+   * the ETH is actually on, the listing can go there instead and the faucet
+   * stops being the blocker. That is one press — the same press the network
+   * picker makes, aimed by the balance sweep rather than by the creator
+   * guessing which testnet they claimed on.
+   *
+   * When there is no factory there, the honest answer is the other one. A
+   * reader who knows their ETH is on Sepolia will otherwise go looking for a
+   * bridge or a setting that would let them spend it, and there isn't one;
+   * saying so is what ends that search and sends them to the faucet.
+   */
+  const elsewhereDeployment = gasElsewhere ? deploymentFor(gasElsewhere.slug) : null;
+  const wayOut = !gasElsewhere
+    ? null
+    : elsewhereDeployment
+      ? {
+          note: `Folio launches on ${gasElsewhere.name} too — this listing can go there instead and spend the ${gasElsewhere.symbol} you already hold. That factory's curve terms apply, and the token stays on that network for good.`,
+          action: {
+            label: `Launch on ${gasElsewhere.name} instead`,
+            disabled: busy,
+            onClick: () => {
+              setChainSlug(elsewhereDeployment.chain);
+              // Same reason as the network picker: these errors were measured
+              // against the old chain's caps and no longer describe anything.
+              setErrors({});
+            },
+          },
+        }
+      : {
+          note: `Folio has no factory on ${gasElsewhere.name}, so there is nowhere to move this launch to: nothing on Folio can spend that balance where it sits.`,
+        };
+
   // The curve opens at virtualEthReserve / supply, so the price a buyer first
   // sees is known before anything is signed.
   const openingPrice = useMemo(
@@ -469,6 +505,7 @@ export default function LaunchForm() {
             heading={`No ${chainEntry?.chain.nativeCurrency.symbol ?? "test ETH"} to pay gas with`}
             address={address}
             elsewhere={gasElsewhere}
+            wayOut={wayOut}
             unreadable={gasUnreadable}
             onRecheck={() => void refetchBalance()}
             checking={checkingGas}

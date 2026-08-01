@@ -31,6 +31,40 @@ export function FaucetLinks({ chain }: { chain: string }) {
 }
 
 /**
+ * What a page can offer a reader whose gas turned out to be on another chain.
+ *
+ * `note` is always worth saying: even "there is no way to spend it here" ends
+ * the search. `action` is for the pages where the money is usable after one
+ * press — it is absent, not disabled, when there is nothing to press.
+ */
+export type ElsewhereWayOut = {
+  /** One sentence on what that balance can and cannot do for this page. */
+  note: string;
+  /** The press that puts the reader on the funded chain, when one exists. */
+  action?: { label: string; onClick: () => void; disabled?: boolean };
+};
+
+/**
+ * The way-out line for a page whose chain is decided by a token, not a choice.
+ *
+ * A trade has no equivalent of the launch form's network picker: the token was
+ * deployed on one chain and cannot leave it, so a balance on another one is not
+ * a switch away from being useful — it is simply unusable here. Saying that is
+ * still worth a line, for the same reason the diagnosis above it is: otherwise
+ * the reader goes hunting for the setting that would fix it.
+ */
+export function fixedChainWayOut(
+  elsewhere: FundsElsewhere | null | undefined,
+  network: string | undefined
+): ElsewhereWayOut | null {
+  if (!elsewhere) return null;
+  const here = network ?? "this network";
+  return {
+    note: `This token trades on ${here} and cannot be moved off it, so the ${elsewhere.symbol} on ${elsewhere.name} can't buy it — there is no network to switch to here, only a claim to make on ${here}.`,
+  };
+}
+
+/**
  * The same links, boxed, for when an empty wallet is blocking the next step.
  *
  * It names the network, because a faucet claim on the wrong testnet looks
@@ -49,12 +83,21 @@ export function FaucetLinks({ chain }: { chain: string }) {
  * the address and chain the zero actually came from, linked to the explorer
  * that can confirm or contradict it. A number the reader can check beats a
  * number they have to trust.
+ *
+ * Diagnosing the wrong-network claim still left the reader holding it. Knowing
+ * the ETH is on Sepolia does not say whether that is a solvable problem, and
+ * the honest answer differs by page: a launch can move to whichever chain the
+ * money is on, if Folio has a factory there, while a token trades on the one
+ * chain it was launched on and nothing can move that. Neither answer belongs
+ * here — this box does not know what page it is on — so `wayOut` carries it in
+ * from the caller: a sentence, and a button when there is something to press.
  */
 export function FaucetNotice({
   chain,
   heading,
   address,
   elsewhere = null,
+  wayOut = null,
   unreadable = false,
   onRecheck,
   checking = false,
@@ -65,6 +108,8 @@ export function FaucetNotice({
   address?: `0x${string}`;
   /** Funds found on another supported chain, when the sweep located them. */
   elsewhere?: FundsElsewhere | null;
+  /** What this page can offer about those funds. Ignored without `elsewhere`. */
+  wayOut?: ElsewhereWayOut | null;
   /** True when the balance read failed, as opposed to returning zero. */
   unreadable?: boolean;
   onRecheck?: () => void;
@@ -105,10 +150,26 @@ export function FaucetNotice({
               {elsewhere.symbol}
             </span>{" "}
             on {elsewhere.name} and nothing{network ? ` on ${network}` : " here"} — which is what
-            a confirmed faucet claim on the wrong testnet looks like. Gas for this page has to be
-            claimed{network ? ` on ${network}` : " on this network"}; the faucet below is the one
-            for it.
+            a confirmed faucet claim on the wrong testnet looks like. Gas for this page{" "}
+            {/* Hedged only when the caller has somewhere else to offer: "has to
+                be" is true when this chain is the only one that can do the job,
+                and a lie in the same breath as a button that says otherwise. */}
+            {wayOut?.action ? "would have to be" : "has to be"} claimed
+            {network ? ` on ${network}` : " on this network"}; the faucet below is the one for it.
           </p>
+          {wayOut && <p style={{ marginTop: "var(--sp-2)" }}>{wayOut.note}</p>}
+          {wayOut?.action && (
+            <p style={{ marginTop: "var(--sp-3)" }}>
+              <button
+                type="button"
+                className="btn btn--outline btn--sm"
+                onClick={wayOut.action.onClick}
+                disabled={wayOut.action.disabled}
+              >
+                {wayOut.action.label}
+              </button>
+            </p>
+          )}
         </>
       ) : (
         <>
