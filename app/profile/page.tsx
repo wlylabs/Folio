@@ -3,8 +3,6 @@
 import { useAccount } from "wagmi";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import WalletButton from "@/components/WalletButton";
-import WalletHandoff from "@/components/WalletHandoff";
 import Mark from "@/components/Mark";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { chainLabel } from "@/lib/chains";
@@ -62,17 +60,12 @@ export default function ProfilePage() {
           <p className="eyebrow" style={{ marginBottom: "var(--sp-3)" }}>
             Staff page
           </p>
-          <p style={{ marginBottom: "var(--sp-5)" }}>
-            Connect your wallet to see the launches published from it.
+          {/* The wallet is connected from the settings panel alone, so this
+              page points there rather than carrying a second control. */}
+          <p>
+            Connect your wallet under Settings in the masthead to see the
+            launches published from it.
           </p>
-          <div style={{ maxWidth: "18rem", margin: "0 auto" }}>
-            <WalletButton variant="block" />
-            {/* Renders nothing unless connecting from this browser is the
-                thing that will not work. */}
-            <div style={{ marginTop: "var(--sp-3)", textAlign: "left" }}>
-              <WalletHandoff />
-            </div>
-          </div>
         </div>
       </main>
     );

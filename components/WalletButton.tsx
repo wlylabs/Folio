@@ -9,29 +9,23 @@ import { shortAddress } from "@/lib/types";
 import { useChainReach } from "@/lib/walletChainReach";
 import { hasStoredWalletConnectSession } from "@/lib/walletSession";
 
-type Variant = "menu" | "block";
-
 /**
  * The wallet control, drawn in Folio's print language instead of RainbowKit's
  * default rounded blue pill.
  *
- * `block` is the full-width slab used inside forms and the trade panel — same
- * geometry and weight as the Buy button it sits beside. `menu` is the stacked
- * pair inside the settings panel: once connected it splits into a network row
- * and an account row, each opening its own modal, because the panel is where a
- * reader goes to change either one.
+ * There is exactly one of these on the site, inside the settings panel. The
+ * forms and the trade panel used to carry their own copy; a reader met the
+ * connect button in three different shapes and had no single place that owned
+ * the wallet. Now the panel owns it, and everywhere else says so in a line.
+ *
+ * Connected, it splits into a network row and an account row, each opening its
+ * own modal, because the panel is where a reader goes to change either one.
  *
  * `onOpenModal` fires just before a RainbowKit modal is asked to open. The
  * settings panel uses it to close itself first — a dropdown left standing
  * behind a modal is a second layer nobody asked for.
  */
-export default function WalletButton({
-  variant = "block",
-  onOpenModal,
-}: {
-  variant?: Variant;
-  onOpenModal?: () => void;
-}) {
+export default function WalletButton({ onOpenModal }: { onOpenModal?: () => void }) {
   const pending = useHandoffPending();
   const reach = useChainReach();
   const repair = useSessionRepair();
@@ -46,7 +40,6 @@ export default function WalletButton({
         // fade rather than a switch — see `.wallet-mount` in globals.css.
         const ready = mounted;
         const connected = ready && account && chain;
-        const block = variant === "block";
 
         // Every opener goes through here, so the panel closes on the way to any
         // modal without each call site remembering to do it.
@@ -119,20 +112,6 @@ export default function WalletButton({
               }
 
               const who = account.ensName ?? shortAddress(account.address);
-
-              if (block) {
-                return (
-                  // An address is not a label, so it keeps its own casing.
-                  <button
-                    type="button"
-                    onClick={open(openAccountModal)}
-                    className="btn btn--block btn--outline btn--plain"
-                  >
-                    {who}
-                    {account.displayBalance ? ` · ${account.displayBalance}` : ""}
-                  </button>
-                );
-              }
 
               return (
                 <div className="wallet-rows">

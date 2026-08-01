@@ -93,7 +93,7 @@ export default function SettingsMenu() {
         >
           <section className="settings__group">
             <h2 className="eyebrow">Wallet</h2>
-            <WalletButton variant="menu" onOpenModal={close} />
+            <WalletButton onOpenModal={close} />
             {!isConnected && (
               <p className="settings__note">
                 Reading needs no wallet. Connect one to publish a launch or to
