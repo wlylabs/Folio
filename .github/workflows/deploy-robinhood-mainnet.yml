@@ -66,10 +66,14 @@
 #    carries that URL under `[etherscan] robinhood-mainnet`, but the *provider*
 #    is a command-line choice, which is why the flags are still here.
 #
-# 2. **No API key is required to verify.** Blockscout does not ask for one, so
-#    there is no secret to check before turning verification on.
-#    `BLOCKSCOUT_API_KEY` exists in `.env.example` only because foundry.toml
-#    wants the field, and this workflow never reads it.
+# 2. **No API key is required to verify** — but the variable still has to
+#    exist. Blockscout does not ask for a key, so there is no secret to check
+#    before turning verification on. What forge does insist on is the *name*:
+#    `foundry.toml` interpolates `${BLOCKSCOUT_API_KEY}` into its `[etherscan]`
+#    entry, and an unset name fails verification outright with "environment
+#    variable not found", after a successful broadcast. The deploy step below
+#    therefore defines it as the empty string, matching what a local
+#    `source .env` gives you.
 #
 # 3. **The RPC URL is checked against the chain before anything is signed.** A
 #    secret that answers HTML instead of JSON-RPC, or that points at another
@@ -286,6 +290,13 @@ jobs:
           # stdin — the run would hang until it timed out. The environment's
           # reviewers and the `confirm` input are what replace it here.
           FOLIO_SKIP_CONFIRM: "true"
+          # Blockscout wants no API key, but `foundry.toml` interpolates
+          # `${BLOCKSCOUT_API_KEY}` into its `[etherscan]` entry, and forge
+          # fails the *whole* verification with "environment variable not
+          # found" when the name is unset rather than treating it as blank.
+          # Empty-but-defined is what a local `source .env` produces, which is
+          # the configuration DEPLOYMENT.md describes and the one that works.
+          BLOCKSCOUT_API_KEY: ""
         run: |
           set -euo pipefail
           verify_flags=()
