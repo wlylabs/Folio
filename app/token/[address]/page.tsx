@@ -106,7 +106,13 @@ export default async function TokenPage({
   const explorer = explorerAddressUrl(token.chain, token.contract_address);
 
   return (
-    <main id="main" className="shell page article">
+    /*
+      One column, read top to bottom: headline, article, then the decision the
+      article is arguing for. The trade panel used to sit in a rail beside the
+      headline, which put a buy button in front of a reader who had not yet read
+      a word of the piece it belongs to.
+    */
+    <main id="main" className="shell shell--measure page article">
       {/*
         Server-rendered, like everything else on this page: the listing is a
         piece of writing with a date and a byline, and this is the machine-
@@ -139,6 +145,15 @@ export default async function TokenPage({
           </span>
           <span aria-hidden="true">·</span>
           <span>{formatDate(token.created_at)}</span>
+
+          {/*
+            The way past the article for someone who came back to trade rather
+            than to read. Putting the panel after the piece is right for a first
+            visit and tedious on the fifth, and one anchor settles both.
+          */}
+          <a className="article__jump" href="#trade">
+            Buy or sell
+          </a>
         </div>
       </div>
 
@@ -149,89 +164,102 @@ export default async function TokenPage({
         dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(token.article_body) }}
       />
 
-      <aside className="article__rail" aria-label="Curve data and trading">
-        <section className="factbox">
-          <h2 className="factbox__head">
-            <span>Contract data</span>
-            <span>Testnet</span>
-          </h2>
+      <section id="trade" className="article__decision" aria-labelledby="trade-heading">
+        <h2 id="trade-heading" className="decision__title">
+          Buy or sell ${token.symbol}
+        </h2>
 
-          {/*
-            Progress leads the box: the share of supply the curve has issued is
-            the one figure a reader scans for, and a bar says it faster than a
-            percentage does.
-          */}
-          <div className="factbox__row" style={{ display: "block" }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: "var(--sp-3)",
-                marginBottom: "var(--sp-2)",
-              }}
-            >
-              <span className="factbox__label">
-                Issued{stats.onChain ? "" : " (stored)"}
-              </span>
-              <span className="factbox__value">{formatPercent(stats.percentSold)}</span>
-            </div>
-            <div
-              className="meter"
-              role="progressbar"
-              aria-label="Share of supply issued"
-              aria-valuenow={Math.round(stats.percentSold)}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            >
-              <div className="meter__fill" style={{ width: `${stats.percentSold}%` }} />
-            </div>
-          </div>
-
-          {factRows(token, stats, explorer).map(([label, value]) => (
-            <div key={label} className="factbox__row">
-              <span className="factbox__label">{label}</span>
-              <span className="factbox__value">{value}</span>
+        {/*
+          The figures that actually bear on the decision, and only those: what a
+          token costs, what the whole thing is worth, how much of it is already
+          out. The rest of the contract's data is reference, and waits folded
+          below the panel rather than standing between the article and the
+          button.
+        */}
+        <div className="glance">
+          {glanceCells(token, stats).map((cell) => (
+            <div key={cell.label} className="glance__cell">
+              <span className="glance__label">{cell.label}</span>
+              <span className="glance__value">{cell.value}</span>
+              {cell.meter !== undefined && (
+                <div
+                  className="meter glance__meter"
+                  role="progressbar"
+                  aria-label="Share of supply issued"
+                  aria-valuenow={Math.round(cell.meter)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <div className="meter__fill" style={{ width: `${cell.meter}%` }} />
+                </div>
+              )}
             </div>
           ))}
+        </div>
 
-          {/*
-            Reserve health is the sell-back guarantee stated as one number:
-            10000 bps means the reserve exactly covers every token in
-            circulation. Below that would mean the curve owes more than it holds,
-            which the contract's maths does not permit — so it is worth saying
-            out loud when it holds, and worth alarming on if it ever doesn't.
-          */}
-          {stats.kind === "curve" && (
-            <p className="field__hint" style={{ marginTop: "var(--sp-3)" }}>
-              {stats.reserveHealthBps >= 10_000
-                ? `Reserve covers ${formatPercent(stats.reserveHealthBps / 100)} of what the curve owes holders — every token in circulation can be sold back.`
-                : `Reserve covers only ${formatPercent(
-                    stats.reserveHealthBps / 100
-                  )} of what the curve owes holders. Trade with care.`}
-            </p>
-          )}
-        </section>
+        {/*
+          Reserve health is the sell-back guarantee stated as one number: 10000
+          bps means the reserve exactly covers every token in circulation. Below
+          that would mean the curve owes more than it holds, which the contract's
+          maths does not permit — so it is worth saying out loud when it holds,
+          and worth alarming on if it ever doesn't. It sits above the button
+          because it is the one line that should change what gets pressed.
+        */}
+        {stats.kind === "curve" && (
+          <p className="field__hint">
+            {stats.reserveHealthBps >= 10_000
+              ? `Reserve covers ${formatPercent(stats.reserveHealthBps / 100)} of what the curve owes holders — every token in circulation can be sold back.`
+              : `Reserve covers only ${formatPercent(
+                  stats.reserveHealthBps / 100
+                )} of what the curve owes holders. Trade with care.`}
+          </p>
+        )}
 
         <TradeBar token={token} stats={stats} />
 
         {/*
-          Renders for the creator and nobody else, and decides that from
-          `creator()` on the contract rather than the database's byline — one is
-          a fact, the other is a claim, and this one moves money.
+          Everything the contract says, folded. Shut by default because it is
+          checking material rather than reading material — the address, the caps,
+          the fee — and open in one press for anyone who wants to verify the
+          claim the panel above is making.
         */}
-        {stats.kind === "curve" && <CreatorFees token={token} stats={stats} />}
-      </aside>
+        <details className="factbox factbox--fold">
+          <summary className="factbox__head">
+            <span>Contract data</span>
+            <span>Testnet</span>
+          </summary>
+
+          <div className="factbox__rows">
+            {factRows(token, stats, explorer).map(([label, value]) => (
+              <div key={label} className="factbox__row">
+                <span className="factbox__label">{label}</span>
+                <span className="factbox__value">{value}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      </section>
 
       {/*
-        Last in the markup, first in the main column on a wide screen (see
-        .article__chart). It sits below the article rather than in the rail
-        because a price chart squeezed into a 21rem gutter is not worth drawing
-        — and because it loads on its own schedule, which the rail's sticky
-        panels should not be waiting on.
+        Below the decision rather than above it: the chart is the record of what
+        other people decided, which is context for a trade and not the case for
+        one. It also loads on its own schedule, and nothing above it should be
+        waiting on that.
       */}
       {stats.kind === "curve" && (
         <div className="article__chart">
           <TradeHistoryPanel token={token} />
+        </div>
+      )}
+
+      {/*
+        Renders for the creator and nobody else, and decides that from
+        `creator()` on the contract rather than the database's byline — one is a
+        fact, the other is a claim, and this one moves money.
+      */}
+      {stats.kind === "curve" && (
+        <div className="article__owner">
+          <CreatorFees token={token} stats={stats} />
         </div>
       )}
     </main>
@@ -252,6 +280,53 @@ function Eth({ value, suffix = "" }: { value: number; suffix?: string }) {
       <FiatValue eth={value} block />
     </>
   );
+}
+
+/** One tile above the trade panel. `meter` draws a bar under the value. */
+type Glance = { label: string; value: React.ReactNode; meter?: number };
+
+/**
+ * The three figures a reader is deciding on, lifted out of the contract table.
+ *
+ * The table itself is complete and folded away; this is the part of it that
+ * belongs next to the button. Which three they are depends on what is deployed
+ * at the address — a fixed-price sale has no marginal price to quote, and a
+ * listing with nothing readable behind it should say so here rather than print
+ * stored numbers as though they were live.
+ */
+function glanceCells(token: Token, stats: TokenStats): Glance[] {
+  // The share of supply already issued is the one figure a reader scans for,
+  // and a bar says it faster than a percentage does.
+  const issued: Glance = {
+    label: "Issued",
+    value: formatPercent(stats.percentSold),
+    meter: stats.percentSold,
+  };
+
+  if (stats.kind === "curve") {
+    return [
+      { label: "Price now", value: <Eth value={stats.price} /> },
+      { label: "Market cap", value: <Eth value={stats.marketCap} /> },
+      issued,
+    ];
+  }
+
+  if (stats.kind === "legacy") {
+    return [
+      { label: "Buy price", value: <Eth value={Number(token.starting_price)} /> },
+      {
+        label: "Sell price",
+        value: stats.buyback ? <Eth value={stats.buyback.sellPrice} /> : "no buyback",
+      },
+      issued,
+    ];
+  }
+
+  return [
+    { label: "Symbol", value: `$${token.symbol}` },
+    { label: "Total supply", value: formatAmount(token.supply) },
+    { label: "On-chain data", value: "unreachable" },
+  ];
 }
 
 /** The fact rows, which differ by what kind of contract is actually there. */

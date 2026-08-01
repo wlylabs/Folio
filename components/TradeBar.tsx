@@ -13,10 +13,10 @@ import type { Token, TokenStats } from "@/lib/types";
  * that describes it honestly whether it was created before or after the factory
  * existed, with no migration column to keep in step.
  *
- * On a phone the panel is docked to the bottom edge, because it is the reason
- * the page exists and should never be more than a thumb away. From 1024px it
- * settles into the article rail beside the contract data — same markup either
- * way, the breakpoint lives in globals.css.
+ * Either panel renders in the flow of the article, after the piece and before
+ * the contract's own figures — the page argues its case first and offers the
+ * button at the end of it. The byline carries an anchor down here for a reader
+ * who already knows what they came for.
  *
  * Also where a token page says which chain it is about, since it is on every
  * one of them and already holds the listing. A wallet that connects here on an

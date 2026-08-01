@@ -7,10 +7,10 @@ import type { FundsElsewhere } from "@/components/useGasBalance";
  * Where to get test ETH — now in exactly one place.
  *
  * These links used to be printed wherever an empty wallet was noticed: a boxed
- * paragraph in the trade dock, a second copy under the launch button, a third
- * under the amount field. On a phone the dock is the bottom third of the
- * screen, and three faucet links plus their explanation pushed the article out
- * of view to say something the reader only needs once. They live in Settings
+ * paragraph in the trade panel, a second copy under the launch button, a third
+ * under the amount field. On a phone the panel is most of a screen already, and
+ * three faucet links plus their explanation pushed everything else out of view
+ * to say something the reader only needs once. They live in Settings
  * now. What is left at the point of failure is the diagnosis — which wallet,
  * which network, and whether the zero is real — and a pointer to the panel.
  */

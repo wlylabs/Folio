@@ -128,7 +128,7 @@ export function faucetsFor(slug: string | null | undefined): readonly Faucet[] {
  * Every network that has a faucet, for the one place that lists them all.
  *
  * The faucets used to be printed wherever an empty wallet was noticed — the
- * trade dock, the launch form — which put a paragraph of links in front of the
+ * trade panel, the launch form — which put a paragraph of links in front of the
  * button the reader came for. They live in Settings now, so this returns the
  * whole directory rather than one chain's slice: a reader opening that panel
  * has not necessarily told us which network they are short on.

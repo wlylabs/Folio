@@ -66,7 +66,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  // The trade dock sits against the bottom edge, so the page needs to reach
+  // The consent strip sits against the bottom edge, so the page needs to reach
   // under the home indicator for env(safe-area-inset-bottom) to mean anything.
   viewportFit: "cover",
 };

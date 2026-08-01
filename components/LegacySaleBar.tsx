@@ -3,7 +3,7 @@
 import { useAccount, useConfig, useReadContract } from "wagmi";
 import { getAccount, switchChain, writeContract } from "wagmi/actions";
 import { formatUnits, parseEther, parseUnits } from "viem";
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FOLIO_SALE_ABI } from "@/lib/contracts/folioSale";
 import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
@@ -11,7 +11,6 @@ import WalletButton from "@/components/WalletButton";
 import WalletHandoff from "@/components/WalletHandoff";
 import FiatValue from "@/components/FiatValue";
 import { GasNotice, fixedChainWayOut } from "@/components/Faucet";
-import { useDockHeight } from "@/components/useDockHeight";
 import { useGasBalance } from "@/components/useGasBalance";
 import { classifyTxError } from "@/lib/txErrors";
 import { ensureWalletReady } from "@/lib/walletReady";
@@ -61,13 +60,7 @@ export default function LegacySaleBar({
   const [sellTokens, setSellTokens] = useState("");
   const [status, setStatus] = useState<Status | null>(null);
 
-  // On a phone this panel is pinned over the bottom of the article. Collapsing
-  // it leaves the tab strip and the balances, and gives the page back.
-  const [collapsed, setCollapsed] = useState(false);
-
   const { phase, pending, slow, begin, confirming, done, abandon } = useTxPhase();
-
-  const dockRef = useDockHeight();
 
   const chainEntry = chainBySlug(token.chain);
   const targetChainId = chainEntry?.chain.id;
@@ -250,8 +243,6 @@ export default function LegacySaleBar({
   /** What the primary button says while a transaction is in flight. */
   const busyLabel = phase === "signing" ? "Check your wallet..." : "Confirming...";
 
-  const bodyId = useId();
-
   /**
    * Give up on the wait in progress, and say which wait was given up on.
    *
@@ -272,15 +263,9 @@ export default function LegacySaleBar({
     }));
   };
 
-  /** Picking a side while the panel is shut is a request to open it. */
-  const choose = (next: Side) => {
-    setSide(next);
-    setCollapsed(false);
-  };
-
   return (
-    <div className="trade-dock" ref={dockRef}>
-      <div className="trade-dock__inner">
+    <div className="trade-panel">
+      <div className="trade-panel__inner">
         <div className="tabs">
           <div className="tabs__list" role="tablist" aria-label="Trade side">
             <button
@@ -288,7 +273,7 @@ export default function LegacySaleBar({
               role="tab"
               className="tab"
               aria-selected={side === "buy"}
-              onClick={() => choose("buy")}
+              onClick={() => setSide("buy")}
             >
               Buy
             </button>
@@ -297,7 +282,7 @@ export default function LegacySaleBar({
               role="tab"
               className="tab"
               aria-selected={side === "sell"}
-              onClick={() => choose("sell")}
+              onClick={() => setSide("sell")}
             >
               Sell
             </button>
@@ -308,25 +293,9 @@ export default function LegacySaleBar({
             {ethBalance && <> · {formatEth(Number(formatUnits(ethBalance.value, 18)))} ETH</>}
           </div>
 
-          {/*
-            Phone only — on a wide screen the dock is a panel in the article
-            rail and covers nothing, so there is nothing to get out of the way.
-          */}
-          <button
-            type="button"
-            className="trade-dock__toggle"
-            aria-expanded={!collapsed}
-            aria-controls={bodyId}
-            onClick={() => setCollapsed((was) => !was)}
-          >
-            {collapsed ? "Trade" : "Hide"}
-          </button>
         </div>
 
-        <div
-          id={bodyId}
-          className={`trade-dock__body${collapsed ? " trade-dock__body--shut" : ""}`}
-        >
+        <div className="trade-panel__body">
           {status && (
             <p
               // Keyed on the message so each step of a trade mounts as its own
