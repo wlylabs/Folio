@@ -1032,6 +1032,10 @@ p {
   font-size: var(--fs-small);
   line-height: 1.6;
   color: var(--ink-soft);
+  /* Notices carry addresses, hashes and RPC messages — strings with no space
+     in them for a browser to break at. Without this one runs past the border
+     and off the side of a phone, taking the box's right edge with it. */
+  overflow-wrap: anywhere;
 }
 
 .notice--alert {
