@@ -1,9 +1,9 @@
 {
   "network": "base-sepolia",
   "chainId": 84532,
-  "factory": "0x3E4bAd5CD555A38DDcb67B37A13c4Df5D3785B07",
-  "implementation": "0xD26eEf46360267645D8268aAF6FB715EaF634c52",
-  "owner": "0xcb6caEF390ABa8A113a346C9547858d395175E2a",
+  "factory": "",
+  "implementation": "",
+  "owner": "",
   "deployer": "",
   "deployedAtBlock": 0,
   "deployedAtTimestamp": 0,
