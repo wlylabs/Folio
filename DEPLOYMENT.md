@@ -209,10 +209,17 @@ workflow (which reads the key from a GitHub Environment) over a plaintext key on
 a laptop for anything beyond a one-off.
 
 **5. Choose the curve terms.** `FACTORY_VIRTUAL_ETH_RESERVE`,
-`FACTORY_MAX_RESERVE_CAP` and `FACTORY_GRADUATION_THRESHOLD` default to 2, 5 and
-4 ETH. Those numbers were picked for a chain whose ETH was free. Set them in
-`.env` for what you actually want a launch on this chain to be; the dry run
-below prints all five.
+`FACTORY_MAX_RESERVE_CAP` and `FACTORY_GRADUATION_THRESHOLD` default to 5, 12 and
+10 ETH. Set them in `.env` for what you actually want a launch on this chain to
+be; the dry run below prints all seven.
+
+Two things worth knowing before you change them. Aggression is the *ratio*
+`(V + threshold) / V` squared, so moving the threshold without the virtual
+reserve makes the curve steeper for late buyers rather than just bigger — the
+shipped pair is 9x, and `2 / 10` would be 36x. And the threshold is the entire
+real reserve a launch ever holds, which makes it the depth of any market that
+comes after the curve: a 1 ETH sell costs 44% against a 4 ETH reserve and 19%
+against 10. See `contracts/README.md` for the table.
 
 **6. Dry run.** Simulates against real chain state and broadcasts nothing. The
 network guard runs here — a wrong RPC fails at this step rather than at signing.
@@ -580,7 +587,7 @@ Work top to bottom. Tick each before wiring up the frontend.
 - [ ] `claimFees` still works while paused (call it from the creator wallet on Blockscout).
 - [ ] `Unpause` restores trading; a `Buy` afterwards succeeds.
 
-### Graduation (optional — needs ~4 ETH of buys, at real cost)
+### Graduation (optional — needs the full threshold in buys, at real cost)
 
 - [ ] Buying past `graduationThreshold` emits `Graduated` and sets `graduated`.
 - [ ] Further buys revert with `CurveClosed`.

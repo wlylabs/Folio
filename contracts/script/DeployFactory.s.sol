@@ -196,20 +196,42 @@ contract DeployFactory is FolioScript {
 
     /// @dev Curve terms from the environment. The defaults are the inherited
     ///      ones described above — set them explicitly for a mainnet deploy.
-    function _configFromEnv() private view returns (CurveConfig memory) {
+    /// @dev `internal` rather than `private` so a test subclass can read the
+    ///      shipped defaults back and hold them to the shape they claim — see
+    ///      `FolioDeployDefaults.t.sol`. `forge script` owns `run`, so a seam is
+    ///      the only way these numbers get checked before a mainnet deploy uses
+    ///      them.
+    function _configFromEnv() internal view returns (CurveConfig memory) {
         return CurveConfig({
-            virtualEthReserve: vm.envOr("FACTORY_VIRTUAL_ETH_RESERVE", uint256(2 ether)),
-            maxReserveCap: vm.envOr("FACTORY_MAX_RESERVE_CAP", uint256(5 ether)),
-            graduationThreshold: vm.envOr("FACTORY_GRADUATION_THRESHOLD", uint256(4 ether)),
+            // The graduation threshold is the depth of whatever market comes
+            // after the curve — every wei of the reserve is what a migrated pool
+            // would be seeded with. Extracting `X` ETH from a pool of depth `D`
+            // moves the price to `((D - X) / D) ** 2` of where it was, so a 4 ETH
+            // graduation means a single 1 ETH sell costs 44% and the market the
+            // launch graduates into is broken on arrival. At 10 ETH the same sell
+            // costs 19%, which is a market.
+            //
+            // The virtual reserve rises with it on purpose. Aggression is the
+            // *ratio* `(V + threshold) / V`, squared — holding it at 3 keeps the
+            // curve's shape at the same 9x from open to graduation, so this is a
+            // change of scale and not a steeper climb for late buyers. Drop `V`
+            // back to 2 here and the same threshold would be 36x, which is a
+            // different and much more extractive product.
+            virtualEthReserve: vm.envOr("FACTORY_VIRTUAL_ETH_RESERVE", uint256(5 ether)),
+            maxReserveCap: vm.envOr("FACTORY_MAX_RESERVE_CAP", uint256(12 ether)),
+            graduationThreshold: vm.envOr("FACTORY_GRADUATION_THRESHOLD", uint256(10 ether)),
             feeBps: uint16(vm.envOr("FACTORY_FEE_BPS", uint256(100))),
             priceMoveAlertBps: uint16(vm.envOr("FACTORY_PRICE_MOVE_ALERT_BPS", uint256(10_000))),
-            // Two minutes at 0.1 ETH a wallet. Against a 4 ETH graduation that caps
-            // any single address at 2.5% of the whole curve while the launch is
-            // being discovered, which is the window a bot's edge lives in, and
-            // leaves room for an ordinary opening buy. Set the window to zero to
-            // turn the mechanism off.
+            // Two minutes at 0.25 ETH a wallet — 2.5% of a 10 ETH graduation for
+            // any single address, held at that fraction as the threshold moved so
+            // the protection scales with the launch rather than tightening by
+            // accident. Two minutes is the window a bot's edge lives in, and the
+            // cap still leaves room for an ordinary opening buy. Set the window to
+            // zero to turn the mechanism off.
             sniperWindowSeconds: uint16(vm.envOr("FACTORY_SNIPER_WINDOW_SECONDS", uint256(120))),
-            sniperMaxEthPerWallet: vm.envOr("FACTORY_SNIPER_MAX_ETH_PER_WALLET", uint256(0.1 ether))
+            sniperMaxEthPerWallet: vm.envOr(
+                "FACTORY_SNIPER_MAX_ETH_PER_WALLET", uint256(0.25 ether)
+            )
         });
     }
 }

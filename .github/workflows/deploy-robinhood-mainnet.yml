@@ -57,9 +57,10 @@
 # The last two are the opening-window buy cap: 120 seconds at 0.1 ETH a wallet
 # by default. A window of 0 switches it off.
 #
-# Unset, these fall back to the script's defaults — 2 ETH virtual reserve, 5 ETH
-# cap, graduation at 4 ETH — which were chosen back when Folio had a chain that
-# handed out its ETH for free. On this chain they are real amounts. Set them.
+# Unset, these fall back to the script's defaults — 5 ETH virtual reserve, 12 ETH
+# cap, graduation at 10 ETH. That pair is a 9x curve, and the threshold is sized
+# as the depth of whatever market follows the curve rather than as the smallest
+# number that graduates. On this chain they are real amounts. Set them.
 #
 # ## Verification, and the RPC check
 #

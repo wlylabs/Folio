@@ -69,8 +69,33 @@ restatement, and `reserveHealthBps()` should never read below `10_000`.
 
 The price multiple from launch to graduation is
 `((virtualEthReserve + graduationThreshold) / virtualEthReserve) ** 2`. At the
-shipped defaults (2 ETH virtual, 4 ETH threshold) that is **9x**. Raising the
+shipped defaults (5 ETH virtual, 10 ETH threshold) that is **9x**. Raising the
 virtual reserve to 6 ETH makes it 2.8x. Nothing in `FolioToken.sol` changes.
+
+Note what that formula does *not* depend on: the absolute size of either number.
+Aggression is the ratio, so `2 / 4` and `5 / 10` are the same 9x curve at
+different scales — the same 67% of supply sold at graduation, the same shape.
+That is what lets the threshold be chosen for the size of the reserve it
+accumulates without making the climb steeper for late buyers. Move one without
+the other and the shape changes: `2 / 10` is 36x.
+
+### Why the threshold is also a liquidity decision
+
+The graduation threshold is the whole real reserve a launch ever holds, so it is
+also the depth of whatever market comes after the curve. Extracting `X` ETH from
+a constant-product pool of depth `D` moves the price to `((D - X) / D) ** 2`:
+
+| Threshold | A 0.5 ETH sell | A 1 ETH sell |
+| --- | --- | --- |
+| 4 ETH | −23% | −44% |
+| 10 ETH | −10% | −19% |
+| 20 ETH | −5% | −10% |
+
+The shipped 10 ETH is a deliberate middle: high enough that a graduated launch
+is a market a person can trade in, low enough to still be reachable. Set it low
+and graduation produces a pool that one ordinary sell breaks; set it very high
+and nothing ever graduates. It is the number to revisit first if migration to a
+DEX is ever built, because it is that pool's opening depth.
 
 Graduation closes buying and emits `Graduated`. Selling stays open forever, and
 there is no migration path to a DEX in this contract — that is a later stage.
@@ -81,8 +106,8 @@ The first buyer gets the lowest price the curve will ever offer. That is the
 curve working, and it is also what a bot watching for `TokenCreated` is there to
 collect. `sniperWindowSeconds` and `sniperMaxEthPerWallet` bound it: for that many
 seconds after creation, any one address may spend at most that much across all
-its buys. The shipped default is **0.1 ETH a wallet for 120 seconds**, which
-against a 4 ETH graduation caps a single address at 2.5% of the whole curve
+its buys. The shipped default is **0.25 ETH a wallet for 120 seconds**, which
+against a 10 ETH graduation caps a single address at 2.5% of the whole curve
 during the minutes a launch is being discovered.
 
 A buy over the remaining allowance is trimmed and the excess refunded — the same
