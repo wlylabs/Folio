@@ -4,8 +4,23 @@ import { useMemo, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useAccount, useConfig } from "wagmi";
-import { getAccount, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
-import { formatEther, formatUnits, parseEther, parseEventLogs } from "viem";
+import {
+  getAccount,
+  getPublicClient,
+  simulateContract,
+  switchChain,
+  waitForTransactionReceipt,
+  writeContract,
+} from "wagmi/actions";
+import type { Config } from "wagmi";
+import {
+  formatEther,
+  formatUnits,
+  getAbiItem,
+  parseEther,
+  parseEventLogs,
+  type TransactionReceipt,
+} from "viem";
 import { useRouter } from "next/navigation";
 import WalletButton from "@/components/WalletButton";
 import FiatValue from "@/components/FiatValue";
@@ -21,11 +36,16 @@ import {
   openingPriceEth,
   type CurveConfig,
 } from "@/lib/contracts/deployment";
-import { DEFAULT_CHAIN_SLUG, chainBySlug, explorerTxUrl } from "@/lib/chains";
+import {
+  DEFAULT_CHAIN_SLUG,
+  chainBySlug,
+  explorerAddressUrl,
+  explorerTxUrl,
+} from "@/lib/chains";
 import { useDeclarePreferredChain } from "@/lib/preferredChain";
 import { classifyTxError } from "@/lib/txErrors";
 import { ensureWalletReady } from "@/lib/walletReady";
-import { formatBps, formatEth } from "@/lib/types";
+import { formatBps, formatEth, shortAddress } from "@/lib/types";
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
@@ -36,6 +56,102 @@ const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
  * opening price and nothing else.
  */
 const DEFAULT_SUPPLY = "1000000000";
+
+/**
+ * Something that stopped a launch, in the shape the box on screen needs.
+ *
+ * A launch fails in more than one place and the places are not alike: a
+ * declined signature is not a failure at all, a stale factory address is a
+ * deployment bug, and a confirmed transaction whose event went missing leaves
+ * a token that may well exist. Each of those wants its own headline and, when
+ * there is one, a link — the transaction and the token are the two facts a
+ * reader can check for themselves, and pasting a 66-character hash into a
+ * sentence is not a way of giving them either.
+ */
+type Failure = {
+  /** The headline. One line, no punctuation at the end. */
+  title: string;
+  body: string;
+  /** The launch transaction, when one was sent. Rendered short and linked. */
+  hash?: string;
+  /** The token, when it exists in spite of the failure. */
+  token?: string;
+  /** "plain" for the things that are not failures — a declined signature. */
+  tone?: "alert" | "plain";
+};
+
+/**
+ * An error carrying a {Failure} written for the person who hit it.
+ *
+ * Everything else reaching the catch is a wallet or RPC error, which
+ * classifyTxError translates. This used to be told apart by matching the
+ * message against the opening words of every sentence thrown above — a test
+ * that quietly broke each time one of them was reworded.
+ */
+class AuthoredFailure extends Error {
+  readonly failure: Failure;
+
+  constructor(failure: Failure) {
+    super(failure.body);
+    this.name = "AuthoredFailure";
+    this.failure = failure;
+  }
+}
+
+const TOKEN_CREATED_EVENT = getAbiItem({ abi: FOLIO_FACTORY_ABI, name: "TokenCreated" });
+
+/**
+ * The TokenCreated log for a confirmed launch: the token's address and the
+ * supply the factory actually minted, or null if neither can be found.
+ *
+ * The receipt is the first place to look and usually the last. A receipt that
+ * comes back without the event does not mean the launch is lost, though: it is
+ * assembled by whichever node the wallet happens to be talking to, and one that
+ * is behind on indexing answers with a confirmed transaction and an empty log
+ * list. So before concluding anything, ask the app's own RPC for that block's
+ * logs — eth_getLogs is a different index from eth_getTransactionReceipt, and a
+ * launch missing from only one of them is a launch that happened.
+ *
+ * Matched on the transaction hash, so a second launch landing in the same block
+ * is never mistaken for this one.
+ */
+async function findCreatedToken(
+  config: Config,
+  {
+    factory,
+    chainId,
+    hash,
+    receipt,
+  }: { factory: `0x${string}`; chainId: number; hash: string; receipt: TransactionReceipt }
+): Promise<{ token: string; totalSupply: bigint } | null> {
+  const fromReceipt = parseEventLogs({
+    abi: FOLIO_FACTORY_ABI,
+    eventName: "TokenCreated",
+    logs: receipt.logs,
+  }).find((log) => log.address.toLowerCase() === factory.toLowerCase());
+  if (fromReceipt) {
+    return { token: fromReceipt.args.token, totalSupply: fromReceipt.args.totalSupply };
+  }
+
+  const client = getPublicClient(config, { chainId });
+  if (!client) return null;
+
+  try {
+    const logs = await client.getLogs({
+      address: factory,
+      event: TOKEN_CREATED_EVENT,
+      fromBlock: receipt.blockNumber,
+      toBlock: receipt.blockNumber,
+      strict: true,
+    });
+    const mine = logs.find((log) => log.transactionHash?.toLowerCase() === hash.toLowerCase());
+    return mine ? { token: mine.args.token, totalSupply: mine.args.totalSupply } : null;
+  } catch (err) {
+    // A second lookup that cannot run leaves the receipt's answer standing.
+    console.warn("Could not re-read the launch block for TokenCreated:", err);
+    return null;
+  }
+}
 
 type Stage = "idle" | "uploading" | "launching" | "confirming" | "saving";
 
@@ -55,7 +171,9 @@ type FormState = {
   articleTitle: string;
 };
 
-type Errors = Partial<Record<keyof FormState | "avatar" | "form", string>>;
+/** Per-field errors. Whatever stops the whole form is a {Failure}, not one of
+ *  these — it has a headline and links, and no field to sit under. */
+type Errors = Partial<Record<keyof FormState | "avatar", string>>;
 
 /**
  * @param config the curve terms of the chain being launched on. Passed in
@@ -135,6 +253,7 @@ export default function LaunchForm() {
   });
   const [avatar, setAvatar] = useState<File | null>(null);
   const [errors, setErrors] = useState<Errors>({});
+  const [failure, setFailure] = useState<Failure | null>(null);
   const [stage, setStage] = useState<Stage>("idle");
   const [txHash, setTxHash] = useState<string | null>(null);
 
@@ -229,7 +348,8 @@ export default function LaunchForm() {
 
   const set = (key: keyof FormState) => (value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-    setErrors((prev) => ({ ...prev, [key]: undefined, form: undefined }));
+    setErrors((prev) => ({ ...prev, [key]: undefined }));
+    setFailure(null);
   };
 
   async function uploadAvatar(file: File, owner: string): Promise<string> {
@@ -239,7 +359,8 @@ export default function LaunchForm() {
     const { error } = await supabase.storage
       .from("token-avatars")
       .upload(path, file, { contentType: file.type, upsert: false });
-    if (error) throw new Error(`Avatar upload failed: ${error.message}`);
+    // The caller supplies the "what failed" half; this is only the "why".
+    if (error) throw new Error(error.message);
 
     return supabase.storage.from("token-avatars").getPublicUrl(path).data.publicUrl;
   }
@@ -248,24 +369,30 @@ export default function LaunchForm() {
     if (!isConnected || !address) return;
 
     if (!isSupabaseConfigured) {
-      setErrors({ form: "Supabase isn't configured. See .env.example." });
+      setFailure({
+        title: "Publishing isn't configured",
+        body: "Supabase isn't set up, so there is nowhere to store the article this token belongs to. See .env.example.",
+      });
       return;
     }
     if (!deployment || !curve) {
-      setErrors({
-        form: `No factory is configured on ${
-          chainBySlug(chainSlug)?.chain.name ?? chainSlug
-        }. Deploy one with contracts/script/DeployFactory.s.sol and commit the deployments/${chainSlug}.json it writes.`,
+      setFailure({
+        title: `No factory on ${chainBySlug(chainSlug)?.chain.name ?? chainSlug}`,
+        body: `Deploy one with contracts/script/DeployFactory.s.sol and commit the deployments/${chainSlug}.json it writes.`,
       });
       return;
     }
     if (!chainEntry) {
-      setErrors({ form: `Unsupported chain "${deployment.chain}" in the deployment record.` });
+      setFailure({
+        title: "The deployment record names a chain this build doesn't support",
+        body: `deployments/${deployment.chain}.json is for "${deployment.chain}", which is not in SUPPORTED_CHAINS.`,
+      });
       return;
     }
     if (noGas) {
-      setErrors({
-        form: `This wallet has no ${chainEntry.chain.nativeCurrency.symbol} on ${chainEntry.chain.name}, and launching costs gas. Claim some from a faucet below, then try again.`,
+      setFailure({
+        title: `No ${chainEntry.chain.nativeCurrency.symbol} to pay gas with`,
+        body: `This wallet holds nothing on ${chainEntry.chain.name}, and launching costs gas. Claim some from a faucet below, then try again.`,
       });
       return;
     }
@@ -276,13 +403,26 @@ export default function LaunchForm() {
       return;
     }
     setErrors({});
+    setFailure(null);
     setTxHash(null);
+
+    // Held locally as well as in state: the catch below runs in the closure
+    // this render created, where `txHash` is still whatever it was before the
+    // launch started.
+    let sentHash: `0x${string}` | null = null;
 
     try {
       let avatarUrl: string | null = null;
       if (avatar) {
         setStage("uploading");
-        avatarUrl = await uploadAvatar(avatar, address);
+        try {
+          avatarUrl = await uploadAvatar(avatar, address);
+        } catch (err) {
+          throw new AuthoredFailure({
+            title: "The avatar didn't upload",
+            body: `${err instanceof Error ? err.message : String(err)} Nothing was signed — try again, or launch without an avatar.`,
+          });
+        }
       }
 
       // A stored session can look connected while its connector is still
@@ -294,11 +434,12 @@ export default function LaunchForm() {
       // whatever network happens to be selected — where there is no factory.
       if (getAccount(config).chainId !== chainEntry.chain.id) {
         await switchChain(config, { chainId: chainEntry.chain.id }).catch((err) => {
-          throw new Error(
-            `Switch your wallet to ${chainEntry.chain.name} to launch. (${
+          throw new AuthoredFailure({
+            title: `Your wallet is not on ${chainEntry.chain.name}`,
+            body: `The launch has to be signed there, and the switch was refused: ${
               err instanceof Error ? err.message : String(err)
-            })`
-          );
+            }`,
+          });
         });
       }
 
@@ -306,13 +447,44 @@ export default function LaunchForm() {
       // default cap"; anything else tightens this launch's blast radius.
       const cap = form.maxReserveCap.trim() ? parseEther(form.maxReserveCap.trim()) : 0n;
 
-      const hash = await writeContract(config, {
+      const call = {
         address: deployment.factory,
         abi: FOLIO_FACTORY_ABI,
         functionName: "createToken",
         args: [form.name.trim(), form.symbol.trim(), BigInt(form.supply.trim()), cap],
         chainId: chainEntry.chain.id,
-      });
+      } as const;
+
+      // Ask the chain what this call would do before asking anyone to sign it.
+      // The case that matters is an address with no contract behind it: a call
+      // to one succeeds, costs gas and emits nothing, which at the receipt is
+      // indistinguishable from a launch that vanished. eth_call names it now,
+      // before the money is spent — as it does a paused factory, or a supply
+      // this factory's curve won't take.
+      try {
+        await simulateContract(config, { ...call, account: address });
+      } catch (err) {
+        const refusal = classifyTxError(err);
+        if (refusal.reason === "NoContract") {
+          throw new AuthoredFailure({
+            title: `No factory answered on ${chainEntry.chain.name}`,
+            body: `Nothing at ${deployment.factory} responded to createToken, so signing this would spend gas and create nothing. That address comes from deployments/${deployment.chain}.json — re-run DeployFactory.s.sol against ${chainEntry.chain.name} and commit the record it writes.`,
+          });
+        }
+        if (refusal.kind === "reverted") {
+          throw new AuthoredFailure({
+            title: "The chain would refuse this launch",
+            body: `${refusal.message} Nothing was signed and no gas was spent.`,
+          });
+        }
+        // An RPC that never answered is not a verdict on the launch. The wallet
+        // gets its turn: a preflight that could not run is no reason to block a
+        // transaction that would have gone through.
+        console.warn("Launch preflight could not run:", err);
+      }
+
+      const hash = await writeContract(config, call);
+      sentHash = hash;
       setTxHash(hash);
 
       setStage("confirming");
@@ -321,28 +493,35 @@ export default function LaunchForm() {
         chainId: chainEntry.chain.id,
       });
       if (receipt.status !== "success") {
-        throw new Error("The launch transaction reverted. Nothing was published.");
+        throw new AuthoredFailure({
+          title: "The launch transaction reverted",
+          body: "The chain rejected it, so no token was created and nothing was published. The gas is spent either way.",
+          hash,
+        });
       }
 
       // The token address comes from the event, not from arithmetic. A clone's
       // address is a hash of the factory's nonce and the implementation, and
       // predicting it here would be a second implementation of something the
       // chain already told us.
-      const created = parseEventLogs({
-        abi: FOLIO_FACTORY_ABI,
-        eventName: "TokenCreated",
-        logs: receipt.logs,
-      }).find((log) => log.address.toLowerCase() === deployment.factory.toLowerCase());
+      const created = await findCreatedToken(config, {
+        factory: deployment.factory,
+        chainId: chainEntry.chain.id,
+        hash,
+        receipt,
+      });
 
       if (!created) {
-        throw new Error(
-          `The launch transaction confirmed but emitted no TokenCreated event. Check ${hash} on the explorer before retrying.`
-        );
+        throw new AuthoredFailure({
+          title: "The launch confirmed, but its token never turned up",
+          body: "No TokenCreated event came back for this transaction — not on the receipt, and not in the logs of the block it landed in — so the article was not published. Open it on the explorer before launching again: if it did create a token, a second launch creates a second one.",
+          hash,
+        });
       }
 
       // Lowercased so token page lookups by URL are case-insensitive.
-      const contractAddress = created.args.token.toLowerCase();
-      const wholeSupply = Number(formatUnits(created.args.totalSupply, 18));
+      const contractAddress = created.token.toLowerCase();
+      const wholeSupply = Number(formatUnits(created.totalSupply, 18));
 
       setStage("saving");
       const { error } = await supabase.from("tokens").insert({
@@ -368,22 +547,40 @@ export default function LaunchForm() {
       if (error) {
         // The token is live even though the article didn't save, so surface the
         // address rather than losing it.
-        throw new Error(
-          `Token created at ${contractAddress}, but saving the article failed: ${error.message}`
-        );
+        throw new AuthoredFailure({
+          title: "Your token is live, but the article didn't save",
+          body: `The launch went through on ${chainEntry.chain.name}; storing the listing that goes with it failed: ${error.message}. The token exists and is tradeable — do not launch it again.`,
+          hash,
+          token: contractAddress,
+        });
       }
 
       router.push(`/token/${contractAddress}`);
     } catch (err) {
       console.error("Launch failed:", err);
-      // Messages thrown above are already written for a person; only wallet and
-      // RPC failures need translating.
-      const authored =
-        err instanceof Error &&
-        /^(Avatar upload failed|Switch your wallet|Token created at|The launch transaction)/.test(
-          err.message
-        );
-      setErrors({ form: authored ? (err as Error).message : classifyTxError(err).message });
+
+      if (err instanceof AuthoredFailure) {
+        setFailure(err.failure);
+      } else {
+        // Everything left is the wallet or the RPC talking.
+        const classified = classifyTxError(err);
+        setFailure({
+          title:
+            classified.kind === "cancelled"
+              ? "Launch cancelled"
+              : classified.kind === "network"
+                ? "The network didn't answer"
+                : "The launch didn't go through",
+          body:
+            classified.kind === "cancelled"
+              ? "You declined the transaction in your wallet, so nothing was published and nothing was spent."
+              : classified.message,
+          // A cancellation is not an error. Painting it red is how a launchpad
+          // ends up feeling broken to someone who simply changed their mind.
+          tone: classified.kind === "cancelled" ? "plain" : "alert",
+          hash: sentHash ?? undefined,
+        });
+      }
       setStage("idle");
     }
   };
@@ -674,11 +871,7 @@ export default function LaunchForm() {
           </section>
         )}
 
-        {errors.form && (
-          <div className="notice notice--alert" role="alert">
-            {errors.form}
-          </div>
-        )}
+        {failure && <FailureNotice failure={failure} chain={faucetChain} />}
 
         {busy && (
           <p className="status" role="status">
@@ -695,7 +888,7 @@ export default function LaunchForm() {
                     follow it on the explorer
                   </a>
                 ) : (
-                  <span>tx {txHash}</span>
+                  <span className="mono">tx {shortAddress(txHash)}</span>
                 )}
               </>
             )}
@@ -726,6 +919,60 @@ export default function LaunchForm() {
         </div>
       </div>
     </main>
+  );
+}
+
+/**
+ * What went wrong, boxed like every other notice on the site.
+ *
+ * The transaction and the token are given as short forms with a link, not as
+ * full hashes in a sentence: sixty-six unbreakable characters in a paragraph
+ * overflow the box on a phone, and a reader who wants to check the transaction
+ * wants to open it, not to read it out. Both of them are also the reason this
+ * box exists at all — every failure after signing leaves something on chain
+ * that the reader needs to look at before deciding whether to try again.
+ */
+function FailureNotice({ failure, chain }: { failure: Failure; chain: string }) {
+  const txUrl = failure.hash ? explorerTxUrl(chain, failure.hash) : null;
+  const tokenUrl = failure.token ? explorerAddressUrl(chain, failure.token) : null;
+
+  return (
+    <div
+      className={`notice${failure.tone === "plain" ? "" : " notice--alert"}`}
+      // A cancellation is announced, not interrupted with.
+      role={failure.tone === "plain" ? "status" : "alert"}
+    >
+      <p className="notice__title">{failure.title}</p>
+      <p>{failure.body}</p>
+
+      {failure.token && (
+        <p style={{ marginTop: "var(--sp-2)" }}>
+          Token <span className="mono">{shortAddress(failure.token)}</span>
+          {tokenUrl && (
+            <>
+              {" · "}
+              <a href={tokenUrl} target="_blank" rel="noopener noreferrer">
+                view on explorer
+              </a>
+            </>
+          )}
+        </p>
+      )}
+
+      {failure.hash && (
+        <p style={{ marginTop: "var(--sp-2)" }}>
+          Transaction <span className="mono">{shortAddress(failure.hash)}</span>
+          {txUrl && (
+            <>
+              {" · "}
+              <a href={txUrl} target="_blank" rel="noopener noreferrer">
+                view on explorer
+              </a>
+            </>
+          )}
+        </p>
+      )}
+    </div>
   );
 }
 
