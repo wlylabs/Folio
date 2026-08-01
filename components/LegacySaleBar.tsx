@@ -9,7 +9,7 @@ import { FOLIO_SALE_ABI } from "@/lib/contracts/folioSale";
 import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
 import WalletButton from "@/components/WalletButton";
 import FiatValue from "@/components/FiatValue";
-import { FaucetLinks, FaucetNotice } from "@/components/Faucet";
+import { FaucetLinks, FaucetNotice, fixedChainWayOut } from "@/components/Faucet";
 import { useDockHeight } from "@/components/useDockHeight";
 import { useGasBalance } from "@/components/useGasBalance";
 import { classifyTxError } from "@/lib/txErrors";
@@ -284,6 +284,7 @@ export default function LegacySaleBar({
             heading={`No ${chainEntry?.chain.nativeCurrency.symbol ?? "test ETH"} in this wallet`}
             address={address}
             elsewhere={gasElsewhere}
+            wayOut={fixedChainWayOut(gasElsewhere, chainEntry?.chain.name)}
             unreadable={gasUnreadable}
             onRecheck={() => void refetchEth()}
             checking={checkingGas}
