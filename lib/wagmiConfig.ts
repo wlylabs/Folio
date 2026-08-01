@@ -1,4 +1,5 @@
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
+import { coinbaseWallet, injectedWallet, safeWallet } from "@rainbow-me/rainbowkit/wallets";
 import { http, type Chain, type Transport } from "viem";
 import { SUPPORTED_CHAINS } from "./chains";
 import { walletConnectMetadata } from "./walletMetadata";
@@ -53,8 +54,33 @@ const transports = Object.fromEntries(
   SUPPORTED_CHAINS.map((entry) => [entry.chain.id, http(entry.rpcEnv || undefined)])
 ) as Record<number, Transport>;
 
+/**
+ * The wallets the connect modal offers when there is no WalletConnect relay to
+ * offer them over.
+ *
+ * RainbowKit's default list is mostly phone wallets, and every one of them
+ * pairs over WalletConnect. Without a project ID that pairing cannot happen —
+ * but the modal still lists them, so pressing one opens a wallet that then
+ * fails on its own terms, which is why the failure reads as "not supported"
+ * rather than as a missing setting. Listing only what can actually connect is
+ * the honest version of that modal:
+ *
+ *  - `injectedWallet` — an extension, or a wallet's own in-app browser, which
+ *    is the route WalletHandoff points a phone at.
+ *  - `coinbaseWallet` — its own SDK, no relay involved.
+ *  - `safeWallet` — only appears inside a Safe app frame, and costs nothing
+ *    elsewhere.
+ *
+ * `undefined` when a project ID is configured, which leaves RainbowKit's full
+ * default list exactly as it was.
+ */
+const relaylessWallets = [
+  { groupName: "Available here", wallets: [injectedWallet, coinbaseWallet, safeWallet] },
+];
+
 export const wagmiConfig = getDefaultConfig({
   appName: "Folio",
+  wallets: hasWalletConnectProjectId ? undefined : relaylessWallets,
   // Coinbase Wallet's own connector shows this rather than reading the
   // WalletConnect metadata below, so it is set in both places.
   appIcon: walletConnectMetadata.icons[0],

@@ -8,9 +8,11 @@ import { useRouter } from "next/navigation";
 import { FOLIO_TOKEN_ABI } from "@/lib/contracts/folioToken";
 import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
 import WalletButton from "@/components/WalletButton";
+import WalletHandoff from "@/components/WalletHandoff";
 import FiatValue from "@/components/FiatValue";
 import { GasNotice, fixedChainWayOut } from "@/components/Faucet";
 import { useDockHeight } from "@/components/useDockHeight";
+import { useTradeDensity } from "@/components/useTradeDensity";
 import { useGasBalance } from "@/components/useGasBalance";
 import { classifyTxError } from "@/lib/txErrors";
 import { ensureWalletReady } from "@/lib/walletReady";
@@ -31,6 +33,24 @@ const BPS = 10_000n;
 /** Slippage presets, in basis points. 1% is the default. */
 const SLIPPAGE_PRESETS = [50, 100, 200];
 const DEFAULT_SLIPPAGE_BPS = 100;
+
+/**
+ * Quick sizes for a buy, in ETH.
+ *
+ * Typing a decimal into a number field is the slowest thing on this panel and
+ * the easiest to get wrong by an order of magnitude — on a phone, with the
+ * article underneath and a keyboard over it. Three sizes and the ceiling cover
+ * almost every trade anyone makes here, and the field stays for the rest.
+ */
+const BUY_PRESETS_ETH = ["0.01", "0.05", "0.1"] as const;
+
+/** Quick sizes for a sell, as fractions of what the reader holds. */
+const SELL_FRACTIONS = [
+  { label: "25%", numerator: 1n, denominator: 4n },
+  { label: "50%", numerator: 1n, denominator: 2n },
+  { label: "75%", numerator: 3n, denominator: 4n },
+  { label: "Max", numerator: 1n, denominator: 1n },
+] as const;
 
 /** How often the curve state and the open quote are re-read, in ms. Someone
  *  else's trade moves the price, and a stale quote is a failed transaction. */
@@ -70,6 +90,10 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
   // On a phone this panel is pinned over the bottom of the article. Collapsing
   // it leaves the tab strip and the balances, and gives the page back.
   const [collapsed, setCollapsed] = useState(false);
+
+  // How much of the panel to draw. Compact keeps the trade and folds the
+  // settings and the curve's accounting away — see useTradeDensity.
+  const { compact, setCompact } = useTradeDensity();
 
   const { phase, pending, slow, begin, confirming, done, abandon } = useTxPhase();
 
@@ -167,6 +191,36 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
 
   const tokenBalance = tokenBalanceRaw === undefined ? null : Number(formatUnits(tokenBalanceRaw, DECIMALS));
   const overSells = sellUnits !== null && tokenBalanceRaw !== undefined && sellUnits > tokenBalanceRaw;
+
+  /**
+   * The quick sizes under each field.
+   *
+   * Both sides get four, always — a fraction of a balance that is zero comes
+   * back unpressable rather than absent, so switching tabs never moves the
+   * button under the reader's thumb. `value` is the string the field would hold,
+   * so a chip can also show itself as the current amount.
+   */
+  const buyPicks = useMemo<Pick[]>(
+    () => [
+      ...BUY_PRESETS_ETH.map((eth) => ({ label: `${eth} ETH`, value: eth })),
+      // The ceiling, which is a size like any other: past it the curve refunds
+      // the difference, so there is nothing above this worth offering.
+      { label: "Fill curve", value: headroomWei > 0n ? trimZeros(formatEther(headroomWei)) : null },
+    ],
+    [headroomWei]
+  );
+
+  const sellPicks = useMemo<Pick[]>(
+    () =>
+      SELL_FRACTIONS.map(({ label, numerator, denominator }) => ({
+        label,
+        value:
+          tokenBalanceRaw && tokenBalanceRaw > 0n
+            ? trimZeros(formatUnits((tokenBalanceRaw * numerator) / denominator, DECIMALS))
+            : null,
+      })),
+    [tokenBalanceRaw]
+  );
 
   /**
    * Whether the quote on screen was fetched for the amount in the field.
@@ -360,6 +414,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
   const busyLabel = phase === "signing" ? "Check your wallet..." : "Confirming...";
 
   const bodyId = useId();
+  const detailsId = useId();
 
   /**
    * Give up on the wait in progress, and say which wait was given up on.
@@ -529,9 +584,15 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
             />
           )}
 
+          {/*
+            The two sides, drawn from the same three parts in the same order —
+            field, quick sizes, button — so switching tabs changes the numbers
+            and nothing else. Everything they share afterwards is below, printed
+            once.
+          */}
           {side === "buy" ? (
-            <>
-              <div className="trade-row">
+            <div className="trade-form">
+              <div className="trade-form__amount">
                 <Amount
                   label="Spend (ETH)"
                   value={spendEth}
@@ -542,78 +603,38 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
                   // typed amount is worth, so it follows every keystroke rather
                   // than waiting on the debounce the RPC round trip needs.
                   hint={<FiatValue eth={spendWei === null ? null : Number(formatEther(spendWei))} />}
-                  onMax={
-                    headroomWei > 0n
-                      ? () => setSpendEth(trimZeros(formatEther(headroomWei)))
-                      : undefined
-                  }
-                  maxLabel="Fill curve"
                 />
-
-                <div className="trade-row__action">
-                  {walletWaking ? (
-                    <button type="button" className="btn btn--primary btn--block" disabled data-busy>
-                      Reconnecting wallet...
-                    </button>
-                  ) : isConnected ? (
-                    <button
-                      type="button"
-                      className="btn btn--primary btn--block"
-                      onClick={handleBuy}
-                      disabled={buyDisabled}
-                      // Separates "waiting on your wallet" from the several other
-                      // reasons this button is disabled, which otherwise look
-                      // identical. Drives the sweep in globals.css.
-                      data-busy={pending || undefined}
-                    >
-                      {paused
-                        ? "Trading halted"
-                        : curveClosed
-                          ? "Curve closed"
-                          : pending
-                            ? busyLabel
-                            : buyTooSmall
-                              ? "Amount too small"
-                              : `Buy $${token.symbol}`}
-                    </button>
-                  ) : (
-                    <WalletButton variant="block" />
-                  )}
-                </div>
+                <QuickPicks
+                  picks={buyPicks}
+                  current={spendEth}
+                  onPick={setSpendEth}
+                  disabled={pending || paused || curveClosed}
+                  label="Quick amounts to spend"
+                />
               </div>
 
-              <Slippage bps={slippageBps} onChange={setSlippageBps} disabled={pending} />
-
-              <p className="trade-foot">
-                {formatEth(Number(formatEther(priceWei)))} ETH{" "}
-                <FiatValue eth={Number(formatEther(priceWei))} /> per token
-                {tokensOut !== null && tokensOut > 0n && (
-                  <>
-                    {" · "}≈ {formatTokens(Number(formatUnits(tokensOut, DECIMALS)))} ${token.symbol}
-                  </>
-                )}
-                {minTokensOut !== null && minTokensOut > 0n && (
-                  <> · min {formatTokens(Number(formatUnits(minTokensOut, DECIMALS)))}</>
-                )}
-                {quotingBuy && tokensOut === null && <> · pricing...</>}
-                {buyTooSmall && <> · too small for one token unit</>}
-                {/*
-                  The curve fills to its ceiling and hands back the rest rather
-                  than reverting, so an over-sized buy is legal — but a buyer is
-                  owed the number before they sign it.
-                */}
-                {refund !== null && refund > 0n && ethSpent !== null && (
-                  <>
-                    {" · "}
-                    {formatEth(Number(formatEther(ethSpent)))} ETH spent,{" "}
-                    {formatEth(Number(formatEther(refund)))} refunded at the ceiling
-                  </>
-                )}
-              </p>
-            </>
+              <Action
+                waking={walletWaking}
+                connected={isConnected}
+                onClick={handleBuy}
+                disabled={buyDisabled}
+                busy={pending}
+                label={
+                  paused
+                    ? "Trading halted"
+                    : curveClosed
+                      ? "Curve closed"
+                      : pending
+                        ? busyLabel
+                        : buyTooSmall
+                          ? "Amount too small"
+                          : `Buy $${token.symbol}`
+                }
+              />
+            </div>
           ) : (
-            <>
-              <div className="trade-row">
+            <div className="trade-form">
+              <div className="trade-form__amount">
                 <Amount
                   label={`Sell ($${token.symbol})`}
                   value={sellTokens}
@@ -621,84 +642,139 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
                   disabled={pending || paused}
                   step="1"
                   placeholder="0"
-                  onMax={
-                    tokenBalanceRaw && tokenBalanceRaw > 0n
-                      ? () => setSellTokens(trimZeros(formatUnits(tokenBalanceRaw, DECIMALS)))
-                      : undefined
-                  }
+                  // The buy side prices the field; this side can only price the
+                  // quote, since what the tokens are worth is the curve's answer
+                  // rather than an exchange rate. Same line, same place.
+                  hint={<FiatValue eth={ethOut === null ? null : Number(formatEther(ethOut))} />}
                 />
-
-                <div className="trade-row__action">
-                  {walletWaking ? (
-                    <button type="button" className="btn btn--primary btn--block" disabled data-busy>
-                      Reconnecting wallet...
-                    </button>
-                  ) : isConnected ? (
-                    <button
-                      type="button"
-                      className="btn btn--primary btn--block"
-                      onClick={handleSell}
-                      disabled={sellDisabled}
-                      data-busy={pending || undefined}
-                    >
-                      {paused
-                        ? "Trading halted"
-                        : pending
-                          ? busyLabel
-                          : tokenBalance === 0
-                            ? `No $${token.symbol} held`
-                            : sellTooSmall
-                              ? "Amount too small"
-                              : `Sell $${token.symbol}`}
-                    </button>
-                  ) : (
-                    <WalletButton variant="block" />
-                  )}
-                </div>
+                <QuickPicks
+                  picks={sellPicks}
+                  current={sellTokens}
+                  onPick={setSellTokens}
+                  disabled={pending || paused}
+                  label={`Quick amounts to sell`}
+                />
               </div>
 
-              <Slippage bps={slippageBps} onChange={setSlippageBps} disabled={pending} />
-
-              <p className="trade-foot">
-                {ethOut !== null && ethOut > 0n ? (
-                  <>
-                    ≈ {formatEth(Number(formatEther(ethOut)))} ETH{" "}
-                    <FiatValue eth={Number(formatEther(ethOut))} parens />
-                    {minEthOut !== null && (
-                      <> · min {formatEth(Number(formatEther(minEthOut)))}</>
-                    )}
-                  </>
-                ) : quotingSell ? (
-                  <>pricing...</>
-                ) : sellQuoteError && sellUnits !== null ? (
-                  <>More than the curve ever issued.</>
-                ) : sellTooSmall ? (
-                  <>Prices out to zero — sell more.</>
-                ) : (
-                  <>Enter an amount.</>
-                )}
-                {overSells && <> · more than you hold</>}
-                {" · "}fee {formatBps(stats.feeBps)} per leg
-              </p>
-            </>
+              <Action
+                waking={walletWaking}
+                connected={isConnected}
+                onClick={handleSell}
+                disabled={sellDisabled}
+                busy={pending}
+                label={
+                  paused
+                    ? "Trading halted"
+                    : pending
+                      ? busyLabel
+                      : tokenBalance === 0
+                        ? `No $${token.symbol} held`
+                        : sellTooSmall
+                          ? "Amount too small"
+                          : `Sell $${token.symbol}`
+                }
+              />
+            </div>
           )}
 
+          {/* The second answer for a phone whose wallet will not connect from
+              the browser. Renders nothing anywhere else. */}
+          {!isConnected && !walletWaking && <WalletHandoff />}
+
           {/*
-            The reserve is the sell-back guarantee made checkable. Every token in
-            circulation can be sold back into this number, so it belongs beside the
-            button rather than three clicks away on an explorer.
+            The quote, and the control over how much sits under it.
+
+            This line survives compacting, so whatever it says has to be enough
+            to sign on — which is why the slippage in force joins it when the
+            presets are folded away. Nothing disappears without being said.
           */}
-          <p className="trade-foot">
-            Reserve {formatEth(Number(formatEther(reserveWei)))} ETH{" "}
-            <FiatValue eth={Number(formatEther(reserveWei))} />
-            {stats.reserveCap > 0 && <> of {formatEth(stats.reserveCap)} cap</>}
-            {!curveClosed && headroomWei > 0n && (
-              <> · {formatEth(Number(formatEther(headroomWei)))} ETH to the ceiling</>
-            )}
-            {soldUnits > 0n && (
-              <> · {formatTokens(Number(formatUnits(soldUnits, DECIMALS)))} ${token.symbol} out</>
-            )}
-          </p>
+          <div className="trade-summary">
+            <p className="trade-foot">
+              {side === "buy" ? (
+                <>
+                  {formatEth(Number(formatEther(priceWei)))} ETH{" "}
+                  <FiatValue eth={Number(formatEther(priceWei))} /> per token
+                  {tokensOut !== null && tokensOut > 0n && (
+                    <>
+                      {" · "}≈ {formatTokens(Number(formatUnits(tokensOut, DECIMALS)))} $
+                      {token.symbol}
+                    </>
+                  )}
+                  {minTokensOut !== null && minTokensOut > 0n && (
+                    <> · min {formatTokens(Number(formatUnits(minTokensOut, DECIMALS)))}</>
+                  )}
+                  {quotingBuy && tokensOut === null && <> · pricing...</>}
+                  {buyTooSmall && <> · too small for one token unit</>}
+                  {/*
+                    The curve fills to its ceiling and hands back the rest rather
+                    than reverting, so an over-sized buy is legal — but a buyer is
+                    owed the number before they sign it.
+                  */}
+                  {refund !== null && refund > 0n && ethSpent !== null && (
+                    <>
+                      {" · "}
+                      {formatEth(Number(formatEther(ethSpent)))} ETH spent,{" "}
+                      {formatEth(Number(formatEther(refund)))} refunded at the ceiling
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  {ethOut !== null && ethOut > 0n ? (
+                    <>
+                      ≈ {formatEth(Number(formatEther(ethOut)))} ETH{" "}
+                      <FiatValue eth={Number(formatEther(ethOut))} parens />
+                      {minEthOut !== null && (
+                        <> · min {formatEth(Number(formatEther(minEthOut)))}</>
+                      )}
+                    </>
+                  ) : quotingSell ? (
+                    <>pricing...</>
+                  ) : sellQuoteError && sellUnits !== null ? (
+                    <>More than the curve ever issued.</>
+                  ) : sellTooSmall ? (
+                    <>Prices out to zero — sell more.</>
+                  ) : (
+                    <>Enter an amount.</>
+                  )}
+                  {overSells && <> · more than you hold</>}
+                  {" · "}fee {formatBps(stats.feeBps)} per leg
+                </>
+              )}
+              {compact && <> · slippage {formatBps(slippageBps)}</>}
+            </p>
+
+            <button
+              type="button"
+              className="link-button trade-summary__toggle"
+              aria-expanded={!compact}
+              aria-controls={detailsId}
+              onClick={() => setCompact(!compact)}
+            >
+              {compact ? "Details" : "Compact"}
+            </button>
+          </div>
+
+          <div id={detailsId} className="trade-details" hidden={compact}>
+            <Slippage bps={slippageBps} onChange={setSlippageBps} disabled={pending} />
+
+            {/*
+              The reserve is the sell-back guarantee made checkable. Every token in
+              circulation can be sold back into this number, so it belongs beside the
+              button rather than three clicks away on an explorer.
+            */}
+            <p className="trade-foot">
+              Reserve {formatEth(Number(formatEther(reserveWei)))} ETH{" "}
+              <FiatValue eth={Number(formatEther(reserveWei))} />
+              {stats.reserveCap > 0 && <> of {formatEth(stats.reserveCap)} cap</>}
+              {!curveClosed && headroomWei > 0n && (
+                <> · {formatEth(Number(formatEther(headroomWei)))} ETH to the ceiling</>
+              )}
+              {soldUnits > 0n && (
+                <> · {formatTokens(Number(formatUnits(soldUnits, DECIMALS)))} ${token.symbol} out</>
+              )}
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -780,6 +856,101 @@ function Slippage({
   );
 }
 
+/**
+ * One quick size. `value` is what the field would be set to, or null when there
+ * is nothing to set it to — no balance to take a fraction of, no headroom left
+ * on the curve — which draws the chip unpressable rather than dropping it.
+ */
+type Pick = { label: string; value: string | null };
+
+/**
+ * The sizes under a field.
+ *
+ * Chips rather than a second row of buttons: each one fills the field above it
+ * and can be undone by typing, so they are shortcuts to a value, not commands
+ * of their own. The one matching the field reads as pressed, which is also how
+ * a reader can tell that "Max" is still max after the balance moved.
+ */
+function QuickPicks({
+  picks,
+  current,
+  onPick,
+  disabled,
+  label,
+}: {
+  picks: Pick[];
+  current: string;
+  onPick: (value: string) => void;
+  disabled?: boolean;
+  /** Names the group for a screen reader, since the chips share a field. */
+  label: string;
+}) {
+  return (
+    <div className="trade-quick" role="group" aria-label={label}>
+      {picks.map((pick) => (
+        <button
+          key={pick.label}
+          type="button"
+          className="chip"
+          aria-pressed={pick.value !== null && pick.value === current}
+          disabled={disabled || pick.value === null}
+          onClick={() => pick.value !== null && onPick(pick.value)}
+        >
+          {pick.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The button at the end of either side.
+ *
+ * Shared so that buy and sell cannot drift apart: same element, same size, same
+ * three states — a wallet still waking, a wallet that can sign, and no wallet
+ * at all — whichever tab is open.
+ */
+function Action({
+  waking,
+  connected,
+  label,
+  onClick,
+  disabled,
+  busy,
+}: {
+  waking: boolean;
+  connected: boolean;
+  label: string;
+  onClick: () => void;
+  disabled: boolean;
+  busy: boolean;
+}) {
+  return (
+    <div className="trade-form__action">
+      {waking ? (
+        <button type="button" className="btn btn--primary btn--block" disabled data-busy>
+          Reconnecting wallet...
+        </button>
+      ) : connected ? (
+        <button
+          type="button"
+          className="btn btn--primary btn--block"
+          onClick={onClick}
+          disabled={disabled}
+          // Separates "waiting on your wallet" from the several other reasons
+          // this button is disabled, which otherwise look identical. Drives the
+          // sweep in globals.css.
+          data-busy={busy || undefined}
+        >
+          {label}
+        </button>
+      ) : (
+        <WalletButton variant="block" />
+      )}
+    </div>
+  );
+}
+
 function Amount({
   label,
   value,
@@ -788,8 +959,6 @@ function Amount({
   step,
   placeholder,
   hint,
-  onMax,
-  maxLabel = "Max",
 }: {
   label: string;
   value: string;
@@ -797,21 +966,12 @@ function Amount({
   disabled?: boolean;
   step: string;
   placeholder?: string;
-  /** A line under the field — the typed amount in the reader's currency. */
+  /** A line under the field — the amount in the reader's currency. */
   hint?: React.ReactNode;
-  onMax?: () => void;
-  maxLabel?: string;
 }) {
   return (
     <label className="field">
-      <span className="field__label">
-        {label}
-        {onMax && (
-          <button type="button" onClick={onMax} className="link-button" disabled={disabled}>
-            {maxLabel}
-          </button>
-        )}
-      </span>
+      <span className="field__label">{label}</span>
       <input
         type="number"
         min="0"

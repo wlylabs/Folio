@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { FOLIO_SALE_ABI } from "@/lib/contracts/folioSale";
 import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
 import WalletButton from "@/components/WalletButton";
+import WalletHandoff from "@/components/WalletHandoff";
 import FiatValue from "@/components/FiatValue";
 import { GasNotice, fixedChainWayOut } from "@/components/Faucet";
 import { useDockHeight } from "@/components/useDockHeight";
@@ -493,6 +494,10 @@ export default function LegacySaleBar({
               </p>
             </>
           )}
+
+          {/* The way in for a phone that cannot pair from a browser tab.
+              Renders nothing when the connect button is enough. */}
+          {!isConnected && !walletWaking && <WalletHandoff />}
         </div>
       </div>
     </div>
