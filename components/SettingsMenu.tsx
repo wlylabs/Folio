@@ -7,6 +7,7 @@ import { useAccount } from "wagmi";
 import WalletButton from "@/components/WalletButton";
 import WalletHandoff from "@/components/WalletHandoff";
 import CurrencySelector from "@/components/CurrencySelector";
+import ThemeSelector from "@/components/ThemeSelector";
 import { DEFAULT_CHAIN_SLUG, chainLabel } from "@/lib/chains";
 import { FACTORY_DEPLOYMENTS } from "@/lib/contracts/deployment";
 import { CONSENT_EVENT, readConsent, writeConsent, type ConsentChoice } from "@/lib/consent";
@@ -107,6 +108,11 @@ export default function SettingsMenu() {
               connect button is enough.
             */}
             <WalletHandoff />
+          </section>
+
+          <section className="settings__group">
+            <h2 className="eyebrow">Appearance</h2>
+            <ThemeSelector />
           </section>
 
           <section className="settings__group">

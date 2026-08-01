@@ -513,7 +513,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
             <button
               type="button"
               role="tab"
-              className="tab"
+              className="tab tab--buy"
               aria-selected={side === "buy"}
               onClick={() => setSide("buy")}
             >
@@ -522,7 +522,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
             <button
               type="button"
               role="tab"
-              className="tab"
+              className="tab tab--sell"
               aria-selected={side === "sell"}
               onClick={() => setSide("sell")}
             >
@@ -681,6 +681,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
               </div>
 
               <Action
+                tone="buy"
                 waking={walletWaking}
                 connected={isConnected}
                 onClick={handleBuy}
@@ -724,6 +725,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
               </div>
 
               <Action
+                tone="sell"
                 waking={walletWaking}
                 connected={isConnected}
                 onClick={handleSell}
@@ -976,8 +978,18 @@ function QuickPicks({
  * Shared so that buy and sell cannot drift apart: same element, same size, same
  * three states — a wallet still waking, a wallet that can sign, and no wallet
  * at all — whichever tab is open.
+ *
+ * The one thing that does differ is the colour, and it differs the way every
+ * broker a reader has used makes it differ: green to buy, red to sell. The tone
+ * rides on both the live button and the one standing in for it while a wallet
+ * wakes, so the slot does not change colour under the reader's thumb halfway
+ * through connecting.
+ *
+ * The label still names the action in full — "Buy $TICKER" — so the colour is
+ * confirming a decision the words already state.
  */
 function Action({
+  tone,
   waking,
   connected,
   label,
@@ -985,6 +997,7 @@ function Action({
   disabled,
   busy,
 }: {
+  tone: Side;
   waking: boolean;
   connected: boolean;
   label: string;
@@ -992,16 +1005,18 @@ function Action({
   disabled: boolean;
   busy: boolean;
 }) {
+  const variant = tone === "buy" ? "btn--buy" : "btn--sell";
+
   return (
     <div className="trade-form__action">
       {waking ? (
-        <button type="button" className="btn btn--primary btn--block" disabled data-busy>
+        <button type="button" className={`btn ${variant} btn--block`} disabled data-busy>
           Reconnecting wallet...
         </button>
       ) : connected ? (
         <button
           type="button"
-          className="btn btn--primary btn--block"
+          className={`btn ${variant} btn--block`}
           onClick={onClick}
           disabled={disabled}
           // Separates "waiting on your wallet" from the several other reasons
@@ -1012,6 +1027,8 @@ function Action({
           {label}
         </button>
       ) : (
+        // Connecting is not a trade, so it stays the ink button it is
+        // everywhere else on the site.
         <WalletButton variant="block" />
       )}
     </div>

@@ -10,6 +10,9 @@
    The language is print: warm paper, one ink, hairline rules, square
    corners, a display serif for headlines and a UI sans for everything the
    machine says.
+
+   Two things arrive from the trading side of the world, because this page also
+   has to work as one — see the palette notes below.
    ========================================================================== */
 
 :root {
@@ -25,6 +28,44 @@
   --rule: #dbd6cb;
   --rule-strong: #b6b0a2;
   --alert: #a4222f;
+
+  /*
+   * The one place a solid slab of ink carries paper-coloured text: the fact
+   * box's header bar, the code block in an article, the skip link. It is a
+   * token rather than `--ink` directly because inverting the whole palette
+   * after dark would otherwise turn those three into headlights.
+   */
+  --bar: #14120e;
+  --bar-ink: #f7f6f2;
+
+  /* The masthead's frosted backing — the paper colour, at the opacity the
+     blur behind it is tuned for. */
+  --paper-veil: rgba(247, 246, 242, 0.88);
+
+  /* --- Direction -------------------------------------------------------- *
+   *
+   * Green up, red down: the one convention this interface borrows wholesale,
+   * because it is the one every reader arriving from a broker already has.
+   * Folio settles on Robinhood Chain, and #00c805 / #ff5000 are that palette's
+   * two figures — they are used verbatim after dark, where they were designed
+   * to sit.
+   *
+   * On paper they are not: pure #00c805 carries about 2:1 against white, which
+   * is a colour you can see and not one you can read. So the day page runs the
+   * same two hues taken down to where a 12px figure holds 4.5:1, and the night
+   * page runs the originals.
+   *
+   * What colour never does here is carry the meaning alone. A rise is a green
+   * chip that also says "Up" and draws an arrow; a buy in the tape is a green
+   * word that also reads "Buy" and plots a filled marker. Colour is the second
+   * telling of something already told, everywhere it appears.
+   */
+  --up: #00761f;
+  --up-ink: #fffdf8;
+  --up-wash: rgba(0, 118, 31, 0.12);
+  --down: #bd3311;
+  --down-ink: #fffdf8;
+  --down-wash: rgba(189, 51, 17, 0.12);
 
   /* --- Type ------------------------------------------------------------- */
   /*
@@ -71,6 +112,8 @@
 
   --shadow-press: 4px 4px 0 rgba(20, 18, 14, 0.09);
   --shadow-press-sm: 2px 2px 0 rgba(20, 18, 14, 0.09);
+  /* The consent strip, lifting off the bottom edge. */
+  --shadow-lift: 0 -10px 30px rgba(20, 18, 14, 0.1);
 
   /*
    * Three durations and one curve, so every control in the interface accelerates
@@ -82,6 +125,60 @@
   --dur: 160ms;
   --dur-slow: 240ms; /* things entering the page rather than reacting in place */
   --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ==========================================================================
+   The night page
+
+   Not a second design — the same one after dark. Every rule below re-points a
+   token the day page already defined, so nothing in the rest of this file, and
+   nothing in any component, knows which palette it is being drawn in. The paper
+   goes to near-black, the ink to bone, and each pair keeps the contrast it had.
+
+   `data-theme` is put on <html> by the boot script in app/layout.tsx, before
+   the first paint, from the reader's stored answer or their system's — see
+   lib/theme.ts. With scripting off the attribute never arrives and the day page
+   is what gets served, which is the harmless way to fail: a coherent light page
+   rather than half of each.
+   ========================================================================== */
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --paper: #0d0d0c;
+  --paper-raised: #161614;
+  --paper-sunk: #1f1e1b;
+  --ink: #f3f1ea;
+  --ink-soft: #b8b2a6;
+  --ink-muted: #948d80;
+  --rule: #34322c;
+  --rule-strong: #56524a;
+  --alert: #ff6b5e;
+
+  /* A raised bar rather than an inverted one: after dark, the ink slab that
+     headed the fact box would be the brightest thing on the screen. */
+  --bar: #23221e;
+  --bar-ink: #f3f1ea;
+
+  --paper-veil: rgba(13, 13, 12, 0.86);
+
+  /* The originals, at home on black. See the note in the day palette. */
+  --up: #00c805;
+  --up-ink: #06170a;
+  --up-wash: rgba(0, 200, 5, 0.16);
+  --down: #ff5a1f;
+  --down-ink: #1a0a03;
+  --down-wash: rgba(255, 90, 31, 0.16);
+
+  /*
+   * The press, inverted. A hard black offset is the shadow a sheet of paper
+   * casts; on a dark page it is invisible, so the same offset is drawn in ink
+   * instead and reads as the light catching the raised edge. Same geometry,
+   * same distance, opposite hand.
+   */
+  --shadow-press: 4px 4px 0 rgba(243, 241, 234, 0.1);
+  --shadow-press-sm: 2px 2px 0 rgba(243, 241, 234, 0.1);
+  --shadow-lift: 0 -10px 30px rgba(0, 0, 0, 0.6);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -96,10 +193,12 @@
   /*
    * The rule above collapses every animation to nothing, which for a looping
    * one means iterating it thousands of times a second rather than stopping it.
-   * The busy sweep is the only loop in the interface, so it is stopped by hand
-   * and left drawn — the state it reports still needs reporting.
+   * The two loops in the interface are stopped by hand and left drawn — the
+   * button's sweep reports a state that still needs reporting, and the chart's
+   * live marker is a mark on a chart before it is an animation.
    */
-  .btn[data-busy="true"]::after {
+  .btn[data-busy="true"]::after,
+  .chart__live {
     animation: none !important;
   }
 }
@@ -328,8 +427,8 @@ p {
   top: var(--sp-4);
   z-index: 100;
   padding: var(--sp-2) var(--sp-4);
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--bar);
+  color: var(--bar-ink);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   text-decoration: none;
@@ -361,7 +460,7 @@ p {
   /* Above the consent strip (z-index 40): the settings panel drops out of the
      masthead and can reach the bottom of a short window, where the banner is. */
   z-index: 45;
-  background: rgba(247, 246, 242, 0.88);
+  background: var(--paper-veil);
   backdrop-filter: saturate(180%) blur(10px);
   -webkit-backdrop-filter: saturate(180%) blur(10px);
   border-bottom: 1px solid var(--rule);
@@ -524,6 +623,30 @@ p {
 }
 
 /*
+ * The two buttons that spend money.
+ *
+ * Everywhere else in Folio the primary action is ink, because everywhere else
+ * there is only one of them. A trade panel has two, they are opposites, and the
+ * reader has a lifetime of green-buys-red-sells behind them — so this is the
+ * one place the direction colours reach a control. Square, same height, same
+ * press: it is the ink button in another colour, not a borrowed one.
+ *
+ * The label still says "Buy $TICKER" or "Sell $TICKER", and the tab above it is
+ * still the thing that decided which is on screen. Nothing here is only colour.
+ */
+.btn--buy {
+  background: var(--up);
+  color: var(--up-ink);
+  border-color: var(--up);
+}
+
+.btn--sell {
+  background: var(--down);
+  color: var(--down-ink);
+  border-color: var(--down);
+}
+
+/*
  * Hover belongs to pointers that can hover.
  *
  * A touch browser has no pointer to leave, so it fakes one: it applies :hover on
@@ -534,7 +657,9 @@ p {
  * nothing that outlives the finger.
  */
 @media (hover: hover) and (pointer: fine) {
-  .btn--primary:hover:not(:disabled):not([aria-disabled="true"]) {
+  .btn--primary:hover:not(:disabled):not([aria-disabled="true"]),
+  .btn--buy:hover:not(:disabled):not([aria-disabled="true"]),
+  .btn--sell:hover:not(:disabled):not([aria-disabled="true"]) {
     box-shadow: var(--shadow-press);
   }
 
@@ -569,7 +694,9 @@ p {
 .btn:active:not(:disabled):not([aria-disabled="true"]),
 .btn--primary:active:not(:disabled):not([aria-disabled="true"]),
 .btn--outline:active:not(:disabled):not([aria-disabled="true"]),
-.btn--alert:active:not(:disabled):not([aria-disabled="true"]) {
+.btn--alert:active:not(:disabled):not([aria-disabled="true"]),
+.btn--buy:active:not(:disabled):not([aria-disabled="true"]),
+.btn--sell:active:not(:disabled):not([aria-disabled="true"]) {
   transform: translate(1px, 1px);
   box-shadow: var(--shadow-press-sm);
 }
@@ -1156,8 +1283,8 @@ p {
   justify-content: space-between;
   gap: var(--sp-3);
   padding: 0.6rem 0.875rem;
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--bar);
+  color: var(--bar-ink);
   font-family: var(--font-ui);
   font-size: var(--fs-eyebrow);
   font-weight: 600;
@@ -1328,16 +1455,172 @@ p {
 /* ==========================================================================
    Price chart and trade tape
 
-   One series, ink on paper, so there is no palette here and no legend: the
-   panel heading names the line. The buy/sell distinction is carried twice
-   over — a filled or hollow marker on the chart, a word in the tape — because
-   a difference that lives only in a colour is a difference some readers do not
-   get.
+   One series and no legend: the panel heading names the line. What the line is
+   coloured by is the *window* — green if the price ended the selected range
+   above where it started, red if below — which is the one thing a reader looks
+   at a price chart to find out, and the one place borrowing a broker's
+   convention saves them the subtraction.
+
+   Nothing else on the panel changes colour with it. Buy and sell stay a filled
+   or hollow marker on the chart and a word in the tape, because a difference
+   that lives only in a colour is a difference some readers do not get — and
+   because side and direction are two different facts that would be unreadable
+   sharing one hue.
    ========================================================================== */
 
+/*
+ * The quote: the price, the size of a headline, with what it has done over the
+ * selected window beside it.
+ *
+ * It is the first thing in the panel and the last thing most readers need from
+ * it. Scrubbing the chart re-points it at the trade under the pointer — the
+ * figure, the label above it and the change beside it all follow — so the chart
+ * is read by moving across it rather than by squinting at a tooltip.
+ */
+.quote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  padding: var(--sp-4) 0.875rem var(--sp-2);
+}
+
+.quote__label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.quote__value {
+  display: block;
+  margin-top: var(--sp-1);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.5rem, 1.15rem + 1.6vw, 2.25rem);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* The unit is not part of the figure, and at the figure's size it would be
+   shouting. */
+.quote__unit {
+  font-family: var(--font-ui);
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.quote__aside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: 0;
+}
+
+/*
+ * What the price did over the window: an arrow, a word, a figure.
+ *
+ * All three, always. The arrow is the shape, the word is what a screen reader
+ * and a reader who does not separate red from green both get, and the colour is
+ * for everyone else — nobody is relying on the part they cannot use.
+ */
+.move {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid currentColor;
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.move--up {
+  color: var(--up);
+  background: var(--up-wash);
+}
+
+.move--down {
+  color: var(--down);
+  background: var(--down-wash);
+}
+
+/* A curve that has not moved gets no colour at all: there is no direction to
+   report, and a grey chip says that better than a green one at zero. */
+.move--flat {
+  color: var(--ink-muted);
+}
+
+.move__span {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  color: var(--ink-muted);
+}
+
+/*
+ * The window the chart is drawn over. Chips rather than tabs — each one sets a
+ * range, none of them switches a panel — and a range with no trade in it is
+ * never offered, because a filter that changes nothing is a control that
+ * appears broken.
+ */
+.chart__ranges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: 0 0.875rem var(--sp-3);
+}
+
 .chart {
+  /* The series colour, set by the direction of the window — see .chart--up and
+     .chart--down. Every mark inside the plot reads it, so the line, the wash
+     under it and the markers on it can never disagree. */
+  --series: var(--ink);
   padding: var(--sp-3) 0.875rem var(--sp-2);
   border-top: 1px solid var(--rule);
+}
+
+.chart--up {
+  --series: var(--up);
+}
+
+.chart--down {
+  --series: var(--down);
+}
+
+/*
+ * The last price, still live. A quiet pulse on the final marker, which is the
+ * one point on the chart that is not history — it is what the curve is quoting
+ * right now, and it stays true until somebody trades.
+ */
+.chart__live {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: live-pulse 2.4s var(--ease) infinite;
+}
+
+@keyframes live-pulse {
+  0% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
 }
 
 /*
@@ -1440,12 +1723,25 @@ p {
   text-transform: uppercase;
 }
 
+/* The word is the fact; the colour is the second telling of it. A tape read
+   with the colour stripped out — printed, or by a reader who does not separate
+   the two — still says "Buy" and "Sell" on every row. */
 .tape__side--buy {
-  color: var(--ink);
+  color: var(--up);
 }
 
 .tape__side--sell {
-  color: var(--ink-muted);
+  color: var(--down);
+}
+
+/* The same pair inside the chart's tooltip, where the words are "Bought" and
+   "Sold". */
+.tip__side--buy {
+  color: var(--up);
+}
+
+.tip__side--sell {
+  color: var(--down);
 }
 
 .tape__amount,
@@ -1959,8 +2255,8 @@ p {
   font-family: var(--font-mono);
   font-size: 0.8125em;
   line-height: 1.6;
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--bar);
+  color: var(--bar-ink);
   padding: var(--sp-4);
   overflow-x: auto;
 }
@@ -2075,6 +2371,24 @@ p {
 .tab[aria-selected="true"] {
   color: var(--ink);
   border-bottom-color: var(--ink);
+}
+
+/*
+ * The selected tab takes its side's colour, so the panel says which way it is
+ * pointed twice over — the word that is lit, and the rule under it. Same
+ * specificity as the rule above, so it has to sit after it.
+ *
+ * Only the selected one: an unselected tab in red would be a warning about
+ * something nobody has chosen yet.
+ */
+.tab--buy[aria-selected="true"] {
+  color: var(--up);
+  border-bottom-color: var(--up);
+}
+
+.tab--sell[aria-selected="true"] {
+  color: var(--down);
+  border-bottom-color: var(--down);
 }
 
 .tabs__aside {
@@ -2410,7 +2724,7 @@ p {
   z-index: 40;
   background: var(--paper-raised);
   border-top: 1px solid var(--ink);
-  box-shadow: 0 -10px 30px rgba(20, 18, 14, 0.1);
+  box-shadow: var(--shadow-lift);
   padding-bottom: env(safe-area-inset-bottom);
   /* It arrives a beat after the page, once the effect has read localStorage.
      Sliding it up off the edge is what stops that beat from looking like the

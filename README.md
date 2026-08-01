@@ -216,14 +216,51 @@ Two things about how it is wired matter more than they look:
   mounts empty and fills in from `/api/token/<address>/trades`, which caches each
   scan for twenty seconds and shares one walk between concurrent readers.
 - **The axis labels are HTML, not SVG text.** Anything inside a scaled `viewBox`
-  scales with it, which turns a 9px label into a 5px one on a phone. The high,
-  the low and the price now are printed around the plot instead — to four
+  scales with it, which turns a 9px label into a 5px one on a phone. The open,
+  the high and the low are printed around the plot instead — to four
   significant figures, because `formatEth`'s six decimal places cannot tell two
   curve prices apart down where a young launch's price lives.
+
+Above the chart is the quote: the price at headline size, and beside it what it
+has done over the selected window. Scrubbing the chart re-points both at the
+trade under the pointer, and the label stops saying "price now" the moment the
+figure stops being one.
+
+The window is chosen with the chips under the plot — hour, day, week, month, all
+— and `lib/priceWindow.ts` is the whole of that vocabulary. Two things there are
+worth knowing. A range earns its chip only by containing a trade *and* leaving
+one out, so a filter that would change nothing is never offered. And a window's
+opening price is the last trade **before** it rather than the first one inside
+it: on a curve where a single buy can move the price by a fifth, taking the
+first trade inside would quietly discount the move that trade itself made. That
+opening price is the dashed line on the plot, it is always inside the y-domain,
+and it is what the change beside the price is measured from.
+
+Colour on this panel says one thing and says it twice. The line, its wash and
+its markers are green when the window ended above its open and red when below —
+the one broker convention worth borrowing, and the reason the chip beside the
+price also draws an arrow and writes the word ("Up 12.4%"). Buy and sell keep
+filled and hollow markers and their words in the tape, because side and
+direction are two different facts and neither is ever left to a hue alone.
 
 Under the chart is the trade tape: side, size, trader and how long ago, each row
 linking to the transaction. It doubles as the chart's table view, and hovering a
 point on the chart highlights its row.
+
+## The interface
+
+Everything the UI is made of lives in `app/globals.css` as custom properties —
+which is what makes the night palette a re-pointing of about twenty tokens
+rather than a second stylesheet. `lib/theme.ts` owns the vocabulary and the
+boot script that puts `data-theme` on `<html>` before the first paint;
+`components/ThemeProvider.tsx` keeps it in step with the settings panel, other
+tabs and the operating system. The default is `system`, and the wallet modal
+follows along — `lib/walletTheme.ts` carries both palettes, because a wallet
+list in full daylight opened from a dark page is the whole illusion gone.
+
+Two colours reach controls, and only inside a trade panel: green to buy, red to
+sell. Everywhere else the primary action is ink, because everywhere else there
+is only one of them.
 
 ## Claiming creator fees
 
