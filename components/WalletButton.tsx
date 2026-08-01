@@ -12,7 +12,7 @@ type Variant = "menu" | "block";
  * The wallet control, drawn in Folio's print language instead of RainbowKit's
  * default rounded blue pill.
  *
- * `block` is the full-width slab used inside forms and the trade dock — same
+ * `block` is the full-width slab used inside forms and the trade panel — same
  * geometry and weight as the Buy button it sits beside. `menu` is the stacked
  * pair inside the settings panel: once connected it splits into a network row
  * and an account row, each opening its own modal, because the panel is where a

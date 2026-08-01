@@ -13,11 +13,11 @@ const DENSITY_KEY = "folio_trade_compact";
  * accounting behind "Details". Nothing is hidden silently: the slippage in
  * force is printed in the line that stays.
  *
- * The point is the phone, where the dock is pinned over the article and every
- * line it grows is a line of the article it takes. So an unanswered question is
- * answered by the screen: compact where the panel covers something, full where
- * it sits in the rail beside it. A reader who answers it themselves is
- * remembered, on every token page, until they change their mind.
+ * The point is the phone, where the panel is most of a screen and every line it
+ * grows is another one to scroll past on the way to the button. So an unanswered
+ * question is answered by the screen: compact where the panel fills the window,
+ * full where the whole of it is in view at once. A reader who answers it
+ * themselves is remembered, on every token page, until they change their mind.
  *
  * Both reads happen in an effect. localStorage and matchMedia are client-only,
  * and a first render that disagreed with the server's would be a hydration
@@ -44,8 +44,8 @@ export function useTradeDensity(): {
       return;
     }
 
-    // The same 64rem the dock becomes a rail at. Below it the panel is pinned
-    // over the article; above it there is nothing to get out of the way.
+    // Below 64rem the panel is close to a screenful on its own; above it the
+    // whole panel and the figures over it are in view together.
     setState(
       typeof window.matchMedia === "function" && window.matchMedia("(max-width: 63.99rem)").matches
     );

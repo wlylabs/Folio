@@ -8,16 +8,10 @@ import { readConsent, writeConsent } from "@/lib/consent";
  * The consent strip. Sits on the bottom edge, dismisses on either answer, and
  * never returns once answered.
  *
- * Two details it has to get right:
- *
- * - It renders nothing on the first client pass. localStorage cannot be read
- *   during SSR, so a banner rendered optimistically would flash on every visit
- *   for readers who already answered. `decided` starts undefined and the
- *   effect resolves it.
- *
- * - On a token page the trade dock owns the bottom edge. The banner stacks
- *   above it using the same `--dock-h` the dock publishes (components/
- *   useDockHeight.ts), so the two never overlap on a phone.
+ * One detail it has to get right: it renders nothing on the first client pass.
+ * localStorage cannot be read during SSR, so a banner rendered optimistically
+ * would flash on every visit for readers who already answered. `decided` starts
+ * undefined and the effect resolves it.
  */
 export default function CookieBanner() {
   const [decided, setDecided] = useState<boolean | undefined>(undefined);

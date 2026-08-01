@@ -3,7 +3,7 @@
 import { useAccount, useConfig, useReadContract, useReadContracts } from "wagmi";
 import { getAccount, switchChain, writeContract } from "wagmi/actions";
 import { formatEther, formatUnits, parseEther, parseUnits } from "viem";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FOLIO_TOKEN_ABI } from "@/lib/contracts/folioToken";
 import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
@@ -11,7 +11,6 @@ import WalletButton from "@/components/WalletButton";
 import WalletHandoff from "@/components/WalletHandoff";
 import FiatValue from "@/components/FiatValue";
 import { GasNotice, fixedChainWayOut } from "@/components/Faucet";
-import { useDockHeight } from "@/components/useDockHeight";
 import { useTradeDensity } from "@/components/useTradeDensity";
 import { useGasBalance } from "@/components/useGasBalance";
 import { classifyTxError } from "@/lib/txErrors";
@@ -87,17 +86,11 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
   const [slippageBps, setSlippageBps] = useState(DEFAULT_SLIPPAGE_BPS);
   const [status, setStatus] = useState<Status | null>(null);
 
-  // On a phone this panel is pinned over the bottom of the article. Collapsing
-  // it leaves the tab strip and the balances, and gives the page back.
-  const [collapsed, setCollapsed] = useState(false);
-
   // How much of the panel to draw. Compact keeps the trade and folds the
   // settings and the curve's accounting away — see useTradeDensity.
   const { compact, setCompact } = useTradeDensity();
 
   const { phase, pending, slow, begin, confirming, done, abandon } = useTxPhase();
-
-  const dockRef = useDockHeight();
 
   const chainEntry = chainBySlug(token.chain);
   const targetChainId = chainEntry?.chain.id;
@@ -413,7 +406,6 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
   /** What the primary button says while a transaction is in flight. */
   const busyLabel = phase === "signing" ? "Check your wallet..." : "Confirming...";
 
-  const bodyId = useId();
   const detailsId = useId();
 
   /**
@@ -436,15 +428,9 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
     }));
   };
 
-  /** Picking a side while the panel is shut is a request to open it. */
-  const choose = (next: Side) => {
-    setSide(next);
-    setCollapsed(false);
-  };
-
   return (
-    <div className="trade-dock" ref={dockRef}>
-      <div className="trade-dock__inner">
+    <div className="trade-panel">
+      <div className="trade-panel__inner">
         <div className="tabs">
           <div className="tabs__list" role="tablist" aria-label="Trade side">
             <button
@@ -452,7 +438,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
               role="tab"
               className="tab"
               aria-selected={side === "buy"}
-              onClick={() => choose("buy")}
+              onClick={() => setSide("buy")}
             >
               Buy
             </button>
@@ -461,7 +447,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
               role="tab"
               className="tab"
               aria-selected={side === "sell"}
-              onClick={() => choose("sell")}
+              onClick={() => setSide("sell")}
             >
               Sell
             </button>
@@ -472,25 +458,9 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
             {ethBalance && <> · {formatEth(Number(formatUnits(ethBalance.value, 18)))} ETH</>}
           </div>
 
-          {/*
-            Phone only — on a wide screen the dock is a panel in the article
-            rail and covers nothing, so there is nothing to get out of the way.
-          */}
-          <button
-            type="button"
-            className="trade-dock__toggle"
-            aria-expanded={!collapsed}
-            aria-controls={bodyId}
-            onClick={() => setCollapsed((was) => !was)}
-          >
-            {collapsed ? "Trade" : "Hide"}
-          </button>
         </div>
 
-        <div
-          id={bodyId}
-          className={`trade-dock__body${collapsed ? " trade-dock__body--shut" : ""}`}
-        >
+        <div className="trade-panel__body">
           {status && (
             <p
               // Keyed on the message so each step of a trade — sent, confirming,

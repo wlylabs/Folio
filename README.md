@@ -279,6 +279,14 @@ compiler — only edits to a `.sol` file do.
   component is the answer for a deployment with no
   `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, which additionally stops the connect
   modal from listing wallets that cannot pair at all (`lib/wagmiConfig.ts`).
+- **A token page reads as an article, and the trade comes at the end of it.**
+  Headline, byline, the piece itself, then one section holding the three figures
+  a decision turns on, the buy/sell panel, and — folded shut — the whole of the
+  contract's data for anyone checking the claim. The panel used to sit in a rail
+  beside the headline, and on a phone it was pinned over the article from the
+  first line, which offered the button before any of the case for pressing it.
+  The byline carries an anchor down to the panel, so a reader who came back to
+  trade rather than to read is one press away from it.
 - **The trade panel has a compact setting, and it is the phone's default.** Buy
   and sell are drawn from the same three parts in the same order — amount, quick
   sizes (`0.01/0.05/0.1 ETH` and the curve's ceiling; `25/50/75%` and Max), then
@@ -287,8 +295,7 @@ compiler — only edits to a `.sol` file do.
   "Details", with the slippage in force printed in the line that stays, so
   nothing is hidden silently. The choice is remembered
   (`components/useTradeDensity.ts`); unanswered, it comes from the screen, since
-  the dock covers the article on a phone and sits in the rail beside it on a
-  desktop.
+  the panel is most of a phone and fits in view whole on a desktop.
 - **A wallet that connects on the wrong chain is moved, not scolded.** Wallets
   open on Ethereum mainnet, which Folio does not support, so a fresh connection
   used to land straight on "Wrong network". The connect request now names the
