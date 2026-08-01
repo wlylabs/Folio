@@ -97,6 +97,19 @@ export function isChainSlug(value: unknown): value is ChainSlug {
   return SUPPORTED_CHAINS.some((c) => c.slug === value);
 }
 
+/**
+ * Whether a wallet sitting on this chain id is somewhere Folio can work.
+ *
+ * The question a connected wallet asks: RainbowKit answers it internally to
+ * decide whether to show "Wrong network", and ChainSync needs the same answer
+ * to decide whether a switch is worth requesting. Being on the *wrong*
+ * supported chain is not this — that is settled per transaction, against the
+ * chain the token was actually deployed on.
+ */
+export function isSupportedChainId(id: number | undefined | null): boolean {
+  return id !== undefined && id !== null && SUPPORTED_CHAINS.some((c) => c.chain.id === id);
+}
+
 export function chainBySlug(slug: string) {
   return SUPPORTED_CHAINS.find((c) => c.slug === slug);
 }
