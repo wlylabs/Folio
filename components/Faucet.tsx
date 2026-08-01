@@ -85,7 +85,7 @@ export function fixedChainWayOut(
  * number they have to trust.
  *
  * Diagnosing the wrong-network claim still left the reader holding it. Knowing
- * the ETH is on Sepolia does not say whether that is a solvable problem, and
+ * the ETH is on the other testnet does not say whether that is solvable, and
  * the honest answer differs by page: a launch can move to whichever chain the
  * money is on, if Folio has a factory there, while a token trades on the one
  * chain it was launched on and nothing can move that. Neither answer belongs

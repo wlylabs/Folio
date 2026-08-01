@@ -18,8 +18,8 @@ import { usePreferredChainSlug } from "@/lib/preferredChain";
  * phone wallet adopted after the fact by WalletSessionSync, a wallet the reader
  * switched away from in another tab.
  *
- * Only unsupported chains. A wallet on Sepolia while the page is about a Base
- * Sepolia token is a *different* problem, and one the trade bar already solves
+ * Only unsupported chains. A wallet on Robinhood Chain Testnet while the page
+ * is about a Base Sepolia token is a *different* problem, one the trade bar solves
  * at the right moment: it switches when there is a transaction to sign, so
  * reading a page never moves a wallet the reader deliberately put somewhere.
  *

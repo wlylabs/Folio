@@ -194,8 +194,9 @@ export default function LaunchForm() {
    * guessing which testnet they claimed on.
    *
    * When there is no factory there, the honest answer is the other one. A
-   * reader who knows their ETH is on Sepolia will otherwise go looking for a
-   * bridge or a setting that would let them spend it, and there isn't one;
+   * reader who knows their ETH is on the other testnet will otherwise go
+   * looking for a bridge or a setting that would let them spend it, and there
+   * isn't one;
    * saying so is what ends that search and sends them to the faucet.
    */
   const elsewhereDeployment = gasElsewhere ? deploymentFor(gasElsewhere.slug) : null;

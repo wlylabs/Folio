@@ -1,5 +1,5 @@
 import { createPublicClient, defineChain, http, type PublicClient } from "viem";
-import { baseSepolia, sepolia } from "viem/chains";
+import { baseSepolia } from "viem/chains";
 
 /**
  * Robinhood Chain Testnet — an Arbitrum Orbit L2, EVM-equivalent, ETH for gas.
@@ -42,6 +42,10 @@ export const robinhoodTestnet = defineChain({
  * A chain being here means the app can *read* it and a wallet can be asked to
  * switch to it. Whether you can *launch* on it is a separate question, answered
  * by `deployments/<slug>.json` — see lib/contracts/deployment.ts.
+ *
+ * Two testnets, the same two `FolioScript.onlySupportedNetwork` allows: the app
+ * offers to switch a wallet to a chain, so listing one the contracts refuse to
+ * deploy on would move a reader somewhere Folio has nothing to trade.
  */
 export const SUPPORTED_CHAINS = [
   {
@@ -52,19 +56,6 @@ export const SUPPORTED_CHAINS = [
       { label: "Coinbase faucet", url: "https://portal.cdp.coinbase.com/products/faucet" },
       { label: "Alchemy faucet", url: "https://www.alchemy.com/faucets/base-sepolia" },
       { label: "Superchain faucet", url: "https://console.optimism.io/faucet" },
-    ],
-  },
-  {
-    slug: "sepolia",
-    chain: sepolia,
-    rpcEnv: process.env.NEXT_PUBLIC_RPC_SEPOLIA,
-    faucets: [
-      {
-        label: "Google Cloud faucet",
-        url: "https://cloud.google.com/application/web3/faucet/ethereum/sepolia",
-      },
-      { label: "Alchemy faucet", url: "https://www.alchemy.com/faucets/ethereum-sepolia" },
-      { label: "PoW faucet", url: "https://sepolia-faucet.pk910.de" },
     ],
   },
   {
