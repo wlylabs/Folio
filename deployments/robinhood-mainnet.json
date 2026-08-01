@@ -1,12 +1,12 @@
 {
   "network": "robinhood-mainnet",
   "chainId": 4663,
-  "factory": "",
-  "implementation": "",
-  "owner": "",
-  "deployer": "",
-  "deployedAtBlock": 0,
-  "deployedAtTimestamp": 0,
+  "factory": "0x7a2dddAE4c5Ae1db2b7450931FB66776C31b0131",
+  "implementation": "0xDCF32f50ab60f70547B52166154fE09C150E6B88",
+  "owner": "0xf6c34946fcd1AA9469BAbef0B93496E62cf1fcAa",
+  "deployer": "0xf6c34946fcd1AA9469BAbef0B93496E62cf1fcAa",
+  "deployedAtBlock": 24966563,
+  "deployedAtTimestamp": 1785580022,
   "explorer": "https://robinhoodchain.blockscout.com",
   "lastToken": "",
   "defaultConfig": {
