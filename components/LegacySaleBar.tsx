@@ -7,8 +7,6 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FOLIO_SALE_ABI } from "@/lib/contracts/folioSale";
 import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
-import WalletButton from "@/components/WalletButton";
-import WalletHandoff from "@/components/WalletHandoff";
 import FiatValue from "@/components/FiatValue";
 import { GasNotice, fixedChainWayOut } from "@/components/GasNotice";
 import { useGasBalance } from "@/components/useGasBalance";
@@ -391,7 +389,12 @@ export default function LegacySaleBar({
                       {soldOut ? "Sold out" : pending ? busyLabel : `Buy $${token.symbol}`}
                     </button>
                   ) : (
-                    <WalletButton variant="block" />
+                    // No connect control here — the wallet is set in the
+                    // settings panel alone. The slot keeps its geometry, and
+                    // the line under the form says where to go.
+                    <button type="button" className="btn btn--buy btn--block" disabled>
+                      {soldOut ? "Sold out" : `Buy $${token.symbol}`}
+                    </button>
                   )}
                 </div>
               </div>
@@ -442,7 +445,9 @@ export default function LegacySaleBar({
                             : `Sell $${token.symbol}`}
                     </button>
                   ) : (
-                    <WalletButton variant="block" />
+                    <button type="button" className="btn btn--sell btn--block" disabled>
+                      {!buyback ? "No buyback" : `Sell $${token.symbol}`}
+                    </button>
                   )}
                 </div>
               </div>
@@ -466,9 +471,14 @@ export default function LegacySaleBar({
             </>
           )}
 
-          {/* The way in for a phone that cannot pair from a browser tab.
-              Renders nothing when the connect button is enough. */}
-          {!isConnected && !walletWaking && <WalletHandoff />}
+          {/* Where the wallet is connected, said once. The controls themselves
+              — connect, network, account, and the phone handoff — live in the
+              settings panel and nowhere else. */}
+          {!isConnected && !walletWaking && (
+            <p className="trade-foot">
+              Connect a wallet under Settings in the masthead to trade.
+            </p>
+          )}
         </div>
       </div>
     </div>

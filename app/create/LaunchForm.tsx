@@ -22,8 +22,6 @@ import {
   type TransactionReceipt,
 } from "viem";
 import { useRouter } from "next/navigation";
-import WalletButton from "@/components/WalletButton";
-import WalletHandoff from "@/components/WalletHandoff";
 import FiatValue from "@/components/FiatValue";
 import { GasNotice } from "@/components/GasNotice";
 import { useGasBalance } from "@/components/useGasBalance";
@@ -756,18 +754,18 @@ export default function LaunchForm() {
         </div>
       )}
 
+      {/*
+        A notice, not a second connect control. The wallet is set in one place
+        — the settings panel in the masthead — so this says where to go and
+        leaves the connecting to it.
+      */}
       {!isConnected && (
         <div className="notice" style={{ marginBottom: "var(--sp-5)" }}>
           <p className="notice__title">Connect a wallet to sign the launch</p>
-          <p style={{ marginBottom: "var(--sp-4)" }}>
-            Nothing is published until you approve the transaction.
+          <p>
+            Open Settings in the masthead to connect one. Nothing is published
+            until you approve the transaction.
           </p>
-          <WalletButton variant="block" />
-          {/* The way in for a phone that cannot pair from a browser tab.
-              Renders nothing when the button above is enough. */}
-          <div style={{ marginTop: "var(--sp-3)" }}>
-            <WalletHandoff />
-          </div>
         </div>
       )}
 

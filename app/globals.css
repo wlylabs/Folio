@@ -762,12 +762,6 @@ p {
   font-size: var(--fs-eyebrow);
 }
 
-/* An address is not a label, so it keeps its own casing. */
-.btn--plain {
-  text-transform: none;
-  letter-spacing: 0.01em;
-}
-
 /* ==========================================================================
    Settings menu
 
@@ -2505,9 +2499,9 @@ p {
 }
 
 /*
- * The action wraps onto its own line rather than squeezing — "Connect wallet"
- * does not fit beside the amount on a narrow panel, and a two-line button reads
- * as a mistake in a way a stacked one does not.
+ * The action wraps onto its own line rather than squeezing — a label like
+ * "Sell $SYMBOL" does not fit beside the amount on a narrow panel, and a
+ * two-line button reads as a mistake in a way a stacked one does not.
  */
 .trade-row__action {
   flex: 1 1 11rem;
