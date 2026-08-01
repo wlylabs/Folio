@@ -3,6 +3,9 @@ pragma solidity 0.8.26;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
+import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
@@ -117,6 +120,31 @@ contract FolioMigrationForkTest is Test {
         assertTrue(token.migrated());
         assertEq(token.ethReserve(), 0);
         assertEq(token.migrationPrice(), closingPrice);
+
+        // And the pool trades, and pays the creator for it. The swap router is
+        // deployed here rather than found on chain — it is a test helper, and
+        // what is being checked is the manager underneath it.
+        PoolSwapTest swapper = new PoolSwapTest(manager);
+        vm.deal(alice, 5 ether);
+        vm.prank(alice);
+        swapper.swap{value: 2 ether}(
+            key,
+            SwapParams({
+                zeroForOne: true,
+                amountSpecified: -2 ether,
+                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            }),
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            ""
+        );
+
+        uint256 creatorBefore = creator.balance;
+        (uint256 ethFees,) = migrator.collectFees(token);
+        assertGt(ethFees, 0, "the live pool accrued no fees");
+        assertEq(creator.balance - creatorBefore, ethFees, "fees did not reach the creator");
+
+        // The principal is exactly where it was.
+        assertEq(manager.getLiquidity(key.toId()), liquidity, "collecting moved the principal");
     }
 
     function _config(address migrator_) internal pure returns (CurveConfig memory) {

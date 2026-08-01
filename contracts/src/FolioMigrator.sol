@@ -66,11 +66,22 @@ import {IFolioFactory} from "./interfaces/IFolioFactory.sol";
  * function, which is a withdrawal path, which is the one thing this contract must
  * not have. Losing dust is the cheaper side of that trade.
  *
- * The same absence applies to the swap fees the position earns: they accrue to a
- * position no code path can touch. Routing them to creators needs a v4 hook and a
- * collect path, which is deliberately not in this first version — a contract that
- * can collect is a contract with a withdrawal path in it, and that deserves its own
- * review rather than a corner of this one.
+ * ## The fees, which are not locked
+ *
+ * The position's swap fees are a different matter from its principal, and
+ * {collectFees} pays them to the launch's creator. Without it a creator's income
+ * stops at graduation — precisely when a launch most needs somebody with a reason
+ * to look after it — while the pool goes on charging its fee into a position
+ * nobody can reach.
+ *
+ * That is a second `modifyLiquidity`, so it is worth being exact about why it does
+ * not undo the paragraph above. It passes a literal zero, and a zero delta cannot
+ * shrink a position: the poke only makes the manager realise fees it already owed.
+ * Neither branch of {unlockCallback} takes its delta from calldata — `Provide`
+ * widens a `uint128`, `Collect` writes `0` — so there is no input to this contract
+ * that removes liquidity. The recipient is read off the token rather than supplied
+ * by the caller, and `take` sends straight to them, so prompting a collection is a
+ * favour to the creator and cannot be redirected into one for the caller.
  *
  * ## Permissionless
  *
@@ -102,10 +113,22 @@ contract FolioMigrator is IUnlockCallback {
     IFolioFactory public immutable factory;
 
     /// @notice Pool created for each token, once it has migrated.
-    mapping(address token => PoolId) public poolOf;
+    /// @dev The full key, not just the id — an id is a hash and cannot be turned
+    ///      back into the key {collectFees} needs to reach the position.
+    mapping(address token => PoolKey) internal _poolKeyOf;
 
     /// @notice True once a token has been migrated by this contract.
     mapping(address token => bool) public migrated;
+
+    /// @notice The pool a token was migrated into. Zeroed key before migration.
+    function poolKeyOf(address token) external view returns (PoolKey memory) {
+        return _poolKeyOf[token];
+    }
+
+    /// @notice The id of that pool, for reading state out of the manager.
+    function poolOf(address token) external view returns (PoolId) {
+        return _poolKeyOf[token].toId();
+    }
 
     /**
      * @notice A launch moved onto a pool.
@@ -125,6 +148,31 @@ contract FolioMigrator is IUnlockCallback {
         uint128 liquidity
     );
 
+    /**
+     * @notice What {unlockCallback} was asked to do.
+     *
+     * The whole safety argument of this contract turns on this enum having
+     * exactly two members and neither of them removing liquidity: `Provide`
+     * passes `int256(uint256(liquidity))`, `Collect` passes a literal zero. There
+     * is no third case and no path where the delta comes from calldata.
+     */
+    enum Action {
+        Provide,
+        Collect
+    }
+
+    /**
+     * @notice The position's accrued swap fees were paid out to the creator.
+     * @param token The launch whose pool earned them.
+     * @param creator Who received them — read from the token, never from the
+     *        caller, so prompting a collection cannot redirect one.
+     * @param ethOut Wei paid out.
+     * @param tokensOut Token units paid out.
+     */
+    event FeesCollected(
+        address indexed token, address indexed creator, uint256 ethOut, uint256 tokensOut
+    );
+
     error NotAFolioToken();
     error AlreadyMigrated();
     error WrongMigrator();
@@ -133,6 +181,11 @@ contract FolioMigrator is IUnlockCallback {
     error PriceOutOfRange();
     error NoLiquidity();
     error UnexpectedEth();
+    /// @notice {collectFees} on a launch that has not migrated. There is no
+    ///         position to collect from until there is.
+    error NotMigratedYet();
+    /// @notice The position has earned nothing since the last collection.
+    error NothingToCollect();
 
     /**
      * @param poolManager_ The v4 `PoolManager` on this chain.
@@ -196,30 +249,88 @@ contract FolioMigrator is IUnlockCallback {
         uint160 sqrtPriceX96 = _sqrtPriceX96(ethIn, tokensIn);
         poolManager.initialize(key, sqrtPriceX96);
 
-        liquidity = abi.decode(
-            poolManager.unlock(abi.encode(key, sqrtPriceX96, ethIn, tokensIn)), (uint128)
+        bytes memory result = poolManager.unlock(
+            abi.encode(Action.Provide, key, address(0), sqrtPriceX96, ethIn, tokensIn)
         );
+        (liquidity,,) = abi.decode(result, (uint128, uint256, uint256));
         if (liquidity == 0) revert NoLiquidity();
 
-        poolOf[address(token)] = key.toId();
+        _poolKeyOf[address(token)] = key;
         emit Migrated(address(token), key.toId(), ethIn, tokensIn, sqrtPriceX96, liquidity);
     }
 
     /**
-     * @notice v4 unlock callback. Adds the full-range position and pays for it.
-     * @dev The only place this contract calls `modifyLiquidity`, and the delta it
-     *      passes is always positive — there is no encoding of this payload that
-     *      removes liquidity, which is what makes the lock structural.
+     * @notice Pay the position's accrued swap fees to the launch's creator.
+     *         Callable by anyone, as often as anyone likes.
+     *
+     * Without this a creator's income stops at graduation, which is exactly when
+     * a launch most needs someone with a reason to look after it. The pool keeps
+     * charging its swap fee either way; the only question is whether the fee
+     * reaches a person or accretes to a position nobody can touch.
+     *
+     * The recipient is read off the token, never taken from the caller, so
+     * prompting a collection is a favour to the creator and nothing else. There
+     * is no reward for calling and nothing to gain by withholding — the amounts
+     * are whatever the pool has accrued, and they wait if nobody calls.
+     *
+     * @dev This is the second and last `modifyLiquidity` in this contract, and it
+     *      passes a literal zero. A zero delta cannot remove liquidity, which is
+     *      what keeps the position locked while its earnings are not: the whole
+     *      principal stays put and only fees are `take`n.
+     *
+     *      Fees go straight from the manager to the creator rather than through
+     *      here, so this contract never holds them and there is no balance for a
+     *      later function to be tempted to sweep.
+     * @param token The migrated launch.
+     * @return ethOut Wei paid to the creator.
+     * @return tokensOut Token units paid to the creator.
+     */
+    function collectFees(FolioToken token)
+        external
+        returns (uint256 ethOut, uint256 tokensOut)
+    {
+        if (!migrated[address(token)]) revert NotMigratedYet();
+
+        PoolKey memory key = _poolKeyOf[address(token)];
+        address creator = token.creator();
+
+        bytes memory result =
+            poolManager.unlock(abi.encode(Action.Collect, key, creator, uint160(0), uint256(0), uint256(0)));
+        (, ethOut, tokensOut) = abi.decode(result, (uint128, uint256, uint256));
+
+        if (ethOut == 0 && tokensOut == 0) revert NothingToCollect();
+        emit FeesCollected(address(token), creator, ethOut, tokensOut);
+    }
+
+    /**
+     * @notice v4 unlock callback. Either opens the position or collects its fees.
+     * @dev Both branches call `modifyLiquidity`, and neither can remove liquidity:
+     *      `Provide` passes a `uint128` widened to `int256`, which cannot be
+     *      negative, and `Collect` passes a literal zero. The delta never comes
+     *      from calldata. That is the whole lock, and it is worth re-reading this
+     *      function rather than the prose above before believing it.
      */
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
         if (msg.sender != address(poolManager)) revert NotPoolManager();
 
-        (PoolKey memory key, uint160 sqrtPriceX96, uint256 amount0, uint256 amount1) =
-            abi.decode(data, (PoolKey, uint160, uint256, uint256));
+        (
+            Action action,
+            PoolKey memory key,
+            address recipient,
+            uint160 sqrtPriceX96,
+            uint256 amount0,
+            uint256 amount1
+        ) = abi.decode(data, (Action, PoolKey, address, uint160, uint256, uint256));
 
-        // Full range, snapped inward to legal multiples of the spacing.
+        // Full range, snapped inward to legal multiples of the spacing. Recomputed
+        // rather than stored: it follows from the spacing, and a stored copy is a
+        // second source of truth for where the position lives.
         int24 tickLower = _floorToSpacing(TickMath.MIN_TICK, key.tickSpacing);
         int24 tickUpper = _ceilToSpacing(TickMath.MAX_TICK, key.tickSpacing);
+
+        if (action == Action.Collect) {
+            return _collect(key, tickLower, tickUpper, recipient);
+        }
 
         uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,
@@ -231,8 +342,7 @@ contract FolioMigrator is IUnlockCallback {
 
         if (liquidity == 0) revert NoLiquidity();
 
-        // The one `modifyLiquidity` in this contract, and its delta is always
-        // positive. There is no payload that reaches this line with a removal.
+        // Positive by construction: a `uint128` widened into an `int256`.
         (BalanceDelta callerDelta,) = poolManager.modifyLiquidity(
             key,
             ModifyLiquidityParams({
@@ -258,7 +368,48 @@ contract FolioMigrator is IUnlockCallback {
             poolManager.settle();
         }
 
-        return abi.encode(liquidity);
+        return abi.encode(liquidity, uint256(0), uint256(0));
+    }
+
+    /**
+     * @dev Poke the position with a zero delta, which makes the manager realise
+     *      the fees it owes, then send them straight to `recipient`.
+     *
+     *      A zero `liquidityDelta` is the entire safety property here. It cannot
+     *      shrink a position, so the principal is untouched and the only balance
+     *      that can move is the fee credit the poke just materialised. The
+     *      recipient is the creator the caller of {collectFees} read off the
+     *      token, and `take` sends there directly — this contract is never in
+     *      possession of the money.
+     */
+    function _collect(PoolKey memory key, int24 tickLower, int24 tickUpper, address recipient)
+        private
+        returns (bytes memory)
+    {
+        (BalanceDelta callerDelta,) = poolManager.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({
+                tickLower: tickLower,
+                tickUpper: tickUpper,
+                liquidityDelta: 0,
+                salt: bytes32(0)
+            }),
+            ""
+        );
+
+        // With a zero delta the only credits possible are fees, and a credit is
+        // positive. A negative one would mean the poke somehow owed the pool
+        // money, which cannot happen — the branches below simply never fire.
+        int128 delta0 = callerDelta.amount0();
+        int128 delta1 = callerDelta.amount1();
+
+        uint256 ethOut = delta0 > 0 ? uint256(uint128(delta0)) : 0;
+        uint256 tokensOut = delta1 > 0 ? uint256(uint128(delta1)) : 0;
+
+        if (ethOut > 0) poolManager.take(key.currency0, recipient, ethOut);
+        if (tokensOut > 0) poolManager.take(key.currency1, recipient, tokensOut);
+
+        return abi.encode(uint128(0), ethOut, tokensOut);
     }
 
     // -----------------------------------------------------------------------

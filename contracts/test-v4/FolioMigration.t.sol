@@ -381,6 +381,130 @@ contract FolioMigrationTest is Test {
     }
 
     // -----------------------------------------------------------------------
+    // Fees after migration
+    // -----------------------------------------------------------------------
+
+    /// Trade both ways so the position accrues fees in both currencies.
+    function _churn(PoolKey memory key) internal {
+        vm.startPrank(bob);
+        swapper.swap{value: 2 ether}(
+            key,
+            SwapParams({
+                zeroForOne: true,
+                amountSpecified: -2 ether,
+                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            }),
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            ""
+        );
+        uint256 got = token.balanceOf(bob);
+        token.approve(address(swapper), got);
+        swapper.swap(
+            key,
+            SwapParams({
+                zeroForOne: false,
+                amountSpecified: -int256(got / 2),
+                sqrtPriceLimitX96: TickMath.MAX_SQRT_PRICE - 1
+            }),
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            ""
+        );
+        vm.stopPrank();
+    }
+
+    /**
+     * The point of the whole collect path: a creator keeps earning on volume
+     * after the curve is gone. Without it their income stops at graduation, which
+     * is when a launch most needs someone with a reason to look after it.
+     */
+    function test_Fees_ReachTheCreator() public {
+        _graduate();
+        (PoolKey memory key,) = migrator.migrate(token);
+        _churn(key);
+
+        uint256 ethBefore = creator.balance;
+        uint256 tokensBefore = token.balanceOf(creator);
+
+        (uint256 ethOut, uint256 tokensOut) = migrator.collectFees(token);
+        assertTrue(ethOut > 0 || tokensOut > 0, "the pool accrued no fees at all");
+
+        assertEq(creator.balance - ethBefore, ethOut, "ETH fees did not reach the creator");
+        assertEq(
+            token.balanceOf(creator) - tokensBefore, tokensOut, "token fees did not reach them"
+        );
+
+        // And never through this contract — it holds no more than the migration
+        // dust it started with.
+        assertLt(address(migrator).balance, 1 gwei);
+    }
+
+    /**
+     * The property the collect path must not break. A zero `liquidityDelta`
+     * realises fees and cannot shrink a position, so the principal is exactly
+     * where it was before.
+     */
+    function test_Fees_CollectingLeavesThePrincipalUntouched() public {
+        _graduate();
+        (PoolKey memory key, uint128 liquidity) = migrator.migrate(token);
+        _churn(key);
+
+        migrator.collectFees(token);
+
+        assertEq(
+            manager.getLiquidity(key.toId()), liquidity, "collecting moved the principal"
+        );
+    }
+
+    /// Anyone may prompt a collection, and it is a favour to the creator every
+    /// time — the caller cannot make themselves the recipient.
+    function test_Fees_AnyoneMayPromptButOnlyTheCreatorIsPaid() public {
+        _graduate();
+        (PoolKey memory key,) = migrator.migrate(token);
+        _churn(key);
+
+        address stranger = makeAddr("stranger");
+        uint256 strangerEth = stranger.balance;
+        uint256 creatorEth = creator.balance;
+
+        vm.prank(stranger);
+        (uint256 ethOut,) = migrator.collectFees(token);
+
+        assertEq(stranger.balance, strangerEth, "the caller was paid");
+        assertEq(creator.balance - creatorEth, ethOut, "the creator was not");
+    }
+
+    function test_Fees_CollectingTwiceInARowHasNothingToPay() public {
+        _graduate();
+        (PoolKey memory key,) = migrator.migrate(token);
+        _churn(key);
+
+        migrator.collectFees(token);
+
+        vm.expectRevert(FolioMigrator.NothingToCollect.selector);
+        migrator.collectFees(token);
+    }
+
+    function test_Fees_RefusedBeforeMigration() public {
+        _graduate();
+        vm.expectRevert(FolioMigrator.NotMigratedYet.selector);
+        migrator.collectFees(token);
+    }
+
+    /// Fees keep accruing after a collection, so this is an income stream rather
+    /// than a one-off.
+    function test_Fees_AccrueAgainAfterACollection() public {
+        _graduate();
+        (PoolKey memory key,) = migrator.migrate(token);
+
+        _churn(key);
+        migrator.collectFees(token);
+
+        _churn(key);
+        (uint256 ethOut, uint256 tokensOut) = migrator.collectFees(token);
+        assertTrue(ethOut > 0 || tokensOut > 0, "the second round earned nothing");
+    }
+
+    // -----------------------------------------------------------------------
     // The lock
     // -----------------------------------------------------------------------
 

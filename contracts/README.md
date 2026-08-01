@@ -140,10 +140,36 @@ migrate, whoever asks. The address is snapshotted at creation and deliberately n
 read from the factory at call time, because a swappable migrator would be a lever
 that moves other people's money out of a live launch.
 
-Two things the first version deliberately does not do: collect the position's swap
-fees for creators, which needs a hook and a collect path, and a collect path is a
-withdrawal path that deserves its own review; and recover the few thousand wei of
-rounding dust each migration strands in the migrator, for the same reason.
+### Creator fees after migration
+
+The position's principal is locked; its swap fees are not. `collectFees(token)` is
+callable by anyone and pays the accrued fees to the launch's creator. Without it a
+creator's income stops at graduation — exactly when a launch most needs somebody
+with a reason to look after it — while the pool goes on charging its 1% into a
+position nobody can reach.
+
+That is a second `modifyLiquidity`, so it is worth being exact about why the lock
+survives it:
+
+- It passes a **literal zero**. A zero delta cannot shrink a position; the poke
+  only makes the manager realise fees it already owed.
+- Neither branch of `unlockCallback` takes its delta from calldata — `Provide`
+  widens a `uint128`, `Collect` writes `0` — so there is no input to the contract
+  that removes liquidity.
+- The recipient is read off the token, never supplied by the caller, and `take`
+  sends straight there. Prompting a collection is a favour to the creator and
+  cannot be redirected into one for the caller.
+
+`test_Fees_CollectingLeavesThePrincipalUntouched` holds the first of those, and
+`test_Fees_AnyoneMayPromptButOnlyTheCreatorIsPaid` the third.
+
+Fees go 100% to the creator. Folio takes no protocol cut anywhere else, and this
+was not the place to introduce the first one.
+
+One thing still deliberately absent: nothing recovers the few thousand wei of
+rounding dust each migration strands in the migrator. A sweep is a withdrawal path
+in a contract whose whole claim is that it has none, and dust is the cheaper side
+of that trade.
 
 ### The opening window
 
