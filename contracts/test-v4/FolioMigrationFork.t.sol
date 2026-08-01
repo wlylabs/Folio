@@ -37,6 +37,9 @@ contract FolioMigrationForkTest is Test {
 
     /// @dev Uniswap v4 `PoolManager` on Robinhood Chain, from
     ///      `Uniswap/sdks` → `sdk-core/src/addresses.ts` → `ROBINHOOD_ADDRESSES`.
+    ///      Confirmed to hold 24,009 bytes of working `PoolManager` at block
+    ///      25,066,538, with a full migration run through it. That confirmation
+    ///      is a snapshot; this file is what keeps it true.
     address internal constant POOL_MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
 
     uint256 internal constant ROBINHOOD_CHAIN_ID = 4663;

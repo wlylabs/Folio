@@ -417,14 +417,42 @@ identical to L1's, so the `~Gas used` line the scripts print is indicative
 there, not exact. It is a printed figure only — nothing in the contracts
 depends on it.
 
+### Uniswap v4 on Robinhood Chain
+
+Needed only if you are deploying a `FolioMigrator`. Addresses come from
+Uniswap's own `sdks` package (`sdk-core/src/addresses.ts`, `ROBINHOOD_ADDRESSES`)
+and were each checked to hold code on chain 4663 at block 25,066,538:
+
+| Contract | Address | Code |
+| --- | --- | --- |
+| v4 `PoolManager` | `0x8366a39CC670B4001A1121B8F6A443A643e40951` | 24,009 bytes |
+| v4 `PositionManager` | `0x58daec3116aae6d93017baaea7749052e8a04fa7` | 23,877 bytes |
+| v4 `StateView` | `0xf3334192d15450cdd385c8b70e03f9a6bd9e673b` | 3,531 bytes |
+| v4 `Quoter` | `0x8dc178efb8111bb0973dd9d722ebeff267c98f94` | 6,118 bytes |
+
+`FolioMigrator` uses the `PoolManager` only; the rest are listed because they are
+what a frontend or a quoting service would reach for next.
+
+Do not take this table on trust — it is a snapshot, and Uniswap can redeploy.
+`contracts/test-v4/FolioMigrationFork.t.sol` re-checks the `PoolManager` address
+against the live chain and runs a whole migration through it, and the `fork` job
+in `.github/workflows/contracts.yml` runs that on every push. Set the
+`ROBINHOOD_MAINNET_RPC_URL` secret or the job self-skips and warns.
+
 ### Still unconfirmed
 
 `evm_version` stays `paris`, deliberately. Arbitrum has supported PUSH0 since
 ArbOS 11 and TSTORE/MCOPY since ArbOS 20, so Cancun would very probably work —
 but the measured saving is ~63k gas on the one-off factory deploy and under
 0.4% per trade, which is not worth deploying on an assumption about a chain's
-EVM revision. Once a deploy has landed and the explorer confirms what the chain
-runs, this is worth revisiting.
+EVM revision.
+
+That assumption is now weaker than it was: Uniswap v4 is live on this chain and
+its `PoolManager` is built on TSTORE, so the chain demonstrably executes Cancun
+opcodes. That is inference from someone else's deployment rather than a check of
+our own bytecode, which is why the default has not moved — but it is the evidence
+this section was waiting for, and the case for switching is now mostly about
+whether the sub-0.4% is worth a re-verification pass.
 
 ---
 
