@@ -265,6 +265,19 @@ compiler — only edits to a `.sol` file do.
   `WalletSessionSync` adopts the approved session across the first seconds the
   tab is visible again, however it got there, and the wallet button reads
   "Connecting…" while it does.
+- **A wallet that connects on the wrong chain is moved, not scolded.** Wallets
+  open on Ethereum mainnet, which Folio does not support, so a fresh connection
+  used to land straight on "Wrong network". The connect request now names the
+  chain the page is about (RainbowKit's `initialChain`), and `ChainSync` asks
+  again for anything that arrives on an unsupported chain another way — a
+  restored session, a wallet switched in another tab. Which chain that is comes
+  from the page: a token page declares the chain its listing was launched on,
+  the create form the chain it would sign to, everything else the factory's
+  (`lib/preferredChain.ts`). A wallet already on a *supported* chain is left
+  where the reader put it; the switch to the token's own chain happens when
+  there is a transaction to sign, in the trade bar. A declined switch is not
+  asked again — the "Wrong network" button is still there, and it opens the
+  chain modal.
 - **Article HTML is sanitized on render** (`lib/sanitize.ts`) with an allowlist
   matching Tiptap's output. Stored bodies are untrusted — they arrive through
   the public anon key.

@@ -22,6 +22,7 @@ import {
   type CurveConfig,
 } from "@/lib/contracts/deployment";
 import { DEFAULT_CHAIN_SLUG, chainBySlug, explorerTxUrl } from "@/lib/chains";
+import { useDeclarePreferredChain } from "@/lib/preferredChain";
 import { classifyTxError } from "@/lib/txErrors";
 import { ensureWalletReady } from "@/lib/walletReady";
 import { formatBps, formatEth } from "@/lib/types";
@@ -143,6 +144,12 @@ export default function LaunchForm() {
   const [chainSlug, setChainSlug] = useState<string>(
     FACTORY_DEPLOYMENT?.chain ?? DEFAULT_CHAIN_SLUG
   );
+
+  // Which chain a wallet connecting from this page should be asked for. Picking
+  // from the selector above only changes where an unsupported wallet gets moved
+  // to; a wallet already on a supported chain is left alone until the launch is
+  // signed, which is where the switch that matters happens.
+  useDeclarePreferredChain(chainSlug);
 
   // Starts empty on purpose. Prefilled body text has to be selected and deleted
   // before you can write, and whatever survives that gets published; the prompt
