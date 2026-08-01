@@ -24,7 +24,7 @@ import {
 import { useRouter } from "next/navigation";
 import WalletButton from "@/components/WalletButton";
 import FiatValue from "@/components/FiatValue";
-import { FaucetLinks, FaucetNotice } from "@/components/Faucet";
+import { GasNotice } from "@/components/Faucet";
 import { useGasBalance } from "@/components/useGasBalance";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { FOLIO_FACTORY_ABI } from "@/lib/contracts/folioFactory";
@@ -258,8 +258,8 @@ export default function LaunchForm() {
   const [txHash, setTxHash] = useState<string | null>(null);
 
   // Which chain this launch lands on. Every factory is a separate deployment
-  // with its own address, its own curve terms and its own faucet, so this is
-  // not a display preference — it decides what gets signed.
+  // with its own address and its own curve terms, so this is not a display
+  // preference — it decides what gets signed.
   const [chainSlug, setChainSlug] = useState<string>(
     FACTORY_DEPLOYMENT?.chain ?? DEFAULT_CHAIN_SLUG
   );
@@ -285,14 +285,15 @@ export default function LaunchForm() {
   const deployment = deploymentFor(chainSlug);
   const chainEntry = chainBySlug(deployment?.chain ?? "");
   const curve = deployment?.defaultConfig;
-  // For the copy and the faucet links, which have something to say even before
-  // a chain is picked or when none has a factory.
-  const faucetChain = deployment?.chain ?? DEFAULT_CHAIN_SLUG;
+  // Which chain the copy, the explorer links and the gas notice speak about.
+  // Falls back to the default so those still say something before a chain is
+  // picked, or when none of them has a factory.
+  const launchChain = deployment?.chain ?? DEFAULT_CHAIN_SLUG;
 
   // Launching costs gas, and a wallet that has never touched this testnet has
-  // none. Read the balance up front so the form can point at a faucet instead
-  // of letting the wallet reject the signature — and keep reading it, so a
-  // claim made in the faucet tab lands here without a reload.
+  // none. Read the balance up front so the form can say so instead of letting
+  // the wallet reject the signature — and keep reading it, so a claim made in
+  // the faucet tab lands here without a reload.
   const {
     balance,
     noGas,
@@ -392,7 +393,7 @@ export default function LaunchForm() {
     if (noGas) {
       setFailure({
         title: `No ${chainEntry.chain.nativeCurrency.symbol} to pay gas with`,
-        body: `This wallet holds nothing on ${chainEntry.chain.name}, and launching costs gas. Claim some from a faucet below, then try again.`,
+        body: `This wallet holds nothing on ${chainEntry.chain.name}, and launching costs gas. Claim some from the faucets in Settings, then try again.`,
       });
       return;
     }
@@ -654,8 +655,8 @@ export default function LaunchForm() {
             ))}
           </div>
           <p className="field__hint" style={{ marginTop: "var(--sp-2)" }}>
-            Each network has its own factory, its own curve terms and its own faucet. A token
-            launched here cannot be moved to another one.
+            Each network has its own factory and its own curve terms. A token launched here
+            cannot be moved to another one.
           </p>
         </div>
       )}
@@ -698,8 +699,8 @@ export default function LaunchForm() {
 
       {isConnected && (noGas || gasUnreadable) && (
         <div style={{ marginTop: "var(--sp-4)" }}>
-          <FaucetNotice
-            chain={faucetChain}
+          <GasNotice
+            chain={launchChain}
             heading={`No ${chainEntry?.chain.nativeCurrency.symbol ?? "test ETH"} to pay gas with`}
             address={address}
             elsewhere={gasElsewhere}
@@ -871,7 +872,7 @@ export default function LaunchForm() {
           </section>
         )}
 
-        {failure && <FailureNotice failure={failure} chain={faucetChain} />}
+        {failure && <FailureNotice failure={failure} chain={launchChain} />}
 
         {busy && (
           <p className="status" role="status">
@@ -879,9 +880,9 @@ export default function LaunchForm() {
             {txHash && (
               <>
                 {" "}
-                {explorerTxUrl(faucetChain, txHash) ? (
+                {explorerTxUrl(launchChain, txHash) ? (
                   <a
-                    href={explorerTxUrl(faucetChain, txHash) as string}
+                    href={explorerTxUrl(launchChain, txHash) as string}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -895,28 +896,21 @@ export default function LaunchForm() {
           </p>
         )}
 
-        <div>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!isConnected || busy || !deployment}
-            className="btn btn--primary btn--block"
-            // A launch is an upload, a deploy and a receipt; the sweep is the
-            // only sign the sequence is still running. See globals.css.
-            data-busy={busy || undefined}
-          >
-            {busy
-              ? "Working..."
-              : hasMultipleLaunchChains && chainEntry
-                ? `Publish & launch on ${chainEntry.chain.name}`
-                : "Publish & launch"}
-          </button>
-
-          <p className="field__hint" style={{ marginTop: "var(--sp-3)" }}>
-            Need test ETH on {chainEntry?.chain.name ?? "this network"}?{" "}
-            <FaucetLinks chain={faucetChain} />
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={!isConnected || busy || !deployment}
+          className="btn btn--primary btn--block"
+          // A launch is an upload, a deploy and a receipt; the sweep is the
+          // only sign the sequence is still running. See globals.css.
+          data-busy={busy || undefined}
+        >
+          {busy
+            ? "Working..."
+            : hasMultipleLaunchChains && chainEntry
+              ? `Publish & launch on ${chainEntry.chain.name}`
+              : "Publish & launch"}
+        </button>
       </div>
     </main>
   );

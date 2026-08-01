@@ -1,19 +1,21 @@
 "use client";
 
 import { useAccount, useConfig, useReadContract } from "wagmi";
-import { getAccount, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
+import { getAccount, switchChain, writeContract } from "wagmi/actions";
 import { formatUnits, parseEther, parseUnits } from "viem";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FOLIO_SALE_ABI } from "@/lib/contracts/folioSale";
 import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
 import WalletButton from "@/components/WalletButton";
 import FiatValue from "@/components/FiatValue";
-import { FaucetLinks, FaucetNotice, fixedChainWayOut } from "@/components/Faucet";
+import { GasNotice, fixedChainWayOut } from "@/components/Faucet";
 import { useDockHeight } from "@/components/useDockHeight";
 import { useGasBalance } from "@/components/useGasBalance";
 import { classifyTxError } from "@/lib/txErrors";
 import { ensureWalletReady } from "@/lib/walletReady";
+import { awaitReceipt } from "@/lib/receipt";
+import { useTxPhase } from "@/components/useTxPhase";
 import {
   formatEth,
   formatTokens,
@@ -57,7 +59,12 @@ export default function LegacySaleBar({
   const [spendEth, setSpendEth] = useState(String(token.starting_price));
   const [sellTokens, setSellTokens] = useState("");
   const [status, setStatus] = useState<Status | null>(null);
-  const [pending, setPending] = useState(false);
+
+  // On a phone this panel is pinned over the bottom of the article. Collapsing
+  // it leaves the tab strip and the balances, and gives the page back.
+  const [collapsed, setCollapsed] = useState(false);
+
+  const { phase, pending, slow, begin, confirming, done, abandon } = useTxPhase();
 
   const dockRef = useDockHeight();
 
@@ -128,17 +135,38 @@ export default function LegacySaleBar({
     return chainEntry.chain.id;
   }
 
-  /** Wait for the receipt, then pull fresh figures for the whole page. */
-  async function settle(hash: `0x${string}`, id: number, done: string) {
-    setStatus({ kind: "info", message: "Transaction sent, waiting for confirmation...", tx: hash });
-    const receipt = await waitForTransactionReceipt(config, { hash, chainId: id });
+  /**
+   * Wait for the receipt, then pull fresh figures for the whole page.
+   *
+   * Bounded, and `alive`-guarded, for the reasons in lib/receipt.ts and
+   * components/useTxPhase.ts: an unbounded wait on a public testnet RPC is how
+   * a panel ends up stuck on "Confirming..." for a transaction that landed.
+   */
+  async function settle(
+    hash: `0x${string}`,
+    id: number,
+    succeeded: string,
+    alive: () => boolean
+  ) {
+    setStatus({ kind: "info", message: "Sent — waiting for the chain.", tx: hash });
+    const outcome = await awaitReceipt(config, { hash, chainId: id });
+    if (!alive()) return;
 
-    if (receipt.status !== "success") {
-      setStatus({ kind: "error", message: "The transaction reverted. Nothing changed.", tx: hash });
+    if (outcome.kind === "reverted") {
+      setStatus({ kind: "error", message: "Reverted. Nothing changed.", tx: hash });
       return;
     }
 
-    setStatus({ kind: "success", message: done, tx: hash });
+    if (outcome.kind === "pending") {
+      setStatus({
+        kind: "info",
+        message: "Sent, but not confirmed yet — the explorer has the truth.",
+        tx: hash,
+      });
+    } else {
+      setStatus({ kind: "success", message: succeeded, tx: hash });
+    }
+
     await Promise.all([refetchEth(), refetchTokens()]);
     router.refresh();
   }
@@ -159,7 +187,7 @@ export default function LegacySaleBar({
       return;
     }
 
-    setPending(true);
+    const alive = begin();
     try {
       const id = await prepare();
       const hash = await writeContract(config, {
@@ -169,11 +197,13 @@ export default function LegacySaleBar({
         value: spendWei,
         chainId: id,
       });
-      await settle(hash, id, `Bought $${token.symbol}.`);
+      if (!alive()) return;
+      confirming();
+      await settle(hash, id, `Bought $${token.symbol}.`, alive);
     } catch (err) {
-      report(err, "Buy");
+      if (alive()) report(err, "Buy");
     } finally {
-      setPending(false);
+      if (alive()) done();
     }
   };
 
@@ -188,7 +218,7 @@ export default function LegacySaleBar({
       return;
     }
 
-    setPending(true);
+    const alive = begin();
     try {
       const id = await prepare();
       const hash = await writeContract(config, {
@@ -198,12 +228,14 @@ export default function LegacySaleBar({
         args: [sellUnits],
         chainId: id,
       });
-      await settle(hash, id, `Sold $${token.symbol} back to the sale.`);
-      setSellTokens("");
+      if (!alive()) return;
+      confirming();
+      await settle(hash, id, `Sold $${token.symbol} back to the sale.`, alive);
+      if (alive()) setSellTokens("");
     } catch (err) {
-      report(err, "Sell");
+      if (alive()) report(err, "Sell");
     } finally {
-      setPending(false);
+      if (alive()) done();
     }
   };
 
@@ -214,197 +246,254 @@ export default function LegacySaleBar({
   const buyDisabled = pending || soldOut || spendWei === null || noGas;
   const sellDisabled = pending || sellUnits === null || !canSell || noGas;
 
+  /** What the primary button says while a transaction is in flight. */
+  const busyLabel = phase === "signing" ? "Check your wallet..." : "Confirming...";
+
+  const bodyId = useId();
+
+  /**
+   * Give up on the wait in progress, and say which wait was given up on.
+   *
+   * The two are not the same admission. Nothing has been signed while the
+   * wallet is still being asked, so the reader is told to go dismiss it there.
+   * Once it is signed the transaction is out of everyone's hands, this panel's
+   * included — so the explorer link stays on screen.
+   */
+  const stopWaiting = () => {
+    const wasSigning = phase === "signing";
+    abandon();
+    setStatus((prev) => ({
+      kind: "muted",
+      message: wasSigning
+        ? "Stopped waiting on your wallet — reject the request there if it's still open."
+        : "Stopped watching. If it was mined, the explorer will show it.",
+      tx: wasSigning ? undefined : prev?.tx,
+    }));
+  };
+
+  /** Picking a side while the panel is shut is a request to open it. */
+  const choose = (next: Side) => {
+    setSide(next);
+    setCollapsed(false);
+  };
+
   return (
     <div className="trade-dock" ref={dockRef}>
       <div className="trade-dock__inner">
-        <div className="tabs" role="tablist" aria-label="Trade side">
-          <button
-            type="button"
-            role="tab"
-            className="tab"
-            aria-selected={side === "buy"}
-            onClick={() => setSide("buy")}
-          >
-            Buy
-          </button>
-          <button
-            type="button"
-            role="tab"
-            className="tab"
-            aria-selected={side === "sell"}
-            onClick={() => setSide("sell")}
-          >
-            Sell
-          </button>
+        <div className="tabs">
+          <div className="tabs__list" role="tablist" aria-label="Trade side">
+            <button
+              type="button"
+              role="tab"
+              className="tab"
+              aria-selected={side === "buy"}
+              onClick={() => choose("buy")}
+            >
+              Buy
+            </button>
+            <button
+              type="button"
+              role="tab"
+              className="tab"
+              aria-selected={side === "sell"}
+              onClick={() => choose("sell")}
+            >
+              Sell
+            </button>
+          </div>
 
           <div className="tabs__aside">
             {tokenBalance !== null && <>{formatTokens(tokenBalance)} ${token.symbol}</>}
             {ethBalance && <> · {formatEth(Number(formatUnits(ethBalance.value, 18)))} ETH</>}
           </div>
+
+          {/*
+            Phone only — on a wide screen the dock is a panel in the article
+            rail and covers nothing, so there is nothing to get out of the way.
+          */}
+          <button
+            type="button"
+            className="trade-dock__toggle"
+            aria-expanded={!collapsed}
+            aria-controls={bodyId}
+            onClick={() => setCollapsed((was) => !was)}
+          >
+            {collapsed ? "Trade" : "Hide"}
+          </button>
         </div>
 
-        {status && (
-          <p
-            // Keyed on the message so each step of a trade mounts as its own
-            // line and plays the entry animation, rather than the text being
-            // swapped inside one node and the panel appearing to flicker.
-            key={status.message}
-            className={`status${status.kind === "error" ? " status--error" : ""}`}
-            role="status"
-          >
-            {status.message}
-            {statusTx && (
-              <>
-                {" "}
-                <a href={statusTx} target="_blank" rel="noopener noreferrer">
-                  view transaction
-                </a>
-              </>
-            )}
-          </p>
-        )}
-
-        {!stats.onChain && (
-          <p className="status">
-            Live sale data unavailable — this listing may predate on-chain deployment
-            {explorer && (
-              <>
-                {" · "}
-                <a href={explorer} target="_blank" rel="noopener noreferrer">
-                  view contract
-                </a>
-              </>
-            )}
-          </p>
-        )}
-
-        {isConnected && (noGas || gasUnreadable) && (
-          <FaucetNotice
-            chain={token.chain}
-            heading={`No ${chainEntry?.chain.nativeCurrency.symbol ?? "test ETH"} in this wallet`}
-            address={address}
-            elsewhere={gasElsewhere}
-            wayOut={fixedChainWayOut(gasElsewhere, chainEntry?.chain.name)}
-            unreadable={gasUnreadable}
-            onRecheck={() => void refetchEth()}
-            checking={checkingGas}
-          />
-        )}
-
-        {side === "buy" ? (
-          <>
-            <div className="trade-row">
-              <Amount
-                label="Spend (ETH)"
-                value={spendEth}
-                onChange={setSpendEth}
-                disabled={pending || soldOut}
-                step="0.0001"
-                // What the typed amount is worth, following every keystroke.
-                hint={<FiatValue eth={spendWei === null ? null : Number(formatUnits(spendWei, DECIMALS))} />}
-              />
-
-              <div className="trade-row__action">
-                {walletWaking ? (
-                  <button type="button" className="btn btn--primary btn--block" disabled data-busy>
-                    Reconnecting wallet...
-                  </button>
-                ) : isConnected ? (
-                  <button
-                    type="button"
-                    className="btn btn--primary btn--block"
-                    onClick={handleBuy}
-                    disabled={buyDisabled}
-                    // Separates "waiting on your wallet" from the other reasons
-                    // this button is disabled. Drives the sweep in globals.css.
-                    data-busy={pending || undefined}
-                  >
-                    {soldOut ? "Sold out" : pending ? "Confirming..." : `Buy $${token.symbol}`}
-                  </button>
-                ) : (
-                  <WalletButton variant="block" />
-                )}
-              </div>
-            </div>
-
-            <p className="trade-foot">
-              {token.starting_price} ETH <FiatValue eth={Number(token.starting_price)} /> per token
-              {tokensOut !== null && tokensOut > 0 && (
-                <> · you receive ≈ {formatTokens(tokensOut)} ${token.symbol}</>
+        <div
+          id={bodyId}
+          className={`trade-dock__body${collapsed ? " trade-dock__body--shut" : ""}`}
+        >
+          {status && (
+            <p
+              // Keyed on the message so each step of a trade mounts as its own
+              // line and plays the entry animation, rather than the text being
+              // swapped inside one node and the panel appearing to flicker.
+              key={status.message}
+              className={`status${status.kind === "error" ? " status--error" : ""}`}
+              role="status"
+            >
+              {status.message}
+              {statusTx && (
+                <>
+                  {" "}
+                  <a href={statusTx} target="_blank" rel="noopener noreferrer">
+                    view transaction
+                  </a>
+                </>
               )}
             </p>
-          </>
-        ) : (
-          <>
-            <div className="trade-row">
-              <Amount
-                label={`Sell ($${token.symbol})`}
-                value={sellTokens}
-                onChange={setSellTokens}
-                disabled={pending || !buyback}
-                step="1"
-                placeholder="0"
-                onMax={
-                  tokenBalanceRaw && tokenBalanceRaw > 0n
-                    ? () => setSellTokens(trimZeros(formatUnits(tokenBalanceRaw, DECIMALS)))
-                    : undefined
-                }
-              />
+          )}
 
-              <div className="trade-row__action">
-                {walletWaking ? (
-                  <button type="button" className="btn btn--primary btn--block" disabled data-busy>
-                    Reconnecting wallet...
-                  </button>
-                ) : isConnected ? (
-                  <button
-                    type="button"
-                    className="btn btn--primary btn--block"
-                    onClick={handleSell}
-                    disabled={sellDisabled}
-                    data-busy={pending || undefined}
-                  >
-                    {pending
-                      ? "Confirming..."
-                      : !buyback
-                        ? "No buyback"
-                        : tokenBalance === 0
-                          ? `No $${token.symbol} held`
-                          : `Sell $${token.symbol}`}
-                  </button>
-                ) : (
-                  <WalletButton variant="block" />
-                )}
-              </div>
-            </div>
+          {/* A wait that has gone on too long, and the way out of it. See
+              components/useTxPhase.ts. */}
+          {slow && (
+            <p className="status">
+              {phase === "signing"
+                ? "Your wallet hasn't answered — approve it there, or"
+                : "No receipt yet — keep waiting, or"}{" "}
+              <button type="button" className="link-button link-button--inline" onClick={stopWaiting}>
+                stop waiting
+              </button>
+              .
+            </p>
+          )}
 
-            <p className="trade-foot">
-              {buyback ? (
+          {!stats.onChain && (
+            <p className="status">
+              Live sale data unavailable — this listing may predate on-chain deployment.
+              {explorer && (
                 <>
-                  {formatEth(buyback.sellPrice)} ETH <FiatValue eth={buyback.sellPrice} /> per token
-                  back
-                  {ethOut !== null && ethOut > 0 && (
-                    <>
-                      {" · "}you receive ≈ {formatEth(ethOut)} ETH <FiatValue eth={ethOut} parens />
-                    </>
+                  {" · "}
+                  <a href={explorer} target="_blank" rel="noopener noreferrer">
+                    view contract
+                  </a>
+                </>
+              )}
+            </p>
+          )}
+
+          {isConnected && (noGas || gasUnreadable) && (
+            <GasNotice
+              chain={token.chain}
+              heading={`No ${chainEntry?.chain.nativeCurrency.symbol ?? "test ETH"} here`}
+              address={address}
+              elsewhere={gasElsewhere}
+              wayOut={fixedChainWayOut(gasElsewhere, chainEntry?.chain.name)}
+              unreadable={gasUnreadable}
+              onRecheck={() => void refetchEth()}
+              checking={checkingGas}
+            />
+          )}
+
+          {side === "buy" ? (
+            <>
+              <div className="trade-row">
+                <Amount
+                  label="Spend (ETH)"
+                  value={spendEth}
+                  onChange={setSpendEth}
+                  disabled={pending || soldOut}
+                  step="0.0001"
+                  // What the typed amount is worth, following every keystroke.
+                  hint={<FiatValue eth={spendWei === null ? null : Number(formatUnits(spendWei, DECIMALS))} />}
+                />
+
+                <div className="trade-row__action">
+                  {walletWaking ? (
+                    <button type="button" className="btn btn--primary btn--block" disabled data-busy>
+                      Reconnecting wallet...
+                    </button>
+                  ) : isConnected ? (
+                    <button
+                      type="button"
+                      className="btn btn--primary btn--block"
+                      onClick={handleBuy}
+                      disabled={buyDisabled}
+                      // Separates "waiting on your wallet" from the other reasons
+                      // this button is disabled. Drives the sweep in globals.css.
+                      data-busy={pending || undefined}
+                    >
+                      {soldOut ? "Sold out" : pending ? busyLabel : `Buy $${token.symbol}`}
+                    </button>
+                  ) : (
+                    <WalletButton variant="block" />
                   )}
-                  {overSells && <> · more than you hold</>}
-                </>
-              ) : (
-                <>
-                  This launch was deployed before the buyback existed, so its tokens can only be
-                  bought — there is nothing on the contract to sell them back to.
-                </>
-              )}
-            </p>
-          </>
-        )}
+                </div>
+              </div>
 
-        {isConnected && !noGas && (
-          <p className="trade-foot">
-            Out of test ETH? <FaucetLinks chain={token.chain} />
-          </p>
-        )}
+              <p className="trade-foot">
+                {token.starting_price} ETH <FiatValue eth={Number(token.starting_price)} /> per token
+                {tokensOut !== null && tokensOut > 0 && (
+                  <> · you receive ≈ {formatTokens(tokensOut)} ${token.symbol}</>
+                )}
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="trade-row">
+                <Amount
+                  label={`Sell ($${token.symbol})`}
+                  value={sellTokens}
+                  onChange={setSellTokens}
+                  disabled={pending || !buyback}
+                  step="1"
+                  placeholder="0"
+                  onMax={
+                    tokenBalanceRaw && tokenBalanceRaw > 0n
+                      ? () => setSellTokens(trimZeros(formatUnits(tokenBalanceRaw, DECIMALS)))
+                      : undefined
+                  }
+                />
+
+                <div className="trade-row__action">
+                  {walletWaking ? (
+                    <button type="button" className="btn btn--primary btn--block" disabled data-busy>
+                      Reconnecting wallet...
+                    </button>
+                  ) : isConnected ? (
+                    <button
+                      type="button"
+                      className="btn btn--primary btn--block"
+                      onClick={handleSell}
+                      disabled={sellDisabled}
+                      data-busy={pending || undefined}
+                    >
+                      {pending
+                        ? busyLabel
+                        : !buyback
+                          ? "No buyback"
+                          : tokenBalance === 0
+                            ? `No $${token.symbol} held`
+                            : `Sell $${token.symbol}`}
+                    </button>
+                  ) : (
+                    <WalletButton variant="block" />
+                  )}
+                </div>
+              </div>
+
+              <p className="trade-foot">
+                {buyback ? (
+                  <>
+                    {formatEth(buyback.sellPrice)} ETH <FiatValue eth={buyback.sellPrice} /> per token
+                    back
+                    {ethOut !== null && ethOut > 0 && (
+                      <>
+                        {" · "}≈ {formatEth(ethOut)} ETH <FiatValue eth={ethOut} parens />
+                      </>
+                    )}
+                    {overSells && <> · more than you hold</>}
+                  </>
+                ) : (
+                  <>Launched before the buyback existed — these tokens can only be bought.</>
+                )}
+              </p>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
