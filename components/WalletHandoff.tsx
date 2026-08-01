@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
-import { hasWalletConnectProjectId } from "@/lib/wagmiConfig";
+import { hasWalletConnectProjectId, requiredChainName } from "@/lib/wagmiConfig";
 import { currentPageLink, shouldOfferHandoff, walletAppLinks } from "@/lib/walletHandoff";
 
 /**
@@ -65,6 +65,19 @@ export default function WalletHandoff() {
             Open this page inside your wallet&apos;s own browser. The connection
             is made there, so nothing has to hand you back to this tab.
           </p>
+
+          {requiredChainName && (
+            // The likeliest reason a pairing was refused outright rather than
+            // failing halfway, and the reader has no way to know it from the
+            // wallet's own wording. Said here because this panel is where
+            // somebody whose wallet said no ends up. See lib/wagmiConfig.ts.
+            <p className="handoff__note">
+              Folio asks wallets to approve {requiredChainName} when connecting, so a
+              wallet without that network declines instead of connecting to the wrong
+              one. Adding it — many wallets keep test networks behind a setting — fixes
+              the pairing. Opening the page here skips the pairing altogether.
+            </p>
+          )}
 
           <div className="chip-row">
             {links.map((link) => (

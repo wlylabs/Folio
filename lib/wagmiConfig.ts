@@ -1,7 +1,7 @@
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { coinbaseWallet, injectedWallet, safeWallet } from "@rainbow-me/rainbowkit/wallets";
 import { http, type Chain, type Transport } from "viem";
-import { SUPPORTED_CHAINS } from "./chains";
+import { DEFAULT_CHAIN_SLUG, SUPPORTED_CHAINS, chainBySlug } from "./chains";
 import { walletConnectMetadata } from "./walletMetadata";
 
 const PLACEHOLDER_PROJECT_ID = "00000000000000000000000000000000";
@@ -78,6 +78,116 @@ const relaylessWallets = [
   { groupName: "Available here", wallets: [injectedWallet, coinbaseWallet, safeWallet] },
 ];
 
+/**
+ * The chain a wallet must agree to before a WalletConnect pairing counts.
+ *
+ * Everything wagmi proposes is *optional*: it passes `optionalChains` and no
+ * `chains`, so the proposal carries no required namespace at all. A wallet that
+ * has never heard of Base Sepolia is free to approve the session anyway, on
+ * whatever networks it does have — and it does, because the connect sheet in
+ * most phone wallets is an approve button, not a network picker. What comes
+ * back is a session whose namespaces name only Ethereum Mainnet, which is a
+ * connection Folio cannot use for anything: the approved namespaces are fixed
+ * at pairing time, so no later `wallet_switchEthereumChain` can widen them.
+ *
+ * Naming a chain here puts it in `requiredNamespaces` instead, which changes
+ * two things. The wallet must approve that chain or refuse the whole session —
+ * no more silent landing on mainnet. And @walletconnect/ethereum-provider then
+ * takes the session's chain id from this list rather than from whichever
+ * account the wallet happened to return first, which is the other half of how
+ * a Base Sepolia pairing used to come back reporting chain 1.
+ *
+ * The cost is real and worth stating plainly: a wallet without this chain now
+ * declines the connection outright, where before it produced a connection that
+ * merely did not work. That is the better failure — it happens in the wallet,
+ * at the moment of asking, instead of three screens later — but it is still a
+ * failure, and the wallets that hide test networks behind a setting are exactly
+ * the ones readers arrive with. WalletHandoff says so on the way past, and the
+ * route it offers (open Folio inside the wallet's own browser) does not involve
+ * a pairing at all.
+ *
+ * `NEXT_PUBLIC_WALLETCONNECT_REQUIRED_CHAIN` sets it. Any other supported slug
+ * moves the requirement; `none` removes it and restores the all-optional
+ * proposal above. Unset means the default chain, which is the one every
+ * launch-less page is about.
+ *
+ * Only this chain is required. The rest of SUPPORTED_CHAINS stays in the
+ * optional namespace, so a wallet that has them approves them too and a token
+ * on the other testnet still trades without a second pairing.
+ */
+const requiredChainSetting =
+  process.env.NEXT_PUBLIC_WALLETCONNECT_REQUIRED_CHAIN || DEFAULT_CHAIN_SLUG;
+
+const requiredChain =
+  requiredChainSetting === "none" ? undefined : chainBySlug(requiredChainSetting)?.chain;
+
+/** The network a wallet is asked to commit to at pairing, for the UI that has
+ *  to explain a refusal. Undefined when nothing is required. */
+export const requiredChainName = requiredChain?.name;
+
+if (!requiredChain && requiredChainSetting !== "none" && typeof window !== "undefined") {
+  console.warn(
+    `NEXT_PUBLIC_WALLETCONNECT_REQUIRED_CHAIN is "${requiredChainSetting}", which ` +
+      "is not a supported chain slug. No chain will be required at pairing — set " +
+      "it to a slug from SUPPORTED_CHAINS, or to `none` to mean that on purpose."
+  );
+}
+
+/**
+ * `chains` is the required namespace, and wagmi's own types omit it — the
+ * connector means to own that field. It does not, quite: `getProvider` spreads
+ * these parameters into `EthereumProvider.init` *before* setting its own keys,
+ * and `optionalChains` is the only one of the two it names. So `chains` reaches
+ * the provider untouched, and the cast is the honest way to say that this leans
+ * on a gap the type describes as closed. Pinned versions in package.json; if a
+ * bump starts overriding `chains` too, the requirement silently stops applying
+ * and pairings go back to landing on mainnet.
+ */
+const walletConnectParameters = {
+  // RainbowKit builds metadata of its own from `appName`/`appIcon` and passes
+  // it here first, so anything set in this object replaces it wholesale. That
+  // is the point: its version has no `redirect`, which is the field that
+  // sends a phone wallet back to this page after it approves. See
+  // lib/walletMetadata.ts.
+  metadata: walletConnectMetadata,
+
+  ...(requiredChain ? { chains: [requiredChain.id] } : {}),
+
+  // Do not treat a session as stale just because it was opened before the
+  // page knew every chain in SUPPORTED_CHAINS.
+  //
+  // This is what made a phone wallet report a successful connection while
+  // Folio kept showing "Connect wallet". The approval happens in the wallet
+  // app, so the browser is in the background for it; phones routinely evict a
+  // backgrounded tab, and the page reloads on the way back. wagmi's
+  // walletConnect connector writes its `<connector>.requestedChains` key only
+  // *after* `provider.connect()` resolves — code that dies with the page. The
+  // WalletConnect session itself is already persisted by then, so on reload
+  // `reconnect()` finds a live session with accounts, reads an empty
+  // requestedChains, concludes the chains are stale, and calls
+  // `provider.disconnect()` — tearing down the session the reader had just
+  // approved. The wallet is left showing a connection the site has thrown
+  // away.
+  //
+  // With this off, an existing session is adopted as-is. A session that
+  // predates the requirement above is therefore still adopted, mainnet and
+  // all — wagmi does not re-propose over a session whose chains overlap ours
+  // not at all. That is what the connect button's "Reconnect wallet" is for.
+  isNewChainsStale: false,
+
+  // Turns off the event client in @walletconnect/core, which reports session
+  // activity to pulse.walletconnect.org. Nothing here needs it.
+  //
+  // It does NOT silence every WalletConnect beacon. @walletconnect/
+  // ethereum-provider builds a Reown AppKit modal whose own pulse ping fires
+  // on provider init — on page load, before the consent banner is answered —
+  // and it hardcodes that modal's options, so there is no flag to pass. The
+  // only levers are `showQrModal: false` (which would take RainbowKit's QR
+  // pairing with it) or not constructing the connector until the reader asks
+  // to connect. See the note in README.md.
+  telemetryEnabled: false,
+} as Parameters<typeof getDefaultConfig>[0]["walletConnectParameters"];
+
 export const wagmiConfig = getDefaultConfig({
   appName: "Folio",
   wallets: hasWalletConnectProjectId ? undefined : relaylessWallets,
@@ -88,45 +198,5 @@ export const wagmiConfig = getDefaultConfig({
   chains,
   transports,
   ssr: true,
-  walletConnectParameters: {
-    // RainbowKit builds metadata of its own from `appName`/`appIcon` and passes
-    // it here first, so anything set in this object replaces it wholesale. That
-    // is the point: its version has no `redirect`, which is the field that
-    // sends a phone wallet back to this page after it approves. See
-    // lib/walletMetadata.ts.
-    metadata: walletConnectMetadata,
-
-    // Do not treat a session as stale just because it was opened before the
-    // page knew every chain in SUPPORTED_CHAINS.
-    //
-    // This is what made a phone wallet report a successful connection while
-    // Folio kept showing "Connect wallet". The approval happens in the wallet
-    // app, so the browser is in the background for it; phones routinely evict a
-    // backgrounded tab, and the page reloads on the way back. wagmi's
-    // walletConnect connector writes its `<connector>.requestedChains` key only
-    // *after* `provider.connect()` resolves — code that dies with the page. The
-    // WalletConnect session itself is already persisted by then, so on reload
-    // `reconnect()` finds a live session with accounts, reads an empty
-    // requestedChains, concludes the chains are stale, and calls
-    // `provider.disconnect()` — tearing down the session the reader had just
-    // approved. The wallet is left showing a connection the site has thrown
-    // away.
-    //
-    // With this off, an existing session is adopted as-is. A chain the wallet
-    // has not approved is then handled where it belongs: the "Wrong network"
-    // button, which asks the wallet to switch or add it.
-    isNewChainsStale: false,
-
-    // Turns off the event client in @walletconnect/core, which reports session
-    // activity to pulse.walletconnect.org. Nothing here needs it.
-    //
-    // It does NOT silence every WalletConnect beacon. @walletconnect/
-    // ethereum-provider builds a Reown AppKit modal whose own pulse ping fires
-    // on provider init — on page load, before the consent banner is answered —
-    // and it hardcodes that modal's options, so there is no flag to pass. The
-    // only levers are `showQrModal: false` (which would take RainbowKit's QR
-    // pairing with it) or not constructing the connector until the reader asks
-    // to connect. See the note in README.md.
-    telemetryEnabled: false,
-  },
+  walletConnectParameters,
 });
