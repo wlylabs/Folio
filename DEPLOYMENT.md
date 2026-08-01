@@ -640,6 +640,7 @@ None are required. All five are optional and documented in `.env.example`:
 | Variable | Why you'd set it |
 | --- | --- |
 | `NEXT_PUBLIC_SITE_URL` | The public origin. Set it on the production deploy — canonical URLs, `sitemap.xml` and every `og:image` are built from it, and the `VERCEL_URL` fallback changes on every deploy. |
+| `GOOGLE_SITE_VERIFICATION` | The `content` value from Search Console's HTML-tag method. Renders the verification `<meta>` in `<head>`. Server-only. |
 | `NEXT_PUBLIC_FACTORY_ADDRESS` | Point a preview build at a different factory without editing the repo. Overrides the JSON. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Let the indexer write as the service role. Server-only — it bypasses row level security. |
 | `INDEXER_SECRET` | Require `Authorization: Bearer <secret>` on `/api/indexer`. Set it on anything public. |
@@ -684,10 +685,12 @@ a real domain.
 ### Before the first production deploy
 
 - [ ] **Set `NEXT_PUBLIC_SITE_URL`** to the real origin, with no trailing slash.
-      Without it the app falls back to `VERCEL_URL`, which changes on every
-      deploy — so canonical URLs point at a host that will not exist next week,
-      and `sitemap.xml` advertises the same. This is the single setting that
-      matters most here.
+      This is the single setting that matters most here. Unset, a production
+      deploy falls back to `VERCEL_PROJECT_PRODUCTION_URL` — the project's
+      stable alias, which is a serviceable canonical — and then to `VERCEL_URL`,
+      which is not: it changes on every push, Vercel serves those hosts with
+      `X-Robots-Tag: noindex`, and a canonical pointing at a noindex URL tells
+      Google to drop the page that named it.
 - [ ] Fetch `/robots.txt` and confirm the `Sitemap:` line names that origin.
 - [ ] Fetch `/sitemap.xml` and confirm published listings appear in it. It is
       regenerated hourly (`revalidate` in `app/sitemap.ts`), so a launch made in
@@ -708,6 +711,47 @@ a real domain.
 Register the domain in Google Search Console and submit `/sitemap.xml` once.
 Nothing needs resubmitting after that — new listings enter the sitemap on their
 own within the hour.
+
+Verify the property with the HTML-tag method: Search Console → add property →
+URL prefix → HTML tag, copy the `content` value into `GOOGLE_SITE_VERIFICATION`,
+redeploy, then click Verify. A `*.vercel.app` host cannot be verified by DNS —
+the zone is Vercel's, not yours — so on a preview domain this is the only method
+that works.
+
+### When the site is not in Google
+
+Nothing here is a bug to fix in the app; it is a checklist to walk, in order.
+`site:your-domain` returning nothing is the normal state of a site that has
+never been submitted, not a symptom.
+
+- [ ] **Is it submitted?** Google does not find a new site on its own for weeks
+      or months. A site with no inbound links has nothing pointing a crawler at
+      it. Search Console + a sitemap submission is the only fast path, and until
+      that is done every other item below is moot.
+- [ ] **Is the deploy public?** Vercel's Deployment Protection (Project →
+      Settings → Deployment Protection) answers `401` to anyone without a
+      session, crawlers included. Standard Protection covers preview deploys;
+      if it is set to protect production too, Googlebot sees a login wall.
+      Fetch the URL with `curl -I` from outside any logged-in browser and
+      confirm a `200`.
+- [ ] **Does the served host advertise itself?** `curl -s <origin>/robots.txt`
+      and read the `Sitemap:` line: it must name the host you want indexed. If
+      it names a per-deploy `*-git-*.vercel.app`, `NEXT_PUBLIC_SITE_URL` is
+      unset and the fallback is doing the naming.
+- [ ] **Does the response carry `X-Robots-Tag: noindex`?** `curl -I` again.
+      Vercel adds it to preview and per-deploy URLs. It cannot be removed from
+      those hosts — it is the reason a production alias or a real domain is
+      worth having, and the reason a canonical must never point at one.
+- [ ] **Then wait.** Indexing after a valid submission is days, not minutes, and
+      Google indexes a subset of what it crawls. Use Search Console's URL
+      Inspection on one listing to see what it actually decided, rather than
+      inferring from an empty `site:` search.
+
+A `*.vercel.app` subdomain is a weak SEO host regardless: it is shared,
+unrelated projects on it get penalised, and none of its reputation is yours. A
+domain you own is the single biggest improvement available here — and moving
+later means redirects and re-verification, which is cheaper to skip by moving
+early.
 
 ### Where each piece lives
 

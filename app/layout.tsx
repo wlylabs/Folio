@@ -61,6 +61,14 @@ export const metadata: Metadata = {
     description: SITE_DESCRIPTION,
     path: "/",
   }),
+  // Google Search Console's HTML-tag verification method. A property has to be
+  // verified before a sitemap can be submitted or a URL inspected, and this is
+  // the one way to do it that survives a redeploy without touching DNS. Read
+  // server-side, so the token never reaches the client bundle; the tag is
+  // omitted entirely while the variable is unset.
+  verification: process.env.GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.GOOGLE_SITE_VERIFICATION }
+    : undefined,
 };
 
 export const viewport: Viewport = {
