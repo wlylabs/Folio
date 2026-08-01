@@ -436,8 +436,21 @@ what a frontend or a quoting service would reach for next.
 Do not take this table on trust — it is a snapshot, and Uniswap can redeploy.
 `contracts/test-v4/FolioMigrationFork.t.sol` re-checks the `PoolManager` address
 against the live chain and runs a whole migration through it, and the `fork` job
-in `.github/workflows/contracts.yml` runs that on every push. Set the
+in `.github/workflows/contracts.yml` runs them. Set the
 `ROBINHOOD_MAINNET_RPC_URL` secret or the job self-skips and warns.
+
+The two halves run on different cadences, because they cost very different
+amounts of RPC. The address check is three calls, so it runs on every push. The
+full migration reads state hundreds of times over and only adds confidence that
+the real singleton behaves like the local one the `v4` job already covers, so it
+runs on `main`, nightly, and on `workflow_dispatch`.
+
+The usual way to make a fork suite cheap — pin a block so Foundry can reuse its
+RPC cache — is not available on the public endpoint. It serves roughly the last
+6,000 blocks of state, which at a measured 0.1s block time is about ten minutes;
+a pinned block stops being readable long before the next CI run. A provider with
+archive data (Robinhood's docs point at Alchemy) is what would buy that, and the
+secret is the only thing that would need to change.
 
 ### Still unconfirmed
 
