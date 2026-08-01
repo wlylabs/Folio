@@ -15,7 +15,7 @@ import {TradeProbe} from "./TradeProbe.sol";
  * ```
  * source .env
  * forge script contracts/script/Pause.s.sol:Pause \
- *   --rpc-url base-sepolia --broadcast -vvv
+ *   --rpc-url robinhood-mainnet --broadcast -vvv
  * ```
  *
  * `DEPLOYER_PRIVATE_KEY` must hold the factory owner's key. The script checks

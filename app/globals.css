@@ -726,14 +726,6 @@ p {
   color: var(--ink-soft);
 }
 
-/* The network a row of faucet links belongs to. On its own line, because the
-   links after it wrap and a run-in label would be lost in them. */
-.settings__faucet-chain {
-  display: block;
-  font-weight: 600;
-  color: var(--ink);
-}
-
 .settings__links {
   display: flex;
   flex-direction: column;

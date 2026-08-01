@@ -13,9 +13,9 @@ fs_permissions = [{ access = "read-write", path = "./deployments" }]
 solc_version = "0.8.26"
 optimizer = true
 optimizer_runs = 200
-# Paris, not Cancun: no PUSH0, no transient storage, no MCOPY. Both target
-# chains almost certainly accept Shanghai and Cancun opcodes — Robinhood Chain
-# is Arbitrum Orbit, and Arbitrum has had PUSH0 since ArbOS 11 and TSTORE/MCOPY
+# Paris, not Cancun: no PUSH0, no transient storage, no MCOPY. The target chain
+# almost certainly accepts Shanghai and Cancun opcodes — Robinhood Chain is
+# Arbitrum Orbit, and Arbitrum has had PUSH0 since ArbOS 11 and TSTORE/MCOPY
 # since ArbOS 20 — but "almost certainly" is doing real work in that sentence
 # and paris makes it unnecessary. What it costs was measured, not assumed:
 # building at cancun instead saves ~63k gas on the one-off factory deploy
@@ -51,31 +51,28 @@ runs = 2_000
 depth = 256
 fail_on_revert = true
 
-# Two chains and nothing else.
+# One chain and nothing else.
 #
-#   base-sepolia       84532   free ETH, where a change is rehearsed
 #   robinhood-mainnet   4663   Robinhood Chain, real ETH, where Folio launches
 #
-# One of these costs money to get wrong, which is the reason the other is still
-# here: nothing should reach 4663 that has not already run on 84532. No third
-# alias — not Base mainnet, not Ethereum — so nothing here names a network
-# nobody chose. The scripts enforce the same list at runtime:
+# This one costs money to get wrong. There is no testnet alias any more — Base
+# Sepolia was removed rather than left as a second, quieter way to be pointed at
+# the wrong network — and no alias for anything else either, so nothing here
+# names a network nobody chose. Rehearse against a local fork instead:
+# `anvil --fork-url $ROBINHOOD_MAINNET_RPC_URL`, then `--rpc-url
+# http://127.0.0.1:8545`, which keeps chain id 4663 and so passes the guard.
+#
+# The scripts enforce the same list at runtime:
 # `FolioScript.onlySupportedNetwork` reverts on any chain id without a
 # `NetworkProfile`, so a hand-typed `--rpc-url` cannot route a deploy somewhere
 # unlisted either. Adding a chain means adding it in both places.
 #
-# The alias names match the `deployments/<alias>.json` stems, so `--rpc-url
+# The alias name matches the `deployments/<alias>.json` stem, so `--rpc-url
 # robinhood-mainnet` and `deployments/robinhood-mainnet.json` cannot drift.
 [rpc_endpoints]
-base-sepolia = "${BASE_SEPOLIA_RPC_URL}"
 robinhood-mainnet = "${ROBINHOOD_MAINNET_RPC_URL}"
 
-# Verification. The two chains do not use the same kind of explorer, so they do
-# not verify the same way.
-#
-# `chain = 84532` pins Base Sepolia to Etherscan's v2 API, which is what
-# Basescan now serves. One key covers every v2 chain, so the key itself is not
-# what keeps this on testnet — the chain id is.
+# Verification.
 #
 # Robinhood Chain's explorer is Blockscout, which is not on Etherscan's v2 API
 # at all: it serves an Etherscan-compatible endpoint at its own `/api`, and the
@@ -87,7 +84,6 @@ robinhood-mainnet = "${ROBINHOOD_MAINNET_RPC_URL}"
 # still Etherscan, so a Robinhood deploy needs `--verifier blockscout` on the
 # command line as well — see DEPLOYMENT.md for the full command.
 [etherscan]
-base-sepolia = { key = "${BASESCAN_API_KEY}", chain = 84532 }
 robinhood-mainnet = { key = "${BLOCKSCOUT_API_KEY}", chain = 4663, url = "https://robinhoodchain.blockscout.com/api/" }
 
 [fmt]

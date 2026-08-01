@@ -159,8 +159,8 @@ async function fetchCurveStats(client: Client, token: Token) {
  * from the outside, and the page says so when the answer is no.
  */
 async function isFactoryToken(client: Client, chain: string, address: `0x${string}`) {
-  // The factory on the token's *own* chain. Asking Base Sepolia's registry
-  // about a Robinhood token would answer no for a token that is perfectly
+  // The factory on the token's *own* chain. Asking one chain's registry about
+  // another chain's token would answer no for a token that is perfectly
   // genuine, which is the same badge as an impostor.
   const deployment = deploymentFor(chain);
   if (!deployment) return false;

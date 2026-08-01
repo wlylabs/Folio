@@ -34,7 +34,7 @@ type CurrencySpec = {
    */
   digits: number;
   /**
-   * Decimal places for amounts below one unit. Testnet curves price a single
+   * Decimal places for amounts below one unit. A fresh curve prices a single
    * token in the 1e-9 ETH range, which is a fraction of a cent and a fraction
    * of a rupiah; rounding those to "$0.00" would print a lie where a small
    * number belongs.

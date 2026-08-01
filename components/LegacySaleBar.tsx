@@ -10,7 +10,7 @@ import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
 import WalletButton from "@/components/WalletButton";
 import WalletHandoff from "@/components/WalletHandoff";
 import FiatValue from "@/components/FiatValue";
-import { GasNotice, fixedChainWayOut } from "@/components/Faucet";
+import { GasNotice, fixedChainWayOut } from "@/components/GasNotice";
 import { useGasBalance } from "@/components/useGasBalance";
 import { classifyTxError } from "@/lib/txErrors";
 import { ensureWalletReady } from "@/lib/walletReady";
@@ -67,8 +67,8 @@ export default function LegacySaleBar({
   const soldOut = stats.onChain && stats.sold >= stats.supply && stats.supply > 0;
   const buyback = stats.kind === "legacy" ? stats.buyback : null;
 
-  // Polls itself, so test ETH claimed from a faucet in another tab shows up
-  // here without a reload. See useGasBalance.
+  // Polls itself, so ETH that arrives in another tab shows up here without a
+  // reload. See useGasBalance.
   const {
     balance: ethBalance,
     noGas,
@@ -133,7 +133,7 @@ export default function LegacySaleBar({
    * Wait for the receipt, then pull fresh figures for the whole page.
    *
    * Bounded, and `alive`-guarded, for the reasons in lib/receipt.ts and
-   * components/useTxPhase.ts: an unbounded wait on a public testnet RPC is how
+   * components/useTxPhase.ts: an unbounded wait on a public RPC is how
    * a panel ends up stuck on "Confirming..." for a transaction that landed.
    */
   async function settle(

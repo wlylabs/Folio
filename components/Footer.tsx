@@ -7,24 +7,23 @@ import { CONTACT_EMAIL } from "@/lib/contact";
  * The colophon. Small, but it answers the question a launchpad has to answer
  * before anyone signs anything — which network is this, and is the money real.
  *
- * With more than one network live it names the count rather than one of them:
- * "Base Sepolia" on a page showing a Robinhood token would be a wrong answer to
- * exactly the question this line exists to answer. The token page names its own
- * chain — and says whether that chain is a testnet — and /about lists them all.
+ * It names the network, which with one network live is a complete answer: every
+ * listing is on Robinhood Chain and the ETH is real. The count branch below
+ * survives for the same reason SUPPORTED_CHAINS is still a list — naming one of
+ * several networks on a page showing a token from another would be a wrong
+ * answer to exactly the question this line exists to answer.
  *
- * The line used to read "Testnet edition", which was the answer to the second
- * half of that question while every supported network was a testnet. It is not
- * any more, so the network's own name carries it, marked when it is a test
- * network and left plain when the ETH is real.
+ * The line used to read "Testnet edition", and later carried a `· testnet`
+ * marker for the networks that deserved it. Neither is here now: nothing Folio
+ * supports is a test network, and a marker that can never appear is a claim the
+ * reader has to rule out rather than read.
  */
 export default function Footer() {
   const entry = chainBySlug(FACTORY_DEPLOYMENTS[0]?.chain ?? DEFAULT_CHAIN_SLUG);
   const chain =
     FACTORY_DEPLOYMENTS.length > 1
       ? `${FACTORY_DEPLOYMENTS.length} networks`
-      : entry
-        ? `${entry.chain.name}${entry.chain.testnet ? " · testnet" : ""}`
-        : DEFAULT_CHAIN_SLUG;
+      : (entry?.chain.name ?? DEFAULT_CHAIN_SLUG);
 
   return (
     <footer

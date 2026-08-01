@@ -7,7 +7,7 @@ import { waitForTransactionReceipt } from "wagmi/actions";
  * `waitForTransactionReceipt` has no timeout by default: it watches for blocks
  * until one carries the transaction, forever if that never happens. Forever is
  * a real outcome here. The wallet broadcasts through its own node while this
- * page polls a public testnet RPC, and when those two disagree — the RPC is
+ * page polls a public RPC, and when those two disagree — the RPC is
  * rate limited, or lagging, or behind a load balancer that drops the tx from
  * its mempool view — the receipt never arrives at this end even though the
  * transaction landed. The panel that was showing "Confirming..." then shows it
@@ -42,7 +42,7 @@ export async function awaitReceipt(
       hash,
       chainId,
       timeout: RECEIPT_TIMEOUT_MS,
-      // Testnet blocks are seconds apart, and the default interval is tied to
+      // Blocks here are seconds apart, and the default interval is tied to
       // the transport's, which for a public RPC is deliberately slow.
       pollingInterval: 2_000,
       // A node that has not seen the transaction yet is ordinary in the first

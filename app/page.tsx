@@ -124,8 +124,7 @@ export default async function HomePage() {
               }}
             >
               A launch is one article and one transaction. Gas is all it costs
-              — free from a faucet on the test network, real ETH on Robinhood
-              Chain.
+              — real ETH on Robinhood Chain.
             </p>
             <Link href="/create" className="btn btn--primary">
               Write the first one
@@ -173,12 +172,11 @@ export default async function HomePage() {
           <div className="notice">
             <p className="notice__title">Some of this is real money.</p>
             <p style={{ margin: "0 0 var(--sp-3)" }}>
-              A launch on Robinhood Chain settles in real ETH: what you spend is
-              spent, and the tokens are not an investment — their price is
-              whatever the curve says at the moment you trade, and it can go to
-              zero. A launch on Base Sepolia settles in free testnet ETH and is
-              a rehearsal. Every listing says which network it is on; check it
-              before you sign.
+              Every launch is on Robinhood Chain and settles in real ETH: what
+              you spend is spent, and the tokens are not an investment — their
+              price is whatever the curve says at the moment you trade, and it
+              can go to zero. There is no test network here and no rehearsal:
+              every trade on this site moves real money.
             </p>
             <p style={{ margin: "0 0 var(--sp-3)" }}>
               A byline is a claim, not a proof. Folio records the wallet that

@@ -1,12 +1,12 @@
 import { createPublicClient, defineChain, http, type PublicClient } from "viem";
-import { baseSepolia } from "viem/chains";
 
 /**
  * Robinhood Chain — an Arbitrum Orbit L2, EVM-equivalent, ETH for gas.
  *
- * Mainnet. The ETH spent here is real, which is the one thing that separates
- * this entry from every other chain Folio has supported: there is no faucet
- * below, because there is nothing to claim.
+ * Mainnet, and the only network Folio runs on. The ETH spent here is real:
+ * there is no faucet anywhere in this codebase because there is nothing to
+ * claim, and every "get free test ETH" affordance was removed with the testnet
+ * rather than left pointing at a network that no longer exists.
  *
  * Defined here rather than imported from `viem/chains`, which does not ship it.
  * The values match `contracts/script/FolioScript.sol`'s NetworkProfile for
@@ -47,42 +47,24 @@ export const robinhoodMainnet = defineChain({
  * switch to it. Whether you can *launch* on it is a separate question, answered
  * by `deployments/<slug>.json` — see lib/contracts/deployment.ts.
  *
- * The same two `FolioScript.onlySupportedNetwork` allows: the app offers to
+ * The same list `FolioScript.onlySupportedNetwork` allows: the app offers to
  * switch a wallet to a chain, so listing one the contracts refuse to deploy on
  * would move a reader somewhere Folio has nothing to trade.
  *
- * One testnet and one mainnet, which is a change from when both were testnets:
- * a trade on `robinhood-mainnet` spends real ETH. Nothing in this file guards
- * that — the wallet's own confirmation is the guard — but `faucets` being empty
- * for that chain is not an omission, and every "claim free ETH" affordance keys
- * off it.
+ * One chain, and it is a mainnet: a trade on `robinhood-mainnet` spends real
+ * ETH. Nothing in this file guards that — the wallet's own confirmation is the
+ * guard. Folio used to carry Base Sepolia alongside it for rehearsal, and the
+ * list stayed an array when that went: everything downstream reads it as one,
+ * so restoring a second network is an entry here plus a deployment record,
+ * not a refactor.
  */
 export const SUPPORTED_CHAINS = [
-  {
-    slug: "base-sepolia",
-    chain: baseSepolia,
-    rpcEnv: process.env.NEXT_PUBLIC_RPC_BASE_SEPOLIA,
-    faucets: [
-      { label: "Coinbase faucet", url: "https://portal.cdp.coinbase.com/products/faucet" },
-      { label: "Alchemy faucet", url: "https://www.alchemy.com/faucets/base-sepolia" },
-      { label: "Superchain faucet", url: "https://console.optimism.io/faucet" },
-      // No sign-in and no mainnet balance check, which is what the other three
-      // ask for — so it is the one that works for a wallet made this morning.
-      { label: "Zalalena faucet", url: "https://faucet.zalalena.com/base" },
-    ],
-  },
   {
     slug: "robinhood-mainnet",
     chain: robinhoodMainnet,
     rpcEnv: process.env.NEXT_PUBLIC_RPC_ROBINHOOD_MAINNET,
-    // Empty, and it stays empty: gas here is bought, not claimed. A faucet link
-    // on a mainnet is either a scam or a misunderstanding, so the UI showing
-    // nothing is the correct outcome rather than a gap to fill later.
-    faucets: [],
   },
 ] as const;
-
-export type Faucet = { label: string; url: string };
 
 export type ChainSlug = (typeof SUPPORTED_CHAINS)[number]["slug"];
 
@@ -90,7 +72,7 @@ export const DEFAULT_CHAIN_SLUG: ChainSlug = isChainSlug(
   process.env.NEXT_PUBLIC_DEFAULT_CHAIN
 )
   ? process.env.NEXT_PUBLIC_DEFAULT_CHAIN
-  : "base-sepolia";
+  : "robinhood-mainnet";
 
 export function isChainSlug(value: unknown): value is ChainSlug {
   return SUPPORTED_CHAINS.some((c) => c.slug === value);
@@ -121,33 +103,6 @@ export function chainIdBySlug(slug: string): number | undefined {
 export function chainLabel(slug: string | null | undefined): string {
   if (!slug) return "UNKNOWN NETWORK";
   return chainBySlug(slug)?.chain.name.toUpperCase() ?? slug.toUpperCase();
-}
-
-/** Where to get free test ETH for a chain. Empty for anything unrecognised. */
-export function faucetsFor(slug: string | null | undefined): readonly Faucet[] {
-  if (!slug) return [];
-  return chainBySlug(slug)?.faucets ?? [];
-}
-
-/**
- * Every network that has a faucet, for the one place that lists them all.
- *
- * The faucets used to be printed wherever an empty wallet was noticed — the
- * trade panel, the launch form — which put a paragraph of links in front of the
- * button the reader came for. They live in Settings now, so this returns the
- * whole directory rather than one chain's slice: a reader opening that panel
- * has not necessarily told us which network they are short on.
- */
-export function faucetDirectory(): {
-  slug: ChainSlug;
-  name: string;
-  faucets: readonly Faucet[];
-}[] {
-  return SUPPORTED_CHAINS.filter((entry) => entry.faucets.length > 0).map((entry) => ({
-    slug: entry.slug,
-    name: entry.chain.name,
-    faucets: entry.faucets,
-  }));
 }
 
 /** Block explorer link for a transaction, when the chain publishes one. */

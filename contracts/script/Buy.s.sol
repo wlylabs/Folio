@@ -12,7 +12,7 @@ import {FolioToken} from "../src/FolioToken.sol";
  * ```
  * source .env
  * BUY_ETH=10000000000000000 forge script contracts/script/Buy.s.sol:Buy \
- *   --rpc-url base-sepolia --broadcast -vvv
+ *   --rpc-url robinhood-mainnet --broadcast -vvv
  * ```
  *
  * Acts on `FOLIO_TOKEN` if set, otherwise on the `lastToken` recorded for

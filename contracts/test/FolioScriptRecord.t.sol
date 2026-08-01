@@ -32,7 +32,7 @@ contract FolioScriptRecordTest is Test {
         '"factory":"","implementation":"","owner":"","lastToken":""}';
 
     /// @dev The same record after a deploy landed.
-    string internal constant DEPLOYED = '{"network":"base-sepolia","chainId":84532,'
+    string internal constant DEPLOYED = '{"network":"robinhood-mainnet","chainId":4663,'
         '"factory":"0x3E4bAd5CD555A38DDcb67B37A13c4Df5D3785B07",'
         '"implementation":"0xD26eEf46360267645D8268aAF6FB715EaF634c52","lastToken":""}';
 

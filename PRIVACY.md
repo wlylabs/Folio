@@ -77,4 +77,4 @@ Questions about this Privacy Policy can be directed to: [wly38347@gmail.com](mai
 
 ---
 
-*Developer note: This document is an initial AI-assisted draft for testnet-stage development purposes. Before this platform is used with real users at meaningful scale, this document MUST be reviewed by a legal professional familiar with data protection regulation (e.g., Indonesia's PDP Law, GDPR if reaching EU users) in your target jurisdiction(s).*
+*Developer note: This document is an initial AI-assisted draft, written for testnet-stage development. The platform now runs on mainnet alone and that stage is over. Before this platform is used with real users at meaningful scale, this document MUST be reviewed by a legal professional familiar with data protection regulation (e.g., Indonesia's PDP Law, GDPR if reaching EU users) in your target jurisdiction(s).*

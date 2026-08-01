@@ -227,13 +227,15 @@ export default async function TokenPage({
           <summary className="factbox__head">
             <span>Contract data</span>
             {/*
-              Read from the token's own chain, never a constant: this used to
-              say "Testnet" on every listing, which was true while every
-              supported network was one. A token on Robinhood Chain settles in
-              real ETH, and a badge that says otherwise is the one error on this
-              page that costs a reader money.
+              Read from the token's own chain, never a constant. Every network
+              Folio supports settles in real ETH, so a recognised chain is a
+              mainnet — but an unrecognised one must not inherit that word. Rows
+              launched on the retired Base Sepolia testnet are still in the
+              database and their slug no longer resolves; calling those
+              "Mainnet" would be the one error on this page that costs a reader
+              money, so they say what is actually true instead.
             */}
-            <span>{chainBySlug(token.chain)?.chain.testnet ? "Testnet" : "Mainnet"}</span>
+            <span>{chainBySlug(token.chain) ? "Mainnet" : "Unsupported network"}</span>
           </summary>
 
           <div className="factbox__rows">

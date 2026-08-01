@@ -21,10 +21,12 @@ import { walletConnectChainIds } from "@/lib/walletSession";
  * phone wallet adopted after the fact by WalletSessionSync, a wallet the reader
  * switched away from in another tab.
  *
- * Only unsupported chains. A wallet on Robinhood Chain while the page
- * is about a Base Sepolia token is a *different* problem, one the trade bar solves
- * at the right moment: it switches when there is a transaction to sign, so
- * reading a page never moves a wallet the reader deliberately put somewhere.
+ * Only unsupported chains. A wallet sitting on a supported chain that is not
+ * the one the page's token lives on is a *different* problem, one the trade bar
+ * solves at the right moment: it switches when there is a transaction to sign,
+ * so reading a page never moves a wallet the reader deliberately put somewhere.
+ * With Robinhood Chain the only supported network that case cannot arise today,
+ * and the trade bar's switch is what would handle it if a second one returned.
  *
  * One request per situation. wagmi's switchChain adds the chain to the wallet
  * when it does not have it (`wallet_addEthereumChain`), but either half can be

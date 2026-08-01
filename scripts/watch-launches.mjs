@@ -22,7 +22,7 @@
  *                    per-chain form below.
  *   FOLIO_WS_RPC_<CHAIN>          e.g. FOLIO_WS_RPC_ROBINHOOD_MAINNET
  *   NEXT_PUBLIC_RPC_<CHAIN>       the same HTTP endpoints the site reads with,
- *                                 e.g. NEXT_PUBLIC_RPC_BASE_SEPOLIA
+ *                                 e.g. NEXT_PUBLIC_RPC_ROBINHOOD_MAINNET
  *   INDEXER_SECRET   sent as a bearer token, when the endpoint requires one.
  */
 import { readdirSync, readFileSync } from "node:fs";
@@ -42,11 +42,10 @@ const deploymentsDir = join(root, "deployments");
  * not. Rate-limited, which is exactly why NEXT_PUBLIC_RPC_* exists.
  */
 const PUBLIC_RPC = {
-  "base-sepolia": "https://sepolia.base.org",
   "robinhood-mainnet": "https://rpc.mainnet.chain.robinhood.com",
 };
 
-/** `base-sepolia` -> `BASE_SEPOLIA`, for the env var names. */
+/** `robinhood-mainnet` -> `ROBINHOOD_MAINNET`, for the env var names. */
 const envKey = (slug) => slug.toUpperCase().replace(/-/g, "_");
 
 /** Every committed record that names a factory. */

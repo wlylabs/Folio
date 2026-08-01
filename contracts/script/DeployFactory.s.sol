@@ -20,7 +20,7 @@ import {CurveConfig} from "../src/types/CurveConfig.sol";
  * ```
  * source .env
  * forge script contracts/script/DeployFactory.s.sol:DeployFactory \
- *   --rpc-url base-sepolia --broadcast --verify -vvv
+ *   --rpc-url robinhood-mainnet --broadcast --verify -vvv
  * ```
  *
  * The same script, unmodified, deploys to Robinhood Chain — the chain is chosen
@@ -34,7 +34,9 @@ import {CurveConfig} from "../src/types/CurveConfig.sol";
  * Robinhood Chain is a mainnet. `--rpc-url robinhood-mainnet` spends real ETH
  * on gas and puts a factory in front of real buyers, so the confirmation banner
  * is the last thing between the decision and the broadcast: read the chain id
- * on it. Run the whole thing against `base-sepolia` first — the deploy is
+ * on it. There is no testnet to rehearse on — Base Sepolia was removed — so
+ * rehearse against a local fork (`anvil --fork-url $ROBINHOOD_MAINNET_RPC_URL`)
+ * and point the script at that before broadcasting for real. The deploy is
  * cheap enough to rehearse and expensive enough to regret.
  *
  * Re-running deploys a *second, independent* factory. That is intentional —
@@ -46,8 +48,9 @@ import {CurveConfig} from "../src/types/CurveConfig.sol";
  * ## Curve terms
  *
  * The starting `CurveConfig` is read from the environment with the defaults
- * below, all of which are `FolioFactory`-admissible. They are testnet numbers,
- * chosen when both target chains handed out their ETH for free: a 2 ETH virtual
+ * below, all of which are `FolioFactory`-admissible. They are inherited
+ * numbers, chosen when Folio still had a chain that handed out its ETH for
+ * free: a 2 ETH virtual
  * reserve, a 5 ETH blast radius, graduation at 4 ETH, 1% per leg, and a
  * price-move alert at a doubling. On Robinhood Chain those are real amounts and
  * the defaults are almost certainly not what you want — set
@@ -187,7 +190,8 @@ contract DeployFactory is FolioScript {
         }
     }
 
-    /// @dev Curve terms from the environment, with testnet defaults.
+    /// @dev Curve terms from the environment. The defaults are the inherited
+    ///      ones described above — set them explicitly for a mainnet deploy.
     function _configFromEnv() private view returns (CurveConfig memory) {
         return CurveConfig({
             virtualEthReserve: vm.envOr("FACTORY_VIRTUAL_ETH_RESERVE", uint256(2 ether)),

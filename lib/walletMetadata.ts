@@ -29,7 +29,7 @@ const ICON_PATH = "/icon.svg";
  * for the strip of text under "Folio wants to connect".
  */
 const WALLET_DESCRIPTION =
-  "A testnet token launchpad where every listing is an article.";
+  "A token launchpad where every listing is an article.";
 
 /**
  * The origin the reader is actually on, not the one the build was configured

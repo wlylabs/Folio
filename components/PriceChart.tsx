@@ -26,7 +26,7 @@ import { formatEthPrice, formatRelativeTime, formatTokens } from "@/lib/types";
  * around it in real text at a real size.
  *
  * **The axis is never zero-based, and says so by naming its ends.** Curve
- * prices on testnet live in the sixth decimal place; a zero baseline flattens
+ * prices open in the sixth decimal place; a zero baseline flattens
  * every one of them into the same line. The high and the low are printed
  * instead, to enough significant figures to tell them apart — which the site's
  * usual six-decimal ETH format cannot do down here.

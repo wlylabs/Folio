@@ -1,10 +1,10 @@
 # Deploys `FolioFactory` to Robinhood Chain — mainnet — from CI, using
 # repository secrets for the deployer key and the RPC endpoint.
 #
-# This is `deploy-base-sepolia.yml` for the other chain. Everything structural
-# is the same on purpose — same script, same bytecode, same gates — so the two
-# files stay readable side by side and a change to one is obvious in the other.
-# What differs is listed under "What is different from Base Sepolia" below.
+# The only deploy workflow there is. Folio ran a `deploy-base-sepolia.yml`
+# alongside this one while there was a testnet to rehearse on; that chain and
+# that workflow are gone, so this file has no counterpart to stay in step with
+# and every gate below is the only one of its kind.
 #
 # ## This one spends real money
 #
@@ -18,8 +18,9 @@
 #      reviewers belong — add them, this is the gate;
 #   2. the `confirm` input below, which must be typed exactly.
 #
-# Deploy to Base Sepolia first. Same script, same bytecode, free ETH; a change
-# that has not run there has no business running here.
+# There is no testnet run to do first any more. Prove the change locally
+# against a fork — `anvil --fork-url <rpc>` keeps chain id 4663, so the same
+# script and the same network guard apply — before dispatching this.
 #
 # ## Manual trigger only
 #
@@ -36,16 +37,16 @@
 #
 #   DEPLOYER_PRIVATE_KEY       0x-prefixed 32-byte hex — `vm.envUint` needs the
 #                              prefix. This key holds real ETH and ends up
-#                              owning the factory's emergency stop, so it is not
-#                              the throwaway key the testnet workflows use. Fund
-#                              it with the deploy cost and no more.
+#                              owning the factory's emergency stop, so it is
+#                              never a throwaway key. Fund it with the deploy
+#                              cost and no more.
 #   ROBINHOOD_MAINNET_RPC_URL  Resolves the `robinhood-mainnet` alias in
 #                              foundry.toml. The public endpoint works and is
 #                              rate-limited.
 #
-# A separate environment from `base-sepolia`, not a shared one, and this is
-# where that separation earns itself: environments are where the reviewer list
-# lives, and the two chains are not equally consequential to deploy to.
+# Its own environment, which is where the reviewer list lives. Keep it that way
+# even if a second chain is ever added: environments are the approval gate, and
+# the chain holding real reserves should never share one.
 #
 # Optional repository variables (Settings -> Variables), all wei:
 #
@@ -53,10 +54,10 @@
 #   FACTORY_GRADUATION_THRESHOLD, FACTORY_FEE_BPS, FACTORY_PRICE_MOVE_ALERT_BPS
 #
 # Unset, these fall back to the script's defaults — 2 ETH virtual reserve, 5 ETH
-# cap, graduation at 4 ETH — which were chosen when every supported chain handed
-# out its ETH for free. On this chain they are real amounts. Set them.
+# cap, graduation at 4 ETH — which were chosen back when Folio had a chain that
+# handed out its ETH for free. On this chain they are real amounts. Set them.
 #
-# ## What is different from Base Sepolia
+# ## Verification, and the RPC check
 #
 # 1. **Verification goes through Blockscout, not Etherscan.** Robinhood Chain is
 #    not on Etherscan's v2 API at all, so `--verify` alone verifies nothing:
@@ -66,14 +67,14 @@
 #    is a command-line choice, which is why the flags are still here.
 #
 # 2. **No API key is required to verify.** Blockscout does not ask for one, so
-#    unlike `BASESCAN_API_KEY` there is no secret to check before turning
-#    verification on. `BLOCKSCOUT_API_KEY` exists in `.env.example` only because
-#    foundry.toml wants the field, and this workflow never reads it.
+#    there is no secret to check before turning verification on.
+#    `BLOCKSCOUT_API_KEY` exists in `.env.example` only because foundry.toml
+#    wants the field, and this workflow never reads it.
 #
 # 3. **The RPC URL is checked against the chain before anything is signed.** A
-#    secret that answers HTML instead of JSON-RPC, or that points at the testnet,
-#    is invisible until a run fails somewhere confusing — or, worse here, until
-#    it succeeds against the wrong chain. See the preflight step.
+#    secret that answers HTML instead of JSON-RPC, or that points at another
+#    chain, is invisible until a run fails somewhere confusing — or, worse here,
+#    until it succeeds against the wrong chain. See the preflight step.
 #
 # ## The network guard still applies
 #
@@ -175,7 +176,7 @@ jobs:
       # missing env var or an unresolvable RPC alias several minutes in.
       #
       # Two secrets, not three: Blockscout verification needs no API key, so
-      # `verify` adds no requirement here the way it does on Base Sepolia.
+      # turning `verify` on adds no secret to check.
       - name: Check required secrets
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
@@ -197,7 +198,7 @@ jobs:
 
       # The endpoint is asked what chain it is before the deploy asks it to sign
       # anything. A URL that answers HTML, 404s, or belongs to another chain —
-      # the testnet included — fails here, in one line naming what it answered,
+      # Robinhood's own testnet included — fails here, naming what it answered,
       # rather than inside a simulation trace. The RPC URL itself is never
       # printed: it may carry an API key.
       - name: Preflight — the RPC is the chain it claims to be
@@ -230,8 +231,9 @@ jobs:
       # string is not the same as leaving it unset: `vm.envOr` returns its
       # default only for the latter, and fails to parse the former.
       #
-      # The defaults being inherited here are testnet-shaped. What this step
-      # prints is the last chance to notice that before the broadcast.
+      # The defaults being inherited here were shaped for a chain whose ETH was
+      # free. What this step prints is the last chance to notice that before the
+      # broadcast.
       - name: Assemble factory configuration
         env:
           FACTORY_OWNER: ${{ inputs.factory_owner }}
@@ -359,9 +361,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # The record is committed so the frontend and the interaction scripts read
-      # the same address. This is a *second* record, not a replacement: the Base
-      # Sepolia file is untouched and its factory keeps running. Skipped when the
-      # branch is protected — push the record yourself from the artifact then.
+      # the same address. Skipped when the branch is protected — push the record
+      # yourself from the artifact then.
       - name: Commit deployment record
         if: |
           always()

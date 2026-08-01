@@ -16,18 +16,19 @@ its own `deployments/<chain>.json`, written by
 only module that reads them, so re-deploying is a one-file change and adding a
 network is one record plus an entry in `SUPPORTED_CHAINS` (`lib/chains.ts`).
 
-Folio runs on more than one network at a time. Every listing stores the chain it
-was launched on, so a token page reads, prices and trades against the network it
-actually lives on rather than a global default; the create form asks which
-network to launch on when more than one has a factory.
+The one supported network is **Robinhood Chain** (4663, mainnet, real ETH).
+Folio used to run Base Sepolia alongside it as a testnet to rehearse on; that
+network is gone — its chain entry, deployment record, deploy workflow, RPC
+alias and every faucet link with it — so there is no free-ETH mode and nothing
+on the site is a rehearsal. The machinery stayed multi-chain: every listing
+stores the chain it was launched on, so a token page reads, prices and trades
+against the network it actually lives on rather than a global default, and the
+create form asks which network to launch on if a second one ever has a factory.
 
-The two supported networks are **Robinhood Chain** (4663, mainnet, real ETH) and
-**Base Sepolia** (84532, testnet, faucet ETH). They behave identically in the
-app and differently in every way that matters to a wallet, which is why the
-network is printed on the listing, in the trade panel and in the deploy script's
-confirmation banner. `deployments/robinhood-mainnet.json` ships with an empty
-`factory`, so nothing launches there until a deploy fills it in — see
-[DEPLOYMENT.md](DEPLOYMENT.md) section 4.
+The network is printed on the listing, in the trade panel and in the deploy
+script's confirmation banner. `deployments/robinhood-mainnet.json` ships with an
+empty `factory`, so nothing launches until a deploy fills it in — see
+[DEPLOYMENT.md](DEPLOYMENT.md) section 3.
 
 One thing is worth knowing before you rely on any of it:
 `creator_wallet` is a **claim, not a proof**. The browser talks to Supabase with
@@ -73,10 +74,10 @@ third-party request does happen before the reader has answered the banner.
 5. Run `lib/schema.sql` in Supabase's SQL editor. It creates the `tokens` table,
    the avatar storage bucket, and the row-level security policies.
 6. `npm run dev` → Codespaces gives you a forwarded URL to preview in browser.
-7. Fund the wallet on the network you're launching on — deploying costs gas.
-   Base Sepolia has faucets (linked from `lib/chains.ts` and the settings
-   panel); Robinhood Chain is a mainnet and has none, so that ETH has to be
-   bridged or bought. Develop against Base Sepolia.
+7. Fund the wallet on Robinhood Chain — deploying costs gas. It is a mainnet
+   and has no faucet, so that ETH has to be bridged or bought. To develop
+   without spending anything, fork the chain locally (`anvil --fork-url ...`,
+   which keeps chain id 4663) and point the scripts at it.
 
 The app boots without `.env.local` and shows a setup notice instead of crashing,
 so you can check the UI before wiring up Supabase.
@@ -87,14 +88,16 @@ so you can check the UI before wiring up Supabase.
 2. Paste the same env vars from `.env.local` into Vercel's Environment Variables settings.
 3. Deploy. Done — you get a live `.vercel.app` URL.
 
-## Getting test ETH
+## Gas
 
-Every step here — deploying, buying, selling — is a real transaction and costs
-gas, so a wallet with a zero balance can't do anything. Both the launch form and
-the trade bar read the connected balance on the target chain and print faucet
-links for that chain the moment it's empty, rather than letting the wallet fail
-with "insufficient funds". The links live in `SUPPORTED_CHAINS` in
-`lib/chains.ts`; add a chain there and its faucets travel with it.
+Every step here — deploying, buying, selling — is a real transaction on a
+mainnet and costs real ETH, so a wallet with a zero balance can't do anything.
+Both the launch form and the trade bar read the connected balance on the target
+chain and say so the moment it's empty, naming the network the ETH has to be on,
+rather than letting the wallet fail with "insufficient funds".
+
+There are no faucet links anywhere in the app, and there should not be: gas here
+is bought or bridged, and anything offering to give it away is not a faucet.
 
 ## How a launch works
 
@@ -258,7 +261,7 @@ compiler — only edits to a `.sol` file do.
   the article; the contract stores the market.
 - **New listings are indexed from the event log.** The create page writes its
   own row, and `/api/indexer` reconciles anything created outside it — a Foundry
-  script, Basescan, or a browser that closed at the wrong moment. Pages read the
+  script, the explorer, or a browser that closed at the wrong moment. Pages read the
   table; they never scan the chain for the feed.
 - **ETH figures carry a fiat estimate.** Every price on the site is quoted in
   ETH by a contract; a quieter line under it says what that is worth in USD or

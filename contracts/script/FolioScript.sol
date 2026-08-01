@@ -16,37 +16,39 @@ import {FolioToken} from "../src/FolioToken.sol";
  * ## The network guard is the important part
  *
  * Every script here inherits {onlySupportedNetwork}, which reverts unless
- * `block.chainid` is one of the two chains in {_profile} — 84532 (Base Sepolia)
- * or 4663 (Robinhood Chain). That check runs inside the EVM, during the local
- * simulation `forge script` always performs first, so a wrong `--rpc-url` fails
- * before a single transaction is signed — let alone broadcast. It is
- * deliberately not a warning: a script pointed at a chain nobody chose should
- * not be one confirmation away from running.
+ * `block.chainid` is a chain {_profile} knows — 4663 (Robinhood Chain), and
+ * nothing else. That check runs inside the EVM, during the local simulation
+ * `forge script` always performs first, so a wrong `--rpc-url` fails before a
+ * single transaction is signed — let alone broadcast. It is deliberately not a
+ * warning: a script pointed at a chain nobody chose should not be one
+ * confirmation away from running.
  *
  * The guard is an allowlist, not a denylist. Adding a chain means adding a
  * {NetworkProfile} for it and nothing else; a chain id with no profile —
- * Ethereum, Base mainnet, an Orbit chain that is not this one — reverts with
- * {WrongNetwork}. `foundry.toml` reinforces this by resolving no alias beyond
- * these two, but the alias list only covers `--rpc-url <alias>`; this guard
- * also covers a URL someone pasted by hand.
+ * Ethereum, Base mainnet, a testnet, an Orbit chain that is not this one —
+ * reverts with {WrongNetwork}. `foundry.toml` reinforces this by resolving no
+ * alias beyond the one, but the alias list only covers `--rpc-url <alias>`;
+ * this guard also covers a URL someone pasted by hand.
  *
- * ## One of these chains holds real money
+ * ## That chain holds real money
  *
- * Robinhood Chain (4663) is a mainnet. Its ETH was bought, the addresses in
+ * Robinhood Chain (4663) is a mainnet, and it is the only network these scripts
+ * run against. Its ETH was bought, the addresses in
  * `deployments/robinhood-mainnet.json` are live, and a mistake there costs
- * money rather than a faucet claim. Nothing below treats it differently — the
- * guard is about *which* chain, not how much a mistake costs — so what stands
- * between an operator and a wrong mainnet broadcast is {confirm}, which prints
- * the network and chain id and blocks on stdin. Read that banner. And keep
- * `FOLIO_SKIP_CONFIRM` for CI runs whose decision was already made in a
- * reviewed workflow file, which is the only place it appears.
+ * money. There is no testnet to rehearse on any more — Base Sepolia was
+ * removed — so what stands between an operator and a wrong mainnet broadcast is
+ * {confirm}, which prints the network and chain id and blocks on stdin. Read
+ * that banner. Rehearse against a local fork (`anvil --fork-url`) when a change
+ * needs proving before it is broadcast. And keep `FOLIO_SKIP_CONFIRM` for CI
+ * runs whose decision was already made in a reviewed workflow file, which is
+ * the only place it appears.
  *
  * ## Everything chain-shaped lives in one place
  *
- * The deployment record, the explorer, the banner label and the RPC alias all
- * differ between the two networks, so they are read from {_profile} rather
- * than being constants. That is what lets one `DeployFactory` serve both
- * chains: there is no per-chain script, only a per-chain row.
+ * The deployment record, the explorer, the banner label and the RPC alias are
+ * read from {_profile} rather than being constants, so one `DeployFactory`
+ * serves any chain that has a row: there is no per-chain script, only a
+ * per-chain profile.
  *
  * ## Confirmation
  *
@@ -63,10 +65,6 @@ import {FolioToken} from "../src/FolioToken.sol";
  */
 abstract contract FolioScript is Script {
     using stdJson for string;
-
-    /// @notice Base Sepolia. The chain the factory at
-    ///         `deployments/base-sepolia.json` lives on.
-    uint256 internal constant BASE_SEPOLIA = 84532;
 
     /// @notice Robinhood Chain mainnet — an Arbitrum Orbit L2, EVM-equivalent
     ///         for everything these contracts do. Real ETH.
@@ -118,21 +116,14 @@ abstract contract FolioScript is Script {
     /**
      * @dev The profile for the chain the script is running against.
      *
-     *      Two chains, and deliberately no third. Base Sepolia is where the
-     *      rehearsal happens and its ETH is free; Robinhood Chain is the
-     *      mainnet Folio launches on, where it is not. Prove a change on
-     *      84532 before pointing anything at 4663 — that ordering is the
-     *      reason the testnet row is still here at all.
+     *      One chain, and deliberately no second. Robinhood Chain is the
+     *      mainnet Folio launches on and its ETH is real. The Base Sepolia row
+     *      that used to sit above this one is gone: a rehearsal network the
+     *      frontend cannot read and has no deployment record for is not a
+     *      rehearsal, it is a second way to be wrong about which chain a
+     *      command is pointed at. Fork the mainnet locally to rehearse.
      */
     function _profile() internal view returns (NetworkProfile memory) {
-        if (block.chainid == BASE_SEPOLIA) {
-            return NetworkProfile({
-                name: "Base Sepolia (testnet)",
-                slug: "base-sepolia",
-                explorer: "https://sepolia.basescan.org",
-                blockscout: false
-            });
-        }
         if (block.chainid == ROBINHOOD_MAINNET) {
             return NetworkProfile({
                 name: "Robinhood Chain (MAINNET - real funds)",
@@ -146,7 +137,8 @@ abstract contract FolioScript is Script {
         revert WrongNetwork(block.chainid);
     }
 
-    /// @dev The name the banner prints, e.g. `Base Sepolia (testnet)`.
+    /// @dev The name the banner prints, e.g.
+    ///      `Robinhood Chain (MAINNET - real funds)`.
     function networkName() internal view returns (string memory) {
         return _profile().name;
     }
@@ -160,11 +152,10 @@ abstract contract FolioScript is Script {
      * @dev Where the deploy script records what it deployed, and where every
      *      other script reads the factory address back from.
      *
-     *      One file per chain, named after the slug. A deploy to Robinhood
-     *      therefore cannot overwrite the Base Sepolia record, and pointing a
-     *      trading script at the wrong chain finds no factory rather than the
-     *      wrong one. `foundry.toml` grants read-write on `./deployments`, so
-     *      every path this returns is already permitted.
+     *      One file per chain, named after the slug, so pointing a trading
+     *      script at a chain that has never been deployed to finds no factory
+     *      rather than another chain's. `foundry.toml` grants read-write on
+     *      `./deployments`, so every path this returns is already permitted.
      */
     function deploymentsPath() internal view returns (string memory) {
         return string.concat("./deployments/", _profile().slug, ".json");
@@ -375,7 +366,7 @@ abstract contract FolioScript is Script {
     // Links
     // -----------------------------------------------------------------------
 
-    /// @dev An explorer address link for `who`. Both explorers use this path.
+    /// @dev An explorer address link for `who`. Every explorer uses this path.
     function addressLink(address who) internal view returns (string memory) {
         return string.concat(_profile().explorer, "/address/", vm.toString(who));
     }
@@ -383,11 +374,13 @@ abstract contract FolioScript is Script {
     /**
      * @dev A link to `holder`'s balance of `token`.
      *
-     *      The two explorers disagree here. Etherscan puts a holder's balance
-     *      on the token page behind `?a=`; Blockscout has no such view, and
-     *      shows a holder's balances on the address page's token tab instead.
-     *      Same destination, two routes — so this picks by profile rather than
-     *      emitting one URL that 404s on half the deployments.
+     *      Etherscan and Blockscout disagree here. Etherscan puts a holder's
+     *      balance on the token page behind `?a=`; Blockscout has no such view,
+     *      and shows a holder's balances on the address page's token tab
+     *      instead. Robinhood Chain runs Blockscout, so that is the branch
+     *      taken today — the Etherscan route stays for the next chain whose
+     *      profile sets `blockscout: false`, rather than emitting one URL that
+     *      404s wherever it is wrong.
      */
     function tokenLink(address token, address holder) internal view returns (string memory) {
         NetworkProfile memory net = _profile();

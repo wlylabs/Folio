@@ -1,59 +1,7 @@
 import { formatUnits } from "viem";
-import { chainBySlug, explorerAddressUrl, faucetDirectory, faucetsFor } from "@/lib/chains";
+import { chainBySlug, explorerAddressUrl } from "@/lib/chains";
 import { formatEth, shortAddress } from "@/lib/types";
 import type { FundsElsewhere } from "@/components/useGasBalance";
-
-/**
- * Where to get test ETH — now in exactly one place.
- *
- * These links used to be printed wherever an empty wallet was noticed: a boxed
- * paragraph in the trade panel, a second copy under the launch button, a third
- * under the amount field. On a phone the panel is most of a screen already, and
- * three faucet links plus their explanation pushed everything else out of view
- * to say something the reader only needs once. They live in Settings
- * now. What is left at the point of failure is the diagnosis — which wallet,
- * which network, and whether the zero is real — and a pointer to the panel.
- */
-export function FaucetLinks({ chain }: { chain: string }) {
-  const faucets = faucetsFor(chain);
-  if (faucets.length === 0) return null;
-
-  return (
-    <>
-      {faucets.map((faucet, i) => (
-        <span key={faucet.url}>
-          {i > 0 && " · "}
-          <a href={faucet.url} target="_blank" rel="noopener noreferrer">
-            {faucet.label}
-          </a>
-        </span>
-      ))}
-    </>
-  );
-}
-
-/**
- * Every faucet Folio knows about, grouped by network. For the settings panel.
- *
- * Grouped rather than filtered to the current page's chain, because a reader
- * who opens Settings has not said which network they are short on — and the
- * commonest way to end up with no gas is to have claimed on the other one.
- */
-export function FaucetDirectory() {
-  const networks = faucetDirectory();
-  if (networks.length === 0) return null;
-
-  return (
-    <>
-      {networks.map((network) => (
-        <p key={network.slug} className="settings__note">
-          <span className="settings__faucet-chain">{network.name}</span>
-          <FaucetLinks chain={network.slug} />
-        </p>
-      ))}
-    </>
-  );
-}
 
 /**
  * What a page can offer a reader whose gas turned out to be on another chain.
@@ -82,7 +30,7 @@ export function fixedChainWayOut(
 ): ElsewhereWayOut | null {
   if (!elsewhere) return null;
   return {
-    note: `Nothing can move it to ${network ?? "this network"} — gas here has to be claimed here.`,
+    note: `Nothing can move it to ${network ?? "this network"} — gas here has to be held here.`,
   };
 }
 
@@ -97,9 +45,10 @@ export function fixedChainWayOut(
  *
  * Three states, one line of explanation each. `unreadable` is an RPC that
  * failed rather than answered, which is not the same as a zero and must not be
- * reported as one. `elsewhere` is the wallet's balance on a chain this page is
- * *not* spending on — the wrong-testnet claim, made visible. Otherwise it is an
- * ordinary empty wallet, and the answer is the faucet list in Settings.
+ * reported as one. `elsewhere` is the wallet's balance on a supported chain
+ * this page is *not* spending on — see useGasBalance, which finds nothing while
+ * Robinhood Chain is the only supported network. Otherwise it is an ordinary
+ * empty wallet, and gas on a mainnet is bought rather than claimed.
  */
 export function GasNotice({
   chain,
@@ -169,24 +118,16 @@ export function GasNotice({
         <>
           <p className="notice__title">{heading}</p>
           {/*
-            A chain with no faucet is a chain whose gas is bought, so pointing
-            at the faucet list there would send the reader looking for something
-            that does not exist — and the things that answer that search on a
-            mainnet are not faucets. What is true on both is the network the
-            {symbol} has to be on.
+            Folio is on a mainnet and nowhere else, so there is no faucet to
+            point at — and the things that answer a search for one on a mainnet
+            are not faucets. What is left to say is the network the {symbol}
+            has to be on, which is the part a reader gets wrong.
           */}
-          {faucetsFor(chain).length > 0 ? (
-            <p>
-              Faucets are in Settings, under Test ETH. Claim
-              {network ? ` on ${network}` : ""} and come back — this updates on its own.
-            </p>
-          ) : (
-            <p>
-              {symbol} on {network ?? "this network"} has to be bridged or bought — there is no
-              faucet for it. Fund this wallet{network ? ` on ${network}` : ""} and come back; this
-              updates on its own.
-            </p>
-          )}
+          <p>
+            {symbol} on {network ?? "this network"} has to be bridged or bought — there is no
+            faucet for it. Fund this wallet{network ? ` on ${network}` : ""} and come back; this
+            updates on its own.
+          </p>
         </>
       )}
 

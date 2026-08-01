@@ -1,9 +1,10 @@
-One record per chain, named after the `--rpc-url` alias: `base-sepolia.json`,
-`robinhood-mainnet.json`. DeployFactory.s.sol writes the one for the chain it
-ran on and CreateToken.s.sol updates it with the most recent launch. Commit it
-once it exists, so the frontend and the interaction scripts read the same
-address.
+One record per chain, named after the `--rpc-url` alias. Folio runs on one
+network, so there is one file: `robinhood-mainnet.json`. DeployFactory.s.sol
+writes the record for the chain it ran on and CreateToken.s.sol updates it with
+the most recent launch. Commit it once it exists, so the frontend and the
+interaction scripts read the same address.
 
 A record with an empty `factory` is a placeholder for a chain nothing has been
 deployed to yet: `lib/contracts/deployment.ts` reads it as "no factory here"
-and the site drops that chain from the launch picker. Deploying fills it in.
+and the site reports itself as unconfigured rather than sending a transaction
+into the void. Deploying fills it in.

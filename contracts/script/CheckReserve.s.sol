@@ -15,7 +15,7 @@ import {FolioToken} from "../src/FolioToken.sol";
  *
  * ```
  * source .env
- * forge script contracts/script/CheckReserve.s.sol:CheckReserve --rpc-url base-sepolia
+ * forge script contracts/script/CheckReserve.s.sol:CheckReserve --rpc-url robinhood-mainnet
  * ```
  *
  * ## What to look at

@@ -1,4 +1,3 @@
-import baseSepoliaRecord from "@/deployments/base-sepolia.json";
 import robinhoodMainnetRecord from "@/deployments/robinhood-mainnet.json";
 import { FOLIO_FACTORY_ABI } from "@/lib/contracts/folioFactory";
 import { FOLIO_TOKEN_ABI } from "@/lib/contracts/folioToken";
@@ -22,7 +21,6 @@ import { DEFAULT_CHAIN_SLUG, SUPPORTED_CHAINS, chainIdBySlug, type ChainSlug } f
  * Env overrides exist on top of that, for pointing a preview deployment at a
  * factory that isn't the committed one without editing the repo:
  *
- *   NEXT_PUBLIC_FACTORY_ADDRESS_BASE_SEPOLIA=0x...
  *   NEXT_PUBLIC_FACTORY_ADDRESS_ROBINHOOD_MAINNET=0x...
  *   NEXT_PUBLIC_FACTORY_ADDRESS=0x...   (the default chain, kept for back-compat)
  *
@@ -83,7 +81,6 @@ export type FactoryDeployment = {
  * readable from the browser at all. A new chain adds a line here.
  */
 const RECORDS: Partial<Record<ChainSlug, DeploymentRecord>> = {
-  "base-sepolia": baseSepoliaRecord as DeploymentRecord,
   "robinhood-mainnet": robinhoodMainnetRecord as DeploymentRecord,
 };
 
@@ -93,7 +90,6 @@ const RECORDS: Partial<Record<ChainSlug, DeploymentRecord>> = {
  * text — a computed key reads as undefined in the browser.
  */
 const ADDRESS_OVERRIDES: Partial<Record<ChainSlug, string | undefined>> = {
-  "base-sepolia": process.env.NEXT_PUBLIC_FACTORY_ADDRESS_BASE_SEPOLIA,
   "robinhood-mainnet": process.env.NEXT_PUBLIC_FACTORY_ADDRESS_ROBINHOOD_MAINNET,
 };
 

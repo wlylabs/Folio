@@ -61,20 +61,20 @@ export default function AboutPage() {
             it, not cached from a market somewhere else.
           </p>
 
-          <h2>Which network a launch is on decides whether it is real</h2>
+          <h2>Every launch here is real money</h2>
           <p>
-            Folio runs on two networks. A launch on{" "}
+            Folio runs on one network. A launch on{" "}
             <strong>Robinhood Chain</strong> settles in real ETH — the trade is
             final, the fees are real, and a token bought there can lose every
             bit of what it cost. It is not an investment and nobody is
-            underwriting it. A launch on <strong>Base Sepolia</strong> settles
-            in free testnet ETH from a faucet, carries no value at all, and can
-            be reset out from under you; that is the rehearsal.
+            underwriting it.
           </p>
           <p>
-            Every listing names its network, and so does the trade panel before
-            you sign. Read it. The two look identical otherwise, which is the
-            whole reason it is written on the page.
+            There is no test network and no practice mode. Folio used to carry
+            Base Sepolia alongside Robinhood Chain for rehearsal; that is gone,
+            so nothing on this site is a rehearsal. Every listing names its
+            network and so does the trade panel before you sign, and the answer
+            is always the one that costs real ETH.
           </p>
           <p>
             One limitation is worth stating plainly: a byline is a claim, not a
