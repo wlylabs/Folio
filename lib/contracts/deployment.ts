@@ -94,7 +94,6 @@ const RECORDS: Partial<Record<ChainSlug, DeploymentRecord>> = {
  */
 const ADDRESS_OVERRIDES: Partial<Record<ChainSlug, string | undefined>> = {
   "base-sepolia": process.env.NEXT_PUBLIC_FACTORY_ADDRESS_BASE_SEPOLIA,
-  sepolia: process.env.NEXT_PUBLIC_FACTORY_ADDRESS_SEPOLIA,
   "robinhood-testnet": process.env.NEXT_PUBLIC_FACTORY_ADDRESS_ROBINHOOD_TESTNET,
 };
 
