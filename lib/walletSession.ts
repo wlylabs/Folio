@@ -34,3 +34,57 @@ export function hasStoredWalletConnectSession(): boolean {
 
   return false;
 }
+
+/** The part of a connector this module needs, so it takes wagmi's `Connector`
+ *  without importing a type that drags the whole config in. */
+type ProviderSource = { getProvider: () => Promise<unknown> };
+
+/** The part of a WalletConnect provider this module needs. Anything else — an
+ *  injected wallet, a Coinbase SDK provider — simply has no `session`. */
+type MaybeSessionProvider = {
+  session?: { namespaces?: Record<string, { accounts?: string[] } | undefined> };
+};
+
+/**
+ * The chain ids a connector's WalletConnect session was actually approved for.
+ *
+ * The session's namespaces are the wallet's answer to the pairing proposal, and
+ * they are the ceiling on everything afterwards: a request can only be sent for
+ * a chain in there, and `wallet_switchEthereumChain` for one that isn't is
+ * refused by the wallet or dropped on the floor. So this is how the page tells
+ * "the reader's wallet is parked on the wrong network" (fixable with a switch)
+ * apart from "this session can never speak for Base Sepolia" (fixable only by
+ * pairing again). See lib/walletChainReach.ts.
+ *
+ * Empty for a connector with no session at all, which is every connector that
+ * is not WalletConnect — callers must read that as "no answer", not as "no
+ * chains approved".
+ */
+export async function walletConnectChainIds(
+  connector: ProviderSource | undefined | null
+): Promise<number[]> {
+  if (!connector) return [];
+
+  let provider: unknown;
+  try {
+    provider = await connector.getProvider();
+  } catch {
+    // A connector that cannot produce a provider has no session to read.
+    return [];
+  }
+
+  const namespaces = (provider as MaybeSessionProvider | undefined)?.session?.namespaces;
+  if (!namespaces) return [];
+
+  // Accounts are CAIP-10 — `eip155:84532:0x…` — and the namespace key is
+  // sometimes the bare `eip155` and sometimes chain-scoped, so every entry is
+  // read rather than one looked up by name.
+  const ids = new Set<number>();
+  for (const namespace of Object.values(namespaces)) {
+    for (const account of namespace?.accounts ?? []) {
+      const id = Number(account.split(":")[1]);
+      if (Number.isInteger(id)) ids.add(id);
+    }
+  }
+  return [...ids];
+}

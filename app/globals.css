@@ -782,6 +782,20 @@ p {
 }
 
 /*
+ * The line under a wallet button that has to explain itself — currently one
+ * case, a WalletConnect session pinned to a network Folio does not use. Set in
+ * the UI face at the smallest size, like every other aside on the site: it is
+ * read once, by the reader the button just stopped, and never again.
+ */
+.wallet-note {
+  margin-top: var(--sp-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+/*
  * The connected wallet inside the panel: network over account, each row its
  * own button onto its own modal. Stacked rather than the hairline-divided pair
  * the masthead used to carry — the panel has the width to label both.
