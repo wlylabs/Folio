@@ -108,6 +108,18 @@ export type FundsElsewhere = {
  * stops a query outright when the browser claims to be offline, which is a
  * state with no data, no error, and no request running, rendered on screen as
  * a spinner that is waiting for nothing. `stalled` below is what ends both.
+ *
+ * None of which helps the reader whose browser cannot reach the RPC at all.
+ * That one is not stale, not empty and not on the wrong chain — the request
+ * leaves and never arrives, because something between the phone and the
+ * endpoint is in the way, and it fails the same way on every retry this hook
+ * can spend. `unreadable` says so honestly and was still, for that reader, a
+ * permanent notice on a wallet they could see the ETH in. The read now has a
+ * second route before it gets here: `lib/wagmiConfig.ts` puts Folio's own
+ * origin behind the direct endpoint, so a read that cannot leave the browser is
+ * re-asked through `/api/rpc/<chain>` and answered server-side. Reaching
+ * `unreadable` therefore means both routes failed, which is a much smaller set
+ * of things and genuinely worth putting on screen.
  */
 export function useGasBalance({ address, chainId }: Options) {
   const config = useConfig();

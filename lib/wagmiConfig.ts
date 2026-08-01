@@ -1,7 +1,7 @@
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { coinbaseWallet, injectedWallet, safeWallet } from "@rainbow-me/rainbowkit/wallets";
-import { http, type Chain, type Transport } from "viem";
-import { DEFAULT_CHAIN_SLUG, SUPPORTED_CHAINS, chainBySlug } from "./chains";
+import { fallback, http, type Chain, type Transport } from "viem";
+import { DEFAULT_CHAIN_SLUG, SUPPORTED_CHAINS, chainBySlug, rpcProxyPath } from "./chains";
 import { walletConnectMetadata } from "./walletMetadata";
 
 const PLACEHOLDER_PROJECT_ID = "00000000000000000000000000000000";
@@ -49,9 +49,52 @@ const chains = SUPPORTED_CHAINS.map((entry) => entry.chain) as unknown as readon
  * rate limited, so a throttled read leaves a balance unresolved rather than
  * wrong, which reads on screen as a wallet that never got funded. An unset
  * variable keeps the old fallback, so this only ever narrows the failure.
+ *
+ * Behind it, in the browser only, sits Folio's own origin — see
+ * `app/api/rpc/[slug]/route.ts`. Rate limiting is not the only way a read
+ * fails: a phone whose network filters the RPC's domain, or an in-app browser
+ * whose WebView cannot resolve it, or a middlebox answering the POST with a
+ * block page, all produce a balance that never resolves no matter how good the
+ * endpoint above is, on a wallet the reader can see the ETH in. Those are the
+ * reports this is for. The relay is reached at the host the page itself came
+ * from, which is the one host that is known to work, because the page is on
+ * screen.
+ *
+ * Order is the whole design. The direct endpoint is tried first and a healthy
+ * browser never leaves it, so the relay costs nothing in the ordinary case and
+ * carries traffic only for the readers who would otherwise see nothing at all.
+ * viem's `fallback` moves on for transport failures and HTTP errors, and
+ * rethrows a JSON-RPC error rather than re-asking a second endpoint a question
+ * the first one answered.
+ *
+ * Server-side there is no relay in the list, and it would be wrong to add one:
+ * a relative URL has no meaning in Node, this code runs *in* the process that
+ * serves that route, and a server that cannot reach the RPC gains nothing by
+ * asking itself.
  */
 const transports = Object.fromEntries(
-  SUPPORTED_CHAINS.map((entry) => [entry.chain.id, http(entry.rpcEnv || undefined)])
+  SUPPORTED_CHAINS.map((entry) => {
+    const direct = http(entry.rpcEnv || undefined);
+    if (typeof window === "undefined") return [entry.chain.id, direct];
+
+    return [
+      entry.chain.id,
+      // Absolute, from the page's own origin. viem hands a relative URL to
+      // fetch untouched and the browser would resolve it the same way — but
+      // only if nothing on the page has moved the base, and a URL that has to
+      // be right for the fallback to mean anything should not depend on that.
+      fallback([direct, http(`${window.location.origin}${rpcProxyPath(entry.slug)}`)], {
+        // The transports inside a fallback are each given `retryCount: 0` by
+        // viem, so this is the only retry ladder in play: one more pass over
+        // both endpoints, then the error reaches the caller. Deliberately
+        // short. Everything reading a balance is on a timer that will ask again
+        // shortly, and useGasBalance stops calling a read "checking" after
+        // fifteen seconds — a ladder longer than that patience just guarantees
+        // the answer lands after the page has given up on it.
+        retryCount: 1,
+      }),
+    ];
+  })
 ) as Record<number, Transport>;
 
 /**

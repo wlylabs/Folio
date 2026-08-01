@@ -319,6 +319,16 @@ compiler — only edits to a `.sol` file do.
   caches CoinGecko server-side for a minute. It is display only — no trade, no
   floor and no stored value is ever computed from it — and it disappears
   entirely when the price feed is unreachable, leaving the ETH untouched.
+- **A read the browser can't make itself falls back to this origin.** Balances
+  and contract reads go straight to the chain's RPC, as they always did. When
+  that request cannot leave the phone at all — a mobile network that filters the
+  endpoint's domain, an in-app browser whose WebView can't resolve it, a
+  middlebox answering the POST with a block page — viem's `fallback` re-asks the
+  same question through `/api/rpc/<chain>`, which relays it server-side. That is
+  the difference between "Balance unavailable" on a funded wallet and a figure
+  that simply appears. The relay forwards a fixed list of read methods and
+  nothing else: wallets broadcast transactions through their own provider, never
+  through this. A working network never touches it.
 - **Connecting a phone wallet is a round trip, and Folio owns both ends of it.**
   The pairing sends the reader into their wallet app; `lib/walletMetadata.ts`
   gives that session a `redirect` so the wallet can hand them straight back to
