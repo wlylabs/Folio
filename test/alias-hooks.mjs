@@ -29,7 +29,21 @@ export async function resolve(specifier, context, nextResolve) {
 
     // A miss falls through unchanged, so the failure names the specifier the
     // author actually wrote instead of a path this file invented.
-    if (path) return nextResolve(pathToFileURL(path).href, context);
+    if (path) return asJsonIfNeeded(await nextResolve(pathToFileURL(path).href, context));
   }
-  return nextResolve(specifier, context);
+  return asJsonIfNeeded(await nextResolve(specifier, context));
+}
+
+/**
+ * Supply the `with { type: "json" }` a bundler does not ask for.
+ *
+ * `lib/contracts/deployment.ts` imports `deployments/<chain>.json` directly, and
+ * webpack resolves that on the file extension alone. Node's ESM loader wants the
+ * attribute spelled out and throws without it — so the app would have to carry
+ * syntax it needs only when a test imports it. Adding it here instead keeps the
+ * requirement where it belongs: in the runner, not in the code under test.
+ */
+function asJsonIfNeeded(resolved) {
+  if (!resolved?.url?.endsWith(".json")) return resolved;
+  return { ...resolved, importAttributes: { ...resolved.importAttributes, type: "json" } };
 }
