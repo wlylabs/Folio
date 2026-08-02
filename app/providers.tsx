@@ -11,6 +11,7 @@ import { usePreferredChainSlug } from "@/lib/preferredChain";
 import CurrencyProvider from "@/components/CurrencyProvider";
 import ThemeProvider, { useTheme } from "@/components/ThemeProvider";
 import ChainSync from "@/components/ChainSync";
+import WalletChoiceReset from "@/components/WalletChoiceReset";
 import WalletSessionSync from "@/components/WalletSessionSync";
 import { useState } from "react";
 
@@ -31,6 +32,10 @@ export default function Providers({ children }: { children: React.ReactNode }) {
             <WalletSessionSync />
             {/* Also nothing; moves a wallet off a chain Folio cannot use. */}
             <ChainSync />
+            {/* Also nothing; forgets which wallet was used once it is gone, so
+                the connect modal opens on its default list rather than on the
+                wallet the reader just left. */}
+            <WalletChoiceReset />
             {/* Inside the query client: the ETH price is polled through it. */}
             <CurrencyProvider>{children}</CurrencyProvider>
           </WalletChrome>
