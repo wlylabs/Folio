@@ -20,8 +20,18 @@ import { siteUrl } from "./siteUrl";
  * the approved session whenever the tab comes back, however it got back.
  */
 
-/** The favicon, from Next's app/icon.svg file convention. */
-const ICON_PATH = "/icon.svg";
+/**
+ * The mark a wallet draws beside "Folio wants to connect", from
+ * app/icon-192.png/route.tsx.
+ *
+ * A PNG rather than app/icon.svg, which is what a browser tab gets. Wallet
+ * approval sheets are native UI — Android and iOS image views on the other side
+ * of WalletConnect's relay — and SVG is the one format they broadly cannot
+ * decode. A sheet that fails to load this falls back to a coloured square with
+ * a letter in it, taken from the domain, which is exactly the anonymous look
+ * this metadata exists to avoid.
+ */
+const ICON_PATH = "/icon-192.png";
 
 /**
  * One line, because that is what a wallet's approval sheet has room for. The

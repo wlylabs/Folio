@@ -1,0 +1,19 @@
+# Folio — how to report a security problem.
+#
+# RFC 9116. Served from public/ rather than a route because a path beginning
+# with a dot is not something Next's app directory will route: the scanner
+# treats those segments as hidden and skips them.
+#
+# Expires is a required field and this file is static, so the date below is
+# checked in rather than computed. Push a new one when it gets close; a
+# security.txt that has expired is read as abandoned, which is worse than
+# having none at all.
+
+Contact: mailto:wly38347@gmail.com
+Expires: 2027-08-01T00:00:00.000Z
+Preferred-Languages: en, id
+
+# Deliberately no Canonical or Policy line. Both take absolute URLs, this file
+# cannot know the origin it is being served from, and Folio has not settled on
+# its final domain — a Canonical naming the wrong host invalidates the file for
+# a parser that checks it.
