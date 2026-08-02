@@ -29,7 +29,11 @@ import {
   onWalletBoot,
   walletBootLevel,
 } from "./walletBoot";
-import { unblockWalletDirectoryPaging, warmWalletDirectory } from "./walletDirectory";
+import {
+  unblockWalletDirectoryPaging,
+  unstickWalletDirectoryIcons,
+  warmWalletDirectory,
+} from "./walletDirectory";
 import { walletConnectMetadata } from "./walletMetadata";
 import { hasStoredWalletConnectSession } from "./walletSession";
 
@@ -388,11 +392,14 @@ function deferBoot(createWallet: CreateWalletFn): CreateWalletFn {
  *
  * The same level, and the same file, take the wait out of that list's second
  * page: AppKit holds a page of forty wallets back until twenty of their icons
- * have been fetched, and the tiles fetch their own icons anyway.
+ * have been fetched, and the tiles fetch their own icons anyway — and then keep
+ * the tiles doing that asking well, because a tile whose icon request fails
+ * shimmers for as long as the modal is open.
  */
 if (hasWalletConnectProjectId) {
   onWalletBoot(WALLET_BOOT_MODAL, warmWalletDirectory);
   onWalletBoot(WALLET_BOOT_MODAL, unblockWalletDirectoryPaging);
+  onWalletBoot(WALLET_BOOT_MODAL, unstickWalletDirectoryIcons);
 }
 
 /** Every wallet in a list, deferred. */
