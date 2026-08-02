@@ -13,6 +13,7 @@ import { DEFAULT_CHAIN_SLUG, chainLabel } from "@/lib/chains";
 import { FACTORY_DEPLOYMENTS } from "@/lib/contracts/deployment";
 import { CONSENT_EVENT, readConsent, writeConsent, type ConsentChoice } from "@/lib/consent";
 import { CONTACT_EMAIL } from "@/lib/contact";
+import { bootWallets } from "@/lib/walletBoot";
 
 /**
  * Everything the reader can set, in one place behind one button.
@@ -76,6 +77,19 @@ export default function SettingsMenu() {
         className="btn btn--sm btn--outline"
         aria-expanded={open}
         aria-controls={panelId}
+        /*
+         * The wallet SDKs are not downloaded until somebody looks like they
+         * are heading for them, and this button is the only way in — see
+         * lib/walletBoot.ts. Three events rather than one because they cover
+         * three different readers and the earliest one wins: a pointer resting
+         * on the button, a keyboard reaching it, and a finger pressing it on a
+         * phone that has no hover to offer. All three land before the press of
+         * "Connect wallet" inside the panel, which is the press that used to
+         * pay for this.
+         */
+        onPointerEnter={() => bootWallets()}
+        onFocus={() => bootWallets()}
+        onPointerDown={() => bootWallets()}
         onClick={() => setOpen((was) => !was)}
       >
         <span

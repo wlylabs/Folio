@@ -1,8 +1,17 @@
-import { getDefaultConfig } from "@rainbow-me/rainbowkit";
+import { getDefaultConfig, getDefaultWallets } from "@rainbow-me/rainbowkit";
+import type { WalletList } from "@rainbow-me/rainbowkit";
 import { coinbaseWallet, injectedWallet, safeWallet } from "@rainbow-me/rainbowkit/wallets";
 import { fallback, http, type Chain, type Transport } from "viem";
 import { DEFAULT_CHAIN_SLUG, SUPPORTED_CHAINS, chainBySlug, rpcProxyPath } from "./chains";
+import {
+  WALLET_BOOT_MODAL,
+  WALLET_BOOT_PANEL,
+  bootWallets,
+  onWalletBoot,
+  walletBootLevel,
+} from "./walletBoot";
 import { walletConnectMetadata } from "./walletMetadata";
+import { hasStoredWalletConnectSession } from "./walletSession";
 
 const PLACEHOLDER_PROJECT_ID = "00000000000000000000000000000000";
 
@@ -114,12 +123,170 @@ const transports = Object.fromEntries(
  *  - `safeWallet` — only appears inside a Safe app frame, and costs nothing
  *    elsewhere.
  *
- * `undefined` when a project ID is configured, which leaves RainbowKit's full
- * default list exactly as it was.
+ * Only used when there is no project ID. With one, the list is RainbowKit's
+ * own default, unchanged apart from every wallet in it going through
+ * deferBoot below.
  */
-const relaylessWallets = [
+const relaylessWallets: WalletList = [
   { groupName: "Available here", wallets: [injectedWallet, coinbaseWallet, safeWallet] },
 ];
+
+/** One entry in a WalletList. RainbowKit names this `CreateWalletFn` but does
+ *  not export it from the package root, so it is read off the list instead. */
+type CreateWalletFn = WalletList[number]["wallets"][number];
+
+/**
+ * The same wallet, built only once somebody might want it.
+ *
+ * Two hooks are moved, and they are the two ways a wallet SDK ends up being
+ * downloaded by a reader who is only reading:
+ *
+ *  - `setup()`, which wagmi calls on every connector from inside
+ *    `createConfig` — before React has mounted, on every page of the site. For
+ *    the connectors that define one it is a megabyte of SDK away, because it
+ *    awaits `getProvider()`, and the work it then does with that provider is
+ *    subscribing to two events. Nothing reads its result, `connect()` fetches
+ *    its own provider, and wagmi never checks whether it ran, so it is safe to
+ *    hold until the reader is heading for the wallet.
+ *
+ *  - `getProvider()` itself, which wagmi's mount-time `reconnect()` calls on
+ *    every connector in the list to find out whether any of them is holding a
+ *    session. Answering that question honestly costs the whole SDK. Answering
+ *    it with `undefined` costs nothing and is a shape wagmi already handles —
+ *    it is what a connector with no provider available returns, and `reconnect`
+ *    skips it and moves on.
+ *
+ * So a cold connector says it has nothing, *unless* storage says otherwise:
+ * `recentConnectorId` is wagmi's own note of the connector this reader last
+ * connected with, and a stored WalletConnect session is the phone-handoff case
+ * where the approval landed while the page was dead and there was never a
+ * chance to write that note (see lib/walletSession.ts). Either one means this
+ * reader has a wallet to restore, so the SDK is fetched at once and the
+ * restore happens exactly as it did before.
+ *
+ * RainbowKit's second WalletConnect connector waits a step longer than the
+ * rest. It exists so a reader can open WalletConnect's own modal instead of
+ * RainbowKit's QR view, and it is the only thing in the app that pulls in
+ * `@reown/appkit` — half a megabyte, plus a telemetry ping to
+ * pulse.walletconnect.org that fires on init and therefore used to fire on
+ * every page load, before the cookie banner had been answered. It is released
+ * when the connect modal opens, which is the tap before the one that needs it.
+ *
+ * Nothing above can leave a connect waiting on a level that was never
+ * released: `connect` and `getChainId` — the two calls RainbowKit makes when a
+ * reader picks a wallet — open every level themselves before delegating.
+ *
+ * The replacements are written as methods rather than arrows because `this`
+ * matters: `setup` reaches for `this.getProvider()` and `this.onConnect`, and
+ * those live on the object wagmi assembles from this one, not on this one.
+ */
+function deferBoot(createWallet: CreateWalletFn): CreateWalletFn {
+  return (options) => {
+    const wallet = createWallet(options);
+    const createConnector = wallet.createConnector;
+
+    return {
+      ...wallet,
+      createConnector: (walletDetails) => {
+        const connectorFn = createConnector(walletDetails);
+        // The `@reown/appkit` one. Everything else is wanted a step earlier.
+        const appKit = walletDetails.rkDetails.isWalletConnectModalConnector === true;
+        const level = appKit ? WALLET_BOOT_MODAL : WALLET_BOOT_PANEL;
+        // Which of RainbowKit's two WalletConnect clients this connector's
+        // sessions belong to — see getWalletConnectConnector, which sets the
+        // prefix, and hasStoredWalletConnectSession, which reads it.
+        const sessionPrefix = appKit ? "clientOne" : "clientTwo";
+
+        return (config) => {
+          const connector = connectorFn(config);
+          const { setup, getProvider, getChainId, connect } = connector;
+
+          // Two connectors are left alone, because holding them back would
+          // cost something and save nothing. An injected wallet's provider is
+          // `window.ethereum`, already in the page; Safe's is a small module
+          // that only resolves inside Safe's own frame, and a Safe app is
+          // expected to be connected the moment it opens, with nobody there to
+          // press anything. Everything else here is a wallet SDK measured in
+          // hundreds of kilobytes.
+          const cheap = connector.type === "injected" || connector.type === "safe";
+          if (cheap) return connector;
+
+          /**
+           * Has this reader a session that belongs to *this* connector?
+           *
+           * A WalletConnect connector is asked about its own session store,
+           * not about wagmi's `recentConnectorId`: both of RainbowKit's
+           * WalletConnect connectors answer to the id `walletConnect`, so that
+           * note cannot tell them apart, and treating it as a match for both
+           * would build the expensive one for every reader who ever paired
+           * over the cheap one. Everything else has an id of its own, and
+           * `recentConnectorId` is wagmi's own record of which connector this
+           * reader last connected with.
+           */
+          const restoring = async () => {
+            if (connector.type === "walletConnect") {
+              return hasStoredWalletConnectSession(sessionPrefix);
+            }
+            try {
+              return (await config.storage?.getItem("recentConnectorId")) === connector.id;
+            } catch {
+              // Storage can be unavailable. Then there is nothing to restore.
+              return false;
+            }
+          };
+
+          // Cast because `connect` is generic over `withCapabilities` and a
+          // wrapper cannot carry a type parameter through `apply`. The shape
+          // is the connector's own, minus that one inference.
+          return {
+            ...connector,
+
+            ...(setup
+              ? {
+                  // `async` only to satisfy wagmi's signature: the point of
+                  // this one is that it returns without having done the work.
+                  async setup() {
+                    const self = this;
+                    onWalletBoot(level, () => {
+                      void Promise.resolve(setup.call(self)).catch(() => undefined);
+                    });
+                  },
+                }
+              : {}),
+
+            async getProvider(...args: Parameters<typeof getProvider>) {
+              if (walletBootLevel() < level && !(await restoring())) {
+                // "Nothing here" — see above. Cast because wagmi's types
+                // describe a provider that always exists, and the runtime,
+                // which is what `reconnect` is written against, does not.
+                return undefined as unknown as ReturnType<typeof getProvider>;
+              }
+              return getProvider.apply(this, args);
+            },
+
+            async getChainId(...args: Parameters<typeof getChainId>) {
+              bootWallets(WALLET_BOOT_MODAL);
+              return getChainId.apply(this, args);
+            },
+
+            async connect(...args: Parameters<typeof connect>) {
+              bootWallets(WALLET_BOOT_MODAL);
+              return connect.apply(this, args);
+            },
+          } as typeof connector;
+        };
+      },
+    };
+  };
+}
+
+/** Every wallet in a list, deferred. */
+function deferred(wallets: WalletList): WalletList {
+  return wallets.map((group) => ({
+    ...group,
+    wallets: group.wallets.map(deferBoot),
+  }));
+}
 
 /**
  * The chain a wallet must agree to before a WalletConnect pairing counts.
@@ -226,17 +393,22 @@ const walletConnectParameters = {
   //
   // It does NOT silence every WalletConnect beacon. @walletconnect/
   // ethereum-provider builds a Reown AppKit modal whose own pulse ping fires
-  // on provider init — on page load, before the consent banner is answered —
-  // and it hardcodes that modal's options, so there is no flag to pass. The
-  // only levers are `showQrModal: false` (which would take RainbowKit's QR
-  // pairing with it) or not constructing the connector until the reader asks
-  // to connect. See the note in README.md.
+  // on provider init, and it hardcodes that modal's options, so there is no
+  // flag to pass. That ping used to happen on page load, before the consent
+  // banner was answered; the lever taken against it is the last one available
+  // — the connector is not constructed until the reader asks for a wallet.
+  // See deferBoot above, and lib/walletBoot.ts.
   telemetryEnabled: false,
 } as Parameters<typeof getDefaultConfig>[0]["walletConnectParameters"];
 
 export const wagmiConfig = getDefaultConfig({
   appName: "Folio",
-  wallets: hasWalletConnectProjectId ? undefined : relaylessWallets,
+  // RainbowKit's own default list when there is a relay to reach the phone
+  // wallets over, asked for by name rather than left to the `undefined`
+  // default so every wallet in it can go through deferBoot above.
+  wallets: deferred(
+    hasWalletConnectProjectId ? getDefaultWallets().wallets : relaylessWallets
+  ),
   // Coinbase Wallet's own connector shows this rather than reading the
   // WalletConnect metadata below, so it is set in both places.
   appIcon: walletConnectMetadata.icons[0],

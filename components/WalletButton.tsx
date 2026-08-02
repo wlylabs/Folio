@@ -6,6 +6,7 @@ import { useAccount, useDisconnect } from "wagmi";
 import { chainBySlug } from "@/lib/chains";
 import { usePreferredChainSlug } from "@/lib/preferredChain";
 import { shortAddress } from "@/lib/types";
+import { WALLET_BOOT_MODAL, bootWallets } from "@/lib/walletBoot";
 import { useChainReach } from "@/lib/walletChainReach";
 import { hasStoredWalletConnectSession } from "@/lib/walletSession";
 
@@ -42,8 +43,11 @@ export default function WalletButton({ onOpenModal }: { onOpenModal?: () => void
         const connected = ready && account && chain;
 
         // Every opener goes through here, so the panel closes on the way to any
-        // modal without each call site remembering to do it.
+        // modal without each call site remembering to do it — and so the last
+        // of the wallet SDKs is released one tap before the entry that needs
+        // it. See lib/walletBoot.ts.
         const open = (openModal: () => void) => () => {
+          bootWallets(WALLET_BOOT_MODAL);
           onOpenModal?.();
           openModal();
         };
@@ -81,6 +85,7 @@ export default function WalletButton({ onOpenModal }: { onOpenModal?: () => void
                       <button
                         type="button"
                         onClick={() => {
+                          bootWallets(WALLET_BOOT_MODAL);
                           onOpenModal?.();
                           repair();
                         }}
