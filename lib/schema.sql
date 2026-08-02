@@ -172,6 +172,112 @@ create policy "a proved wallet may publish under its own address"
   );
 
 -- ---------------------------------------------------------------------------
+-- The trade log
+--
+-- Every `TokensBought` and `TokensSold` carries the marginal price the trade
+-- left behind, so a launch's whole price history is already on chain and this
+-- table stores nothing the chain is not the authority on. It is a *cache of the
+-- log*, and the distinction matters twice over: nothing here is ever the source
+-- of a price a trade settles at, and a row that disagrees with the chain is a
+-- bug in the recorder rather than a second opinion.
+--
+-- What it buys is the history the chain will not hand back cheaply. Reading it
+-- live means walking `eth_getLogs` backwards from the head, which is bounded by
+-- how many round trips a page load can afford — about 108,000 blocks. On a
+-- two-second chain that was six days. Robinhood Chain mines every 0.1s, so the
+-- same walk reaches **three hours**, and a launch's chart forgot everything
+-- older than one afternoon. Reaching a week would be some 600 `eth_getLogs`
+-- calls per reader per page view, which is not a slower answer, it is no answer.
+--
+-- So the log is walked once, forward, and kept. `lib/tradeRecorder.ts` writes;
+-- `lib/tradeHistory.ts` reads here first and tops up from the chain for the
+-- blocks written since. The chart then costs one indexed query and shows the
+-- whole life of a launch rather than its last three hours.
+--
+-- Writes are service-role only, and that is a security property rather than an
+-- oversight. A public insert policy on this table would let anyone hold the
+-- anon key write price history for a launch they do not own — invented rallies,
+-- invented crashes, in the one panel a reader looks at to decide whether to
+-- buy. There is no shape check that makes forged trades safe, so the policy
+-- refuses everybody instead and the recorder runs on the server. A deployment
+-- with no `SUPABASE_SERVICE_ROLE_KEY` records nothing and falls back to the
+-- bounded live scan, which is exactly what it did before this table existed.
+-- ---------------------------------------------------------------------------
+create table if not exists trades (
+  chain text not null,                  -- slug from SUPPORTED_CHAINS
+  token_address text not null,          -- lowercased, like every address here
+  block_number bigint not null,
+  -- Position in the block. A transaction hash is not a unique key — a contract
+  -- calling buy() twice emits two trades under one hash — so the key carries
+  -- the log's own index and re-recording a block cannot double a trade.
+  log_index integer not null,
+  tx_hash text not null,
+  side text not null check (side in ('buy', 'sell')),
+  trader text not null,
+  -- ETH into the curve on a buy, out of it on a sell. Gross of the fee.
+  eth numeric not null,
+  -- Whole tokens issued on a buy, burned on a sell.
+  tokens numeric not null,
+  -- The marginal price the trade left behind, in ETH per whole token. This is
+  -- the number the chart plots, and it is emitted by the contract after the
+  -- effects of the trade — a settlement, never a sample.
+  price numeric not null,
+  -- Null where the block header could not be read. The chart falls back to even
+  -- spacing when that happens, which is visibly approximate; a guessed
+  -- timestamp would not be.
+  block_time timestamptz,
+  primary key (chain, token_address, block_number, log_index)
+);
+
+-- The one query the chart makes: the last N trades of one launch, newest first.
+create index if not exists trades_token_idx
+  on trades (chain, token_address, block_number desc, log_index desc);
+
+-- ---------------------------------------------------------------------------
+-- How far the recorder has read, per launch
+--
+-- Without this every scan would start from the token's creation block and
+-- re-read the whole log to find the handful of trades since the last one. With
+-- it a scan covers the blocks written since it last ran, which on a chain
+-- mining ten blocks a second is the difference between a bounded cost and one
+-- that grows with the age of the launch.
+--
+-- `first_block` is the other end: the block the token was created in, found
+-- once by bisecting on `eth_getCode` and then never looked for again. It is
+-- kept so a later scan can tell "recorded from the beginning" apart from
+-- "recorded from wherever the first reader happened to arrive", which is the
+-- difference between a complete history and a chart that quietly starts late.
+-- ---------------------------------------------------------------------------
+create table if not exists trade_cursors (
+  chain text not null,
+  token_address text not null,
+  first_block bigint not null,
+  last_block bigint not null,
+  updated_at timestamptz not null default now(),
+  primary key (chain, token_address)
+);
+
+alter table trades enable row level security;
+alter table trade_cursors enable row level security;
+
+-- Readable by everyone: it is a copy of a public event log, and the chart is
+-- drawn in the browser.
+drop policy if exists "trades are publicly readable" on trades;
+create policy "trades are publicly readable"
+  on trades for select
+  using (true);
+
+drop policy if exists "trade cursors are publicly readable" on trade_cursors;
+create policy "trade cursors are publicly readable"
+  on trade_cursors for select
+  using (true);
+
+-- No insert, update or delete policy on either table, deliberately. A table
+-- with RLS on and no policy for an action refuses that action to every role
+-- except the service role, which bypasses RLS — and the service role is the
+-- only thing that should be writing a price history.
+
+-- ---------------------------------------------------------------------------
 -- Delisted launches
 --
 -- Deleting a listing is not enough on its own to make it stay gone. The token

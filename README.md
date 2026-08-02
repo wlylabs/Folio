@@ -253,9 +253,39 @@ panel that describes it honestly rather than one that would revert.
 
 Every `TokensBought` and `TokensSold` carries the marginal price the trade left
 behind, so a launch's whole price history is already on chain and nothing has to
-be recorded to draw it. `lib/tradeHistory.ts` reads it back — walking the log
-backwards from the head of the chain, because the interesting end of a price
-history is the recent end — and the panel under the article plots it.
+be recorded for it to exist. `lib/tradeHistory.ts` reads it back and the panel
+under the article plots it.
+
+What *does* have to be recorded is the reach of it. Reading the log live means
+walking `eth_getLogs` backwards from the head, and that walk is bounded by how
+many round trips a page load can afford — twelve, or 108,000 blocks. On a
+two-second chain that was six days. **Robinhood Chain mines every 0.1 seconds,
+so the same walk reaches three hours**: a launch's chart forgot its own opening
+by the evening, and the "1W" and "1M" chips could never have anything behind
+them. Walking further is not the fix — a week here is some six hundred
+`eth_getLogs` calls per reader per page view.
+
+So the log is walked *forward* once and kept. `lib/tradeRecorder.ts` writes into
+the `trades` table from the block the launch was created in — found by bisecting
+on `eth_getCode`, once, then remembered — and each later run starts where the
+last stopped, so a scan costs the blocks since it rather than the age of the
+launch. It runs on the read path, which is what makes it need no cron: a launch
+nobody looks at costs nothing, and one somebody is looking at is caught up by
+the act of looking.
+
+Three things about that table are worth knowing. It is a **cache of the log**,
+never an authority: the primary key is the log's own coordinates so re-reading a
+block cannot double a trade, and no price anything settles at is ever read from
+it. Writes are **service-role only** — a public insert policy would let anyone
+holding the anon key invent a rally in the one panel a reader checks before
+buying, and no shape check makes a forged trade safe. And the recorder
+deliberately **stops short of the head**, so a reorg cannot leave a wrong row
+behind a key that blocks the right one; `lib/tradeHistory.ts` reads that last
+stretch live on every request, which is one call.
+
+A deployment with no `SUPABASE_SERVICE_ROLE_KEY` records nothing and falls all
+the way back to the bounded backwards walk — what this did before the table
+existed. The endpoint says which it served in `source`.
 
 The chart **steps rather than slopes**. A constant-product curve only moves when
 somebody trades against it, so between two trades the price is a flat line, and
@@ -264,11 +294,12 @@ runs out to the right edge for the same reason: it is still the price.
 
 Two things about how it is wired matter more than they look:
 
-- **It is not part of the page's server render.** A scan is a dozen
-  `eth_getLogs` calls plus a block header per trade; the article, the fact box
-  and the trade panel are the page and none of them should wait on it. The panel
-  mounts empty and fills in from `/api/token/<address>/trades`, which caches each
-  scan for twenty seconds and shares one walk between concurrent readers.
+- **It is not part of the page's server render.** Even one indexed query plus a
+  catch-up run is work the article, the fact box and the trade panel should not
+  wait on. The panel mounts empty and fills in from
+  `/api/token/<address>/trades`, which caches each answer for twenty seconds and
+  shares one run between concurrent readers — so the recorder runs at most once
+  per launch per twenty seconds however many people are reading.
 - **The axis labels are HTML, not SVG text.** Anything inside a scaled `viewBox`
   scales with it, which turns a 9px label into a 5px one on a phone. The open,
   the high and the low are printed around the plot instead — to four
@@ -681,9 +712,8 @@ the edge, where a request can be refused before it costs anything to receive.
       Whether a deployment *opts in* is still a decision: no migrator named in
       the factory's config means the curve stays terminal and the panel never
       appears
-- [ ] Persisting the trade log, so a chart doesn't cost a fresh scan — the scan
-      window is bounded (about six days of blocks), which is why the panel
-      says "the last N trades" rather than claiming to show every one
+- [x] Persisting the trade log, so a chart doesn't cost a fresh scan and isn't
+      bounded by how far one page load can walk — see **The price history**
 - [ ] Nonce and rate-limit state in a store the whole deployment shares, rather
       than one process at a time
 - [ ] A real audit before this carries meaningful value
