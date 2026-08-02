@@ -11,14 +11,26 @@
  * every return to the tab would walk every connector RainbowKit registered,
  * asking each one for a provider, on the overwhelmingly common case of a reader
  * who simply never connected a wallet.
+ *
+ * `prefix` narrows it to one client's sessions. RainbowKit runs two: the
+ * connector behind its own QR view stores under `clientTwo`, and the one that
+ * opens WalletConnect's own modal under `clientOne`. lib/wagmiConfig.ts asks
+ * per connector, because "somebody has a session" is not a reason to spend half
+ * a megabyte building the client that does not hold it. An unrecognised prefix
+ * simply finds nothing, and the connector then waits for the reader to press
+ * something — the safe way for this to be wrong.
  */
-export function hasStoredWalletConnectSession(): boolean {
+export function hasStoredWalletConnectSession(prefix?: string): boolean {
   if (typeof window === "undefined") return false;
+
+  const wanted = prefix
+    ? new RegExp(`^wc@2:client:[^:]+:${prefix}//session$`)
+    : /^wc@2:client:.*\/\/session$/;
 
   try {
     for (let i = 0; i < window.localStorage.length; i++) {
       const key = window.localStorage.key(i);
-      if (!key || !/^wc@2:client:.*\/\/session$/.test(key)) continue;
+      if (!key || !wanted.test(key)) continue;
 
       const value = window.localStorage.getItem(key);
       if (!value) continue;

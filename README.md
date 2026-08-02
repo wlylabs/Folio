@@ -47,13 +47,16 @@ domiciled. The terms now describe the mainnet network rather than promising
 testnet-only, but that is a factual correction, not a review: a lawyer has to
 look at both documents before this is operated against real value or real users.
 
-One gap worth knowing about, because the privacy policy implies otherwise: the
-consent banner gates Folio's own analytics, and there are none yet, but
-WalletConnect pings `pulse.walletconnect.org` on page load regardless. It comes
-from the Reown AppKit modal that `@walletconnect/ethereum-provider` builds
-during provider init, which hardcodes its own options — see the note in
-`lib/wagmiConfig.ts` for the two ways out. Until one of them is taken, a
-third-party request does happen before the reader has answered the banner.
+The consent banner gates Folio's own analytics, and there are none yet.
+WalletConnect used to ping `pulse.walletconnect.org` on page load regardless —
+the ping comes from the Reown AppKit modal that
+`@walletconnect/ethereum-provider` builds during provider init, and that modal
+hardcodes its own options, so there is no flag that silences it. The way out
+taken here is the third one: the provider is not built on page load at all.
+Nothing in the wallet layer is constructed until the reader shows an interest in
+connecting one, so a reader who only reads never reaches any third-party request
+— see `lib/walletBoot.ts`. A reader who does head for the settings panel
+releases the connectors then, which is after the banner has had its chance.
 
 ## Setup (from your phone, via GitHub Codespaces)
 
