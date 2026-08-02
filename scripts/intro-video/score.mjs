@@ -2,18 +2,18 @@
 /**
  * Writes the intro film's score.
  *
- * The film has no voice on it: the narration is on the glass, where it reads
- * in the muted autoplay that a landing page actually gives it, and the sound
- * is texture rather than information. So this is a bed, not a soundtrack —
- * quiet enough that nobody turns it off, and cut to the picture rather than
- * laid under it. Every cue below answers a beat in `intro.html`: the sheet
- * drawing itself, the strike-through landing, the byline earning its chip, the
- * four steps, the curve, the sell leg walking back down it.
+ * The narration is on the glass, where it reads in the muted autoplay a landing
+ * page gives a hero video. That leaves the sound a different job: to carry the
+ * film for whoever turns it on. So this is written the way a brand intro is —
+ * a pulse you can feel, a hook short enough to remember, and a shape that
+ * builds, drops out once and resolves — and mixed the way something close to
+ * the ear is: soft edges, no hard transients, texture you notice only when it
+ * stops.
  *
  *   node scripts/intro-video/score.mjs
- *   node scripts/intro-video/score.mjs --lufs -20 --out /tmp/score.wav
+ *   node scripts/intro-video/score.mjs --lufs -18 --out /tmp/score.wav
  *
- * There is no library and no sample here — two synthesised voices, a room to
+ * There is no library and no sample here — six synthesised voices, a room to
  * put them in, and a cue list. Which is the same bargain the film makes with
  * its own pictures: nothing borrowed, nothing that has to be licensed, and
  * every second of it answerable to something in the repository.
@@ -49,12 +49,20 @@ function args(argv) {
 const opts = args(process.argv.slice(2));
 const OUT = path.resolve(opts.out ?? path.join(HERE, "folio-intro-score.wav"));
 const SR = 48000;
-/** Music alone under a film, rather than under a voice: quiet, but not shy. */
-const LUFS = Number(opts.lufs ?? -20);
-/** The last chord is faded out over this, ending in silence exactly where the
-    film does — anything still ringing at the cut would be chopped, since the
-    picture is what decides how long the file is. */
-const TAIL = 2.2;
+/** Integrated loudness. Music carrying a film sits about where speech would. */
+const LUFS = Number(opts.lufs ?? -18);
+/** The last chord fades over this, ending in silence exactly where the film
+    does — the picture decides how long the file is, so anything still ringing
+    at the cut would be chopped rather than faded. */
+const TAIL = 2.6;
+
+/**
+ * 120 bpm, and not for the usual reason: every cut in this film lands on a
+ * multiple of half a second, so a half-second beat is the only grid that can
+ * be steady and still change chord where the picture changes scene.
+ */
+const BEAT = 0.5;
+const BAR = BEAT * 4;
 
 /* -------------------------------------------------------------------------- */
 /* Pitch                                                                      */
@@ -78,208 +86,221 @@ function hz(note) {
 /* The cue list                                                               */
 /* -------------------------------------------------------------------------- */
 
-/**
- * D minor, and it stays there. The film is eight scenes of one argument, so
- * the score is one harmony bending around a pedal rather than a progression
- * going somewhere: F major for the two scenes that are Folio's own answer,
- * B-flat with its third taken out for the launch that is being struck through,
- * and D for everything that carries weight.
- */
 const CUES = [];
 
-/** A struck note. Decays on its own; `hold` only stretches the decay. */
-const key = (at, note, gain = 0.3, hold = 1) =>
-  CUES.push({ voice: "key", at, note, gain, hold });
+/** The hook and its answers: a wooden, close-miked mallet. */
+const pluck = (at, note, gain = 0.3, pan = 0) =>
+  CUES.push({ voice: "pluck", at, note, gain, pan });
 
-/** A sustained chord: `dur` is how long it is held before it is let go. */
-const chord = (at, dur, notes, gain = 0.45, pan = 0) =>
-  CUES.push({ voice: "pad", at, dur, notes, gain, pan });
+/** A held chord, well under everything else. */
+const chord = (at, dur, notes, gain = 0.3) =>
+  CUES.push({ voice: "pad", at, dur, notes, gain });
 
-/** Weight under everything, felt more than heard. */
-const sub = (at, dur, note, gain = 0.4) =>
-  CUES.push({ voice: "sub", at, dur, note, gain });
+/** The root, low and round. */
+const bass = (at, dur, note, gain = 0.34) =>
+  CUES.push({ voice: "bass", at, dur, note, gain });
 
-/* 1 · Masthead (0:00) — the mark draws itself out of nothing, so the chord
-   arrives from under the floor and the notes are single. */
-chord(0.0, 6.2, ["D3", "A3", "D4", "F4"], 0.26);
-key(0.35, "D4", 0.40); //  the sheet's outline begins
-key(1.55, "A4", 0.30); //  the crease
-key(2.25, "F4", 0.36); //  F-O-L-I-O starts landing
-key(2.60, "D5", 0.20);
-key(3.65, "C5", 0.24); //  the tagline
+/** The pulse. Felt at the chest rather than heard at the ear. */
+const pulse = (at, gain = 0.5) => CUES.push({ voice: "kick", at, gain });
 
-/* 2 · The usual launch (0:07.5) — down a third, and when the promise is struck
-   through the chord loses its own third with it. */
-chord(7.35, 4.4, ["Bb3", "F3", "D4"], 0.24);
-key(8.45, "Bb3", 0.32); //  the card
-key(9.10, "F4", 0.22); //   the rule under it
-chord(11.95, 3.4, ["F3", "Bb3", "F4"], 0.21); // hollow: no third
-key(12.15, "Bb2", 0.38); // the strike-through crosses the line
-key(13.30, "F3", 0.20);
+/** The shaker: the ASMR end of the mix, and the only thing above 6 kHz. */
+const tick = (at, gain = 0.3, pan = 0) => CUES.push({ voice: "tick", at, gain, pan });
 
-/* 3 · The listing is the article (0:15.5) — F major, the first warmth in the
-   film, and the only motif it has. */
-chord(15.35, 10.4, ["F3", "C4", "A3", "C5"], 0.27);
-key(16.35, "F4", 0.38); //  the headline sets
-key(17.55, "A4", 0.28); //  the article body
-key(18.60, "C5", 0.24);
-key(20.25, "A4", 0.26); //  the motif, once more, quieter
-key(21.95, "C5", 0.30); //  the byline earns its Verified chip
-key(22.95, "F4", 0.28); //  the price arrives underneath
-key(24.60, "D4", 0.20); //  and settles back toward D
+/** Paper: a soft noise swell where the film cuts, and under the last build. */
+const paper = (at, dur, gain = 0.3, rise = false) =>
+  CUES.push({ voice: "paper", at, dur, gain, rise });
 
-/* 4 · How a launch works (0:26.5) — four steps at 2.1s apart, four notes up. */
-chord(26.35, 6.6, ["D3", "A3", "F4"], 0.24);
-key(28.15, "D4", 0.34); //  step 1
-key(30.25, "F4", 0.32); //  step 2
-chord(32.25, 6.9, ["F3", "C4", "A4"], 0.22);
-key(32.35, "A4", 0.32); //  step 3
-key(34.45, "C5", 0.34); //  step 4 — one transaction
-key(35.65, "A4", 0.18);
-key(36.55, "F4", 0.15);
-
-/* 5 · The market (0:39) — the curve is drawn upward, the quote is taken at the
-   top, and the sell leg walks the same five notes back down. That mirror is
-   the whole scene's argument, so it is the whole cue's. */
-chord(38.85, 12.4, ["D3", "A3", "D4"], 0.23);
-key(40.05, "D4", 0.28); //  the curve begins to draw
-key(40.60, "E4", 0.26);
-key(41.20, "F4", 0.28);
-key(41.80, "A4", 0.30);
-key(42.35, "C5", 0.32); //  and reaches its top
-chord(43.35, 4.6, ["F3", "C4"], 0.17); // the reserve fills under it
-key(43.55, "A4", 0.24); //  the quote
-key(45.50, "D5", 0.20);
-key(47.50, "C5", 0.28); //  the sell leg: back down the same steps
-key(48.05, "A4", 0.26);
-key(48.60, "F4", 0.26);
-key(49.10, "E4", 0.24);
-key(49.60, "D4", 0.28); //  to exactly where the buy began
-key(50.70, "D3", 0.22);
-
-/* 6 · What holds it up (0:51.5) — a pedal, because the scene is about things
-   that do not move. Three notes for three columns, then a long decrescendo so
-   the dark frame can land in near-silence. */
-sub(51.35, 10.4, "D2", 0.22);
-chord(51.35, 9.6, ["D3", "F3", "A3", "C4"], 0.25);
-key(52.60, "F4", 0.28); //  bylines
-key(54.70, "A4", 0.26); //  articles
-key(56.80, "C5", 0.26); //  trades
-key(58.90, "A4", 0.17);
-
-/* 7 · Real money (1:03) — the one inverted frame, and the one place the score
-   gets out of the way. Two low notes and a lot of room. */
-key(63.45, "D2", 0.44, 1.35); //  "Every launch here is real money."
-key(66.45, "A2", 0.30, 1.2); //   the hairline draws under it
-chord(67.35, 3.8, ["D3", "A3"], 0.15);
-
-/* 8 · Outro (1:10) — the chord that has been implied since the first bar,
-   finally with its fifth and its ninth in it, left to ring out past the cut. */
-chord(69.85, 7.4, ["D3", "A3", "D4", "F4", "A4"], 0.27);
-key(70.30, "D4", 0.36); //  the mark
-key(71.15, "F4", 0.30); //  the wordmark
-key(72.05, "A4", 0.32);
-key(73.30, "D5", 0.28); //  "Launch a token"
-key(75.00, "A4", 0.16); //  and the last thing anyone hears
-
-/* -------------------------------------------------------------------------- */
-/* Voices                                                                     */
-/* -------------------------------------------------------------------------- */
-
-/**
- * A struck string, near enough. Six partials, each decaying faster than the
- * one below it, stretched very slightly sharp the way a real string's are —
- * which is most of the difference between this and a sine with an envelope.
+/* --- The pulse and the shaker, laid down first ----------------------------- *
+ *
+ * Both are written as a grid rather than an arrangement, then thinned where a
+ * scene needs the room. The pulse enters where the film's argument does — at
+ * the second scene, not the first, so the mark draws itself in quiet — and
+ * both leave before the dark frame, which is the only silence in the piece
+ * that matters.
  */
-function struck(L, R, at, freq, gain, hold, pan) {
-  const i0 = Math.round(at * SR);
-  const base = Math.min(4.6, 2.9 * Math.pow(220 / freq, 0.35)) * hold;
-  const len = Math.round(Math.min(base * 1.9, 8) * SR);
-  const attack = Math.round(0.006 * SR);
-  const partials = 7;
-
-  const gl = Math.cos(((pan + 1) * Math.PI) / 4);
-  const gr = Math.sin(((pan + 1) * Math.PI) / 4);
-
-  for (let n = 1; n <= partials; n++) {
-    // Inharmonicity: the stiffer the string, the sharper the upper partials.
-    const f = freq * n * (1 + 0.00045 * n * n);
-    if (f > SR / 2.2) break;
-    const amp = gain * Math.pow(n, -1.6) * (n === 1 ? 1 : 0.9);
-    const tau = base / (1 + 0.75 * (n - 1));
-    const w = (2 * Math.PI * f) / SR;
-    const phase = (n * 1.37) % (2 * Math.PI);
-    for (let i = 0; i < len; i++) {
-      const j = i0 + i;
-      if (j < 0 || j >= L.length) continue;
-      const env = (i < attack ? i / attack : 1) * Math.exp(-i / (tau * SR));
-      // Past the attack, a partial that has decayed to nothing stays there.
-      if (i > attack && env < 1e-5) break;
-      const s = amp * env * Math.sin(w * i + phase);
-      L[j] += s * gl;
-      R[j] += s * gr;
-    }
-  }
-
-  // The hammer itself: a click, filtered until it is only an edge. It is the
-  // only thing in the score above 2 kHz, and without it the notes arrive with
-  // no front on them at all.
-  let lp = 0;
-  for (let i = 0; i < Math.round(0.02 * SR); i++) {
-    const j = i0 + i;
-    if (j < 0 || j >= L.length) continue;
-    lp += 0.22 * ((Math.random() * 2 - 1) - lp);
-    const s = lp * gain * 0.30 * Math.exp(-i / (0.005 * SR));
-    L[j] += s * gl;
-    R[j] += s * gr;
-  }
+for (let t = 8.0; t < 60.5; t += BEAT * 2) {
+  const bar = Math.round((t - 8.0) / BAR);
+  const down = Math.abs(t / BAR - Math.round(t / BAR)) < 1e-6;
+  // Softer between the downbeats: the pulse breathes rather than marches.
+  pulse(t, down ? 0.42 : 0.24);
+  // A held-back opening: the first four bars come up from nothing.
+  if (bar < 4) CUES[CUES.length - 1].gain *= 0.45 + 0.14 * bar;
 }
+for (let t = 4.0; t < 61.0; t += BEAT) {
+  const eighth = Math.round(t / BEAT) % 4;
+  tick(t, eighth === 0 ? 0.22 : eighth === 2 ? 0.17 : 0.11, eighth % 2 ? 0.35 : -0.3);
+}
+for (let t = 70.0; t < 76.0; t += BEAT) {
+  const eighth = Math.round(t / BEAT) % 4;
+  tick(t, (eighth === 0 ? 0.2 : 0.1) * (1 - (t - 70) / 9), eighth % 2 ? 0.35 : -0.3);
+}
+for (let t = 70.0; t < 76.5; t += BEAT * 2) pulse(t, t < 74 ? 0.4 : 0.27);
+
+/* --- Harmony --------------------------------------------------------------- *
+ *
+ * D minor, and it stays there: eight scenes of one argument want a harmony
+ * turning over in place rather than a progression going somewhere. B-flat with
+ * its third taken out where the usual launch is struck through, F major for
+ * the scenes that are Folio's own answer, D under everything that carries
+ * weight.
+ */
+chord(0.0, 7.4, ["D3", "A3", "D4", "F4"], 0.30); //  1 · masthead
+bass(0.0, 7.4, "D2", 0.18);
+
+chord(7.5, 4.4, ["Bb3", "F3", "D4"], 0.28); //       2 · the usual launch
+bass(7.5, 4.4, "Bb1", 0.22);
+chord(12.0, 3.4, ["F3", "Bb3", "F4"], 0.26); //      the third goes with the promise
+bass(12.0, 3.5, "Bb1", 0.20);
+
+chord(15.5, 5.0, ["F3", "C4", "A4"], 0.30); //       3 · the listing is the article
+bass(15.5, 5.0, "F1", 0.23);
+chord(20.5, 4.0, ["C3", "G3", "E4"], 0.28);
+bass(20.5, 4.0, "C2", 0.22);
+chord(24.5, 5.0, ["D3", "A3", "F4"], 0.30);
+bass(24.5, 5.0, "D2", 0.23);
+
+chord(29.5, 5.0, ["Bb3", "F3", "D4"], 0.28); //      4 · how a launch works
+bass(29.5, 5.0, "Bb1", 0.22);
+chord(34.5, 4.5, ["F3", "C4", "A4"], 0.30);
+bass(34.5, 4.5, "F1", 0.23);
+
+chord(39.0, 5.0, ["D3", "A3", "D4"], 0.30); //       5 · the market
+bass(39.0, 5.0, "D2", 0.23);
+chord(44.0, 4.0, ["Bb3", "F3", "D4"], 0.28);
+bass(44.0, 4.0, "Bb1", 0.22);
+chord(48.0, 3.5, ["F3", "C4", "A4"], 0.28);
+bass(48.0, 3.5, "F1", 0.22);
+
+chord(51.5, 5.0, ["D3", "F3", "A3", "C4"], 0.30); // 6 · what holds it up
+bass(51.5, 5.0, "D2", 0.23);
+chord(56.5, 4.0, ["Bb3", "F3", "D4"], 0.27);
+bass(56.5, 4.0, "Bb1", 0.20);
+chord(60.5, 2.4, ["F3", "C4"], 0.20); //             and the room empties out
+
+/* 7 · Real money (1:03) — everything stops. The one inverted frame in the film
+   gets the one silence in the score: a single low note, the room it rings in,
+   and nothing else until the build starts. */
+bass(63.4, 4.2, "D2", 0.30);
+pluck(63.45, "D3", 0.34, 0);
+pluck(66.45, "A3", 0.26, 0.2);
+
+/* 8 · Outro (1:10) — the chord the piece has been circling, with its ninth in
+   it, and the hook one last time an octave up. */
+chord(69.9, 7.0, ["D3", "A3", "D4", "F4", "A4"], 0.34);
+bass(69.9, 6.0, "D2", 0.24);
+chord(74.5, 3.0, ["F3", "C4", "A4", "D5"], 0.26);
+
+/* --- Paper ----------------------------------------------------------------- *
+ *
+ * A sheet turning, more or less, on every cut — the transition sweetener every
+ * intro film has, except that on this one it is also what the product is made
+ * of. The last one is a rise rather than a swell: it is the build into the
+ * logo, and it is the only loud thing in the piece.
+ */
+for (const t of [7.5, 15.5, 26.5, 39.0, 51.5]) paper(t - 0.55, 1.1, 0.085);
+paper(62.4, 1.3, 0.11);
+paper(67.2, 2.85, 0.46, true); //  the build
+paper(69.85, 1.4, 0.1);
+
+/* --- The hook -------------------------------------------------------------- *
+ *
+ * Four notes, D minor pentatonic, stated where the film first says what Folio
+ * is and repeated whenever it says it again. It is deliberately short: the
+ * point of a hook is that somebody who watched this once can still hum it, and
+ * nothing longer survives that.
+ */
+const HOOK = [
+  [0.0, "A4", 0.30],
+  [1.0, "D5", 0.32],
+  [2.0, "C5", 0.28],
+  [2.5, "A4", 0.24],
+  [3.0, "F4", 0.26],
+];
+const hook = (at, gain = 1, octave = 0) => {
+  for (const [dt, note, g] of HOOK) {
+    const shifted = octave ? note.replace(/\d/, (d) => Number(d) + octave) : note;
+    pluck(at + dt, shifted, g * gain, dt % 1 ? 0.18 : -0.15);
+  }
+};
+
+hook(16.0); //          3 · stated, where the article sets
+hook(20.5, 0.8); //     answered a fourth down the phrase
+hook(32.5, 0.85); //    4 · under the steps
+hook(44.0, 0.8); //     5 · after the quote is taken
+hook(52.0, 0.9); //     6 · what holds it up
+hook(70.5, 1.0); //     8 · once more, and that is the last of it
+
+/* --- Accents on the picture ------------------------------------------------ *
+ *
+ * Everything above is the music. These are the places it agrees with a
+ * specific frame: each one is snapped to the nearest beat, which is never more
+ * than a sixth of a second from the cue it answers and always in time.
+ */
+pluck(2.0, "D4", 0.26, -0.2); //   1 · F-O-L-I-O begins to land
+pluck(3.5, "A4", 0.2, 0.2); //         the tagline
+pluck(8.5, "Bb3", 0.26, -0.2); //  2 · the card
+pluck(12.0, "Bb2", 0.34, 0); //        the strike-through crosses the promise
+pluck(22.0, "C5", 0.26, 0.2); //   3 · the byline earns its Verified chip
+pluck(23.0, "F4", 0.24, -0.2); //      the price arrives underneath
+
+pluck(28.0, "D4", 0.28, -0.2); //  4 · the four steps, 2.1s apart on screen
+pluck(30.5, "F4", 0.26, 0.2); //       and on the nearest beat here
+pluck(32.5, "A4", 0.28, -0.2);
+pluck(34.5, "C5", 0.3, 0.2); //        four: one transaction
+
+/* 5 · the curve. Five notes climb while it is drawn, and the sell leg walks
+   the same five back down to exactly where the buy began. */
+pluck(40.0, "D4", 0.26, -0.25);
+pluck(40.5, "E4", 0.24, -0.1);
+pluck(41.0, "F4", 0.26, 0.05);
+pluck(41.5, "A4", 0.28, 0.2);
+pluck(42.0, "C5", 0.3, 0.3);
+pluck(43.5, "A4", 0.22, 0); //         the quote is taken
+pluck(47.5, "C5", 0.26, 0.3);
+pluck(48.0, "A4", 0.24, 0.2);
+pluck(48.5, "F4", 0.24, 0.05);
+pluck(49.0, "E4", 0.22, -0.1);
+pluck(49.5, "D4", 0.26, -0.25);
+
+pluck(53.0, "F4", 0.24, -0.2); //  6 · bylines
+pluck(55.0, "A4", 0.22, 0.2); //       articles
+pluck(57.0, "C5", 0.22, -0.2); //      trades
+
+pluck(73.5, "D5", 0.28, 0.15); //  8 · "Launch a token"
+pluck(75.0, "A4", 0.18, -0.15);
+
+/* -------------------------------------------------------------------------- */
+/* The arc                                                                    */
+/* -------------------------------------------------------------------------- */
 
 /**
- * A held tone: three copies a few cents apart, six harmonics rolled off hard,
- * a slow swell in and a slower let-go. Detuning is what keeps it from sounding
- * like an organ, and the roll-off is what keeps it under the picture.
+ * How loud the piece is, as a function of where it is — one fader over the
+ * whole arrangement rather than a level written into every cue.
+ *
+ * This is the shape an intro has: come up from nothing, grow while the film is
+ * making its case, stop dead where it says the money is real, and build back
+ * out of that into the logo. The two numbers that matter are the -9 at the
+ * drop and the 0 at 70, and the distance between them is the only reason the
+ * ending lands.
  */
-function sustained(L, R, at, freq, gain, dur, pan, harmonics = 5, rolloff = 2.6) {
-  const attack = Math.min(2.4, dur * 0.45);
-  const release = Math.min(3.2, dur * 0.8);
-  const total = dur + release;
-  const i0 = Math.round(at * SR);
-  const len = Math.round(total * SR);
+const ARC = [
+  [0.0, -7], [4.0, -5.5], [8.0, -4.5], [15.5, -2.6], [26.5, -1.5], [39.0, -0.7],
+  [51.5, 0], [60.4, -0.5],
+  [61.6, -9], [63.4, -10], [67.3, -11], //  the film's one silence
+  [68.6, -5.5], [70.0, 0], //               the build, and the logo
+  [78.0, 0],
+];
 
-  const gl = Math.cos(((pan + 1) * Math.PI) / 4);
-  const gr = Math.sin(((pan + 1) * Math.PI) / 4);
-
-  // Four cents, not seven: any wider and a low chord beats audibly instead of
-  // just breathing.
-  for (const cents of [-4, 0, 4]) {
-    const f0 = freq * Math.pow(2, cents / 1200);
-    for (let n = 1; n <= harmonics; n++) {
-      const f = f0 * n;
-      if (f > SR / 2.2) break;
-      const amp = (gain / (cents === 0 ? 2.2 : 4.4)) * Math.pow(n, -rolloff);
-      const w = (2 * Math.PI * f) / SR;
-      const phase = (n * 2.399 + cents) % (2 * Math.PI);
-      for (let i = 0; i < len; i++) {
-        const j = i0 + i;
-        if (j < 0 || j >= L.length) continue;
-        const t = i / SR;
-        const env =
-          t < attack
-            ? 0.5 - 0.5 * Math.cos((Math.PI * t) / attack)
-            : t < dur
-              ? 1
-              : Math.max(0, 1 - (t - dur) / release) ** 2;
-        // Only once it is being let go does a zero mean the note is over.
-        if (t > dur && env <= 0) break;
-        // A breath of movement, well under anything anyone would call vibrato.
-        const drift = 1 + 0.02 * Math.sin(2 * Math.PI * 0.09 * t + n);
-        const s = amp * env * drift * Math.sin(w * i + phase);
-        L[j] += s * gl;
-        R[j] += s * gr;
-      }
+function arc(t) {
+  for (let i = 1; i < ARC.length; i++) {
+    if (t <= ARC[i][0]) {
+      const [t0, d0] = ARC[i - 1];
+      const [t1, d1] = ARC[i];
+      const p = t1 === t0 ? 1 : (t - t0) / (t1 - t0);
+      return Math.pow(10, (d0 + (d1 - d0) * p) / 20);
     }
   }
+  return Math.pow(10, ARC[ARC.length - 1][1] / 20);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -303,14 +324,17 @@ function highpass(x, f, q = 0.707) {
   const alpha = Math.sin(w) / (2 * q);
   const cw = Math.cos(w);
   const a0 = 1 + alpha;
-  return biquad(
-    x,
-    ((1 + cw) / 2) / a0,
-    (-(1 + cw)) / a0,
-    ((1 + cw) / 2) / a0,
-    (-2 * cw) / a0,
-    (1 - alpha) / a0
-  );
+  return biquad(x, ((1 + cw) / 2) / a0, (-(1 + cw)) / a0, ((1 + cw) / 2) / a0,
+    (-2 * cw) / a0, (1 - alpha) / a0);
+}
+
+function lowpass(x, f, q = 0.707) {
+  const w = (2 * Math.PI * f) / SR;
+  const alpha = Math.sin(w) / (2 * q);
+  const cw = Math.cos(w);
+  const a0 = 1 + alpha;
+  return biquad(x, ((1 - cw) / 2) / a0, (1 - cw) / a0, ((1 - cw) / 2) / a0,
+    (-2 * cw) / a0, (1 - alpha) / a0);
 }
 
 function lowShelf(x, f, dB, q = 0.707) {
@@ -328,6 +352,174 @@ function lowShelf(x, f, dB, q = 0.707) {
     (-2 * (A - 1 + (A + 1) * cw)) / a0,
     (A + 1 + (A - 1) * cw - s) / a0
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Voices                                                                     */
+/* -------------------------------------------------------------------------- */
+
+const panL = (p) => Math.cos(((p + 1) * Math.PI) / 4);
+const panR = (p) => Math.sin(((p + 1) * Math.PI) / 4);
+
+/** Adds a mono buffer into the stereo mix at `at`, panned. */
+function place(L, R, buf, at, pan) {
+  const i0 = Math.round(at * SR);
+  const gl = panL(pan), gr = panR(pan);
+  for (let i = 0; i < buf.length; i++) {
+    const j = i0 + i;
+    if (j < 0 || j >= L.length) break;
+    L[j] += buf[i] * gl;
+    R[j] += buf[i] * gr;
+  }
+}
+
+/**
+ * A mallet on wood. Marimba partials are near 1 : 4 : 10, which is why a bar
+ * sounds hollow and a string does not, and the decay is short enough that a
+ * run of these reads as rhythm rather than as chord.
+ */
+function pluckVoice(freq, gain) {
+  const base = Math.min(1.5, 0.95 * Math.pow(330 / freq, 0.4));
+  const len = Math.round(base * 2.4 * SR);
+  const out = new Float32Array(len);
+  const attack = Math.round(0.0025 * SR);
+
+  for (const [ratio, amp, decay] of [[1, 1, 1], [3.99, 0.30, 0.42], [10.1, 0.10, 0.22]]) {
+    const f = freq * ratio;
+    if (f > SR / 2.2) continue;
+    const w = (2 * Math.PI * f) / SR;
+    const tau = base * decay * SR;
+    for (let i = 0; i < len; i++) {
+      const env = (i < attack ? i / attack : 1) * Math.exp(-i / tau);
+      if (i > attack && env < 1e-5) break;
+      out[i] += gain * amp * env * Math.sin(w * i);
+    }
+  }
+
+  // The mallet head itself. Soft — felt, not plastic.
+  for (let i = 0; i < Math.round(0.012 * SR); i++) {
+    out[i] += (Math.random() * 2 - 1) * gain * 0.16 * Math.exp(-i / (0.0022 * SR));
+  }
+  lowpass(out, 5200);
+  return out;
+}
+
+/**
+ * A held chord voice: three copies four cents apart, harmonics rolled off
+ * hard, a slow swell in and a slower let-go. Detuning is what keeps it from
+ * being an organ; the roll-off is what keeps it under everything else.
+ */
+function padVoice(freq, gain, dur) {
+  const attack = Math.min(1.8, dur * 0.4);
+  const release = Math.min(2.6, dur * 0.7);
+  const len = Math.round((dur + release) * SR);
+  const out = new Float32Array(len);
+
+  for (const cents of [-4, 0, 4]) {
+    const f0 = freq * Math.pow(2, cents / 1200);
+    for (let n = 1; n <= 5; n++) {
+      const f = f0 * n;
+      if (f > SR / 2.2) break;
+      const amp = (gain / (cents === 0 ? 2.2 : 4.4)) * Math.pow(n, -2.6);
+      const w = (2 * Math.PI * f) / SR;
+      const phase = (n * 2.399 + cents) % (2 * Math.PI);
+      for (let i = 0; i < len; i++) {
+        const t = i / SR;
+        const env =
+          t < attack
+            ? 0.5 - 0.5 * Math.cos((Math.PI * t) / attack)
+            : t < dur
+              ? 1
+              : Math.max(0, 1 - (t - dur) / release) ** 2;
+        if (t > dur && env <= 0) break;
+        const drift = 1 + 0.02 * Math.sin(2 * Math.PI * 0.09 * t + n);
+        out[i] += amp * env * drift * Math.sin(w * i + phase);
+      }
+    }
+  }
+  return out;
+}
+
+/** The root: a sine with just enough second harmonic to be audible on a phone. */
+function bassVoice(freq, gain, dur) {
+  const attack = 0.06, release = 0.5;
+  const len = Math.round((dur + release) * SR);
+  const out = new Float32Array(len);
+  for (const [ratio, amp] of [[1, 1], [2, 0.22], [3, 0.06]]) {
+    const w = (2 * Math.PI * freq * ratio) / SR;
+    for (let i = 0; i < len; i++) {
+      const t = i / SR;
+      const env =
+        t < attack ? t / attack : t < dur ? 1 : Math.max(0, 1 - (t - dur) / release) ** 2;
+      if (t > dur && env <= 0) break;
+      out[i] += gain * amp * env * Math.sin(w * i);
+    }
+  }
+  return out;
+}
+
+/** The pulse: a short sine dropping in pitch, which is all a soft kick is. */
+function kickVoice(gain) {
+  const len = Math.round(0.42 * SR);
+  const out = new Float32Array(len);
+  let phase = 0;
+  for (let i = 0; i < len; i++) {
+    const t = i / SR;
+    const f = 46 + 54 * Math.exp(-t / 0.028);
+    phase += (2 * Math.PI * f) / SR;
+    const env = Math.exp(-t / 0.115) * (t < 0.002 ? t / 0.002 : 1);
+    out[i] = gain * env * Math.sin(phase);
+  }
+  return out;
+}
+
+/** The shaker: twelve milliseconds of noise, and the top of the whole mix. */
+function tickVoice(gain) {
+  const len = Math.round(0.05 * SR);
+  const out = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    out[i] = (Math.random() * 2 - 1) * gain * Math.exp(-i / (0.006 * SR));
+  }
+  highpass(out, 4200);
+  highpass(out, 4200);
+  lowpass(out, 12000);
+  return out;
+}
+
+/**
+ * Paper. A noise swell, band-limited to where a page actually lives, either
+ * held flat as a turn or opened upward as a build into the last scene.
+ */
+function paperVoice(gain, dur, rise) {
+  const len = Math.round(dur * SR);
+  const out = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    const p = i / len;
+    const env = rise
+      ? Math.pow(p, 2.2)
+      : Math.sin(Math.PI * p) ** 1.6;
+    out[i] = (Math.random() * 2 - 1) * gain * env;
+  }
+  if (rise) {
+    // Opening the filter as it swells is the whole gesture: a build is a
+    // brightening, not just a crescendo.
+    let f = 700;
+    let x1 = 0, y1 = 0;
+    for (let i = 0; i < len; i++) {
+      f = 640 + 3900 * Math.pow(i / len, 1.7);
+      const a = Math.exp((-2 * Math.PI * f) / SR);
+      const y = (1 - a) * out[i] + a * y1;
+      y1 = y;
+      x1 = out[i];
+      out[i] = y;
+    }
+    highpass(out, 260);
+  } else {
+    lowpass(out, 3400);
+    highpass(out, 900);
+    highpass(out, 900);
+  }
+  return out;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -461,38 +653,52 @@ async function main() {
   const frames = Math.round(duration * SR);
 
   console.log(`· ffmpeg   ${ffmpeg}`);
-  console.log(`· ${CUES.length} cues over ${duration.toFixed(1)}s at ${LUFS} LUFS`);
+  console.log(
+    `· ${CUES.length} cues over ${duration.toFixed(1)}s · ${(60 / BEAT).toFixed(0)} bpm · ${LUFS} LUFS`
+  );
 
   const L = new Float32Array(frames);
   const R = new Float32Array(frames);
 
   for (const c of CUES) {
-    if (c.voice === "key") {
-      // Struck notes sit a little off centre, alternating, which opens the
-      // middle for nothing in particular — the picture is what is in it.
-      const pan = ((CUES.indexOf(c) % 2) * 2 - 1) * 0.12;
-      struck(L, R, c.at, hz(c.note), c.gain, c.hold, pan);
-    } else if (c.voice === "pad") {
-      c.notes.forEach((n, i) => {
-        const spread = c.notes.length > 1 ? (i / (c.notes.length - 1) - 0.5) * 0.5 : 0;
-        sustained(L, R, c.at, hz(n), c.gain / Math.sqrt(c.notes.length), c.dur, c.pan + spread);
-      });
-    } else {
-      sustained(L, R, c.at, hz(c.note), c.gain, c.dur, 0, 2, 3.4);
+    const g = c.gain * arc(c.at);
+    switch (c.voice) {
+      case "pluck":
+        place(L, R, pluckVoice(hz(c.note), g), c.at, c.pan);
+        break;
+      case "pad":
+        c.notes.forEach((n, i) => {
+          const spread = c.notes.length > 1 ? (i / (c.notes.length - 1) - 0.5) * 0.55 : 0;
+          place(L, R, padVoice(hz(n), g / Math.sqrt(c.notes.length), c.dur), c.at, spread);
+        });
+        break;
+      case "bass":
+        place(L, R, bassVoice(hz(c.note), g, c.dur), c.at, 0);
+        break;
+      case "kick":
+        place(L, R, kickVoice(g), c.at, 0);
+        break;
+      case "tick":
+        place(L, R, tickVoice(g), c.at, c.pan);
+        break;
+      case "paper":
+        // The build is the one cue that must not be held down by the arc it is
+        // climbing out of, so it takes the level it is going to, not the one
+        // it starts at.
+        place(L, R, paperVoice(c.rise ? c.gain * arc(c.at + c.dur) : g, c.dur, c.rise), c.at, 0);
+        break;
     }
   }
 
-  // Room tone: not audible on its own, and audible by its absence. Air, not
-  // rumble — a low-frequency hiss would only add to what the pads already put
-  // down there.
+  // Room tone: not audible on its own, and audible by its absence.
   const airL = new Float32Array(frames);
   const airR = new Float32Array(frames);
   let n1 = 0, n2 = 0;
   for (let i = 0; i < frames; i++) {
     n1 += 0.35 * ((Math.random() * 2 - 1) - n1);
     n2 += 0.35 * ((Math.random() * 2 - 1) - n2);
-    airL[i] = n1 * 0.012;
-    airR[i] = n2 * 0.012;
+    airL[i] = n1 * 0.010;
+    airR[i] = n2 * 0.010;
   }
   highpass(airL, 900);
   highpass(airR, 900);
@@ -501,25 +707,24 @@ async function main() {
     R[i] += airR[i];
   }
 
-  /* The send is filtered before the room, not after it. Sending the low
-     fundamentals into a 2.6-second decay is what turns a chord bed into a
-     drone: the tail should be the harmonics, and the notes themselves should
-     keep the bottom to themselves. */
+  /* The send is filtered before the room, not after it. Sending low
+     fundamentals into a two-second decay is what turns a chord bed into a
+     drone, and a kick into a smear. */
   const sendL = highpass(Float32Array.from(L), 320);
   const sendR = highpass(Float32Array.from(R), 320);
-  const wetL = reverb(sendL, 2.6, 1.0);
-  const wetR = reverb(sendR, 2.6, 1.13);
-  const WET = 0.34;
+  const wetL = reverb(sendL, 2.1, 1.0);
+  const wetR = reverb(sendR, 2.1, 1.13);
+  const WET = 0.28;
   for (let i = 0; i < frames; i++) {
     L[i] = L[i] * (1 - WET * 0.4) + wetL[i] * WET;
     R[i] = R[i] * (1 - WET * 0.4) + wetR[i] * WET;
   }
 
-  /* Master: nothing below the lowest note in the score is doing any work, and
-     everything above it is doing less than it thinks. */
+  /* Master: nothing below the kick is doing any work, and the shelf keeps the
+     bass out of the way of everything that carries a tune. */
   for (const ch of [L, R]) {
-    highpass(ch, 62);
-    lowShelf(ch, 210, -4.5);
+    highpass(ch, 38);
+    lowShelf(ch, 190, -3.5);
   }
 
   // Out with the picture, and all the way out: silent on the last sample.
@@ -551,7 +756,7 @@ async function main() {
       [
         "-y", "-hide_banner", "-loglevel", "error",
         "-i", raw,
-        "-af", `loudnorm=I=${LUFS}:TP=-2:LRA=13,aresample=${SR}`,
+        "-af", `loudnorm=I=${LUFS}:TP=-2:LRA=11,aresample=${SR}`,
         "-c:a", "pcm_s24le",
         OUT,
       ],
@@ -563,8 +768,7 @@ async function main() {
   fs.rmSync(raw, { force: true });
 
   console.log(
-    `· wrote    ${OUT} (${(fs.statSync(OUT).size / 1e6).toFixed(2)} MB, ` +
-      `${duration.toFixed(1)}s)`
+    `· wrote    ${OUT} (${(fs.statSync(OUT).size / 1e6).toFixed(2)} MB, ${duration.toFixed(1)}s)`
   );
 }
 

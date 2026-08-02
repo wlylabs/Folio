@@ -95,7 +95,7 @@ leaves the sound with a different job: not to say anything, but to be
 somewhere. So there is a score under it, quiet enough to be left on.
 
 It is written the way the picture is — out of nothing borrowed. `score.mjs` is
-two synthesised voices, a room to put them in, and a cue list; no sample, no
+six synthesised voices, a room to put them in, and a cue list; no sample, no
 library, nothing that has to be licensed, and no track anybody has heard
 before. It writes a 78-second stereo WAV, exactly the length of the film.
 
@@ -118,33 +118,59 @@ for the person who turns it on, and `muted` on the `<video>` costs nothing.
 
 ### What is in it
 
-D minor, and it stays there. Eight scenes of one argument do not want a
-progression going somewhere — they want one harmony bending around a pedal. F
-major for the two scenes that are Folio's own answer, B-flat with its third
-taken out where the usual launch is struck through, D underneath everything
-that carries weight.
+The shape is the one an intro has: come up out of nothing, grow while the film
+is making its case, stop dead where it says the money is real, and build back
+out of that into the mark. That shape is one function — `arc(t)`, a fader over
+the whole arrangement — rather than a level written into three hundred cues,
+which is why the two numbers that matter (the -10 at the drop and the 0 at
+1:10) are in one place and legible.
 
-Every cue answers a beat in `intro.html` rather than a bar line, and the cue
-list says which: the sheet beginning to draw itself, the strike-through
-crossing the promise, the byline earning its Verified chip, the four steps at
-2.1 seconds apart. The one the film is really about is scene 5 — five notes
-climb as the bonding curve is drawn, and the sell leg walks the same five back
-down to exactly where the buy began. Scene 7, where the film says the money is
-real, is the one place the score gets out of the way: two low notes and a lot
-of room, and the quietest four seconds in the piece are the ones before it.
+120 bpm, and not for the usual reason: every cut in the film lands on a
+multiple of half a second, so a half-second beat is the only grid that can be
+steady and still change chord where the picture changes scene. The pulse is a
+soft sine dropping in pitch — a kick with no click on it — and it enters at the
+second scene, so the mark draws itself in quiet.
+
+The hook is four notes of D minor pentatonic, stated where the film first says
+what Folio is and repeated five times after. It is deliberately short: the
+point of a hook is that somebody who watched this once can hum it, and nothing
+longer survives that.
+
+Underneath, the mix is close rather than big — soft edges, no hard transients,
+a shaker at the top of it and paper underneath. The paper is literal: a
+band-limited noise swell on every cut, which is the transition sweetener every
+intro film has except that on this one it is also what the product is made of.
+The build into the last scene is the same voice with its filter opening as it
+rises, and it is the only loud thing in the piece.
+
+Harmony is D minor and stays there: eight scenes of one argument want a harmony
+turning over in place, not a progression going somewhere. B-flat with its third
+taken out where the usual launch is struck through, F major for the scenes that
+are Folio's own answer, D under everything that carries weight.
+
+The accents answer specific frames, each snapped to the nearest beat — never
+more than a sixth of a second from the cue it answers, and always in time: the
+strike-through crossing the promise, the byline earning its Verified chip, the
+four steps at 2.1 seconds apart. The one worth keeping is scene 5, where five
+notes climb as the bonding curve is drawn and the sell leg walks the same five
+back down to exactly where the buy began — the scene's whole argument, said in
+the only other language the film has.
 
 | flag | default | what it does |
 | --- | --- | --- |
-| `--lufs` | `-20` | integrated loudness. Music alone under a film sits below speech |
+| `--lufs` | `-18` | integrated loudness. About where speech would sit |
 | `--out` | `folio-intro-score.wav` | where to write |
 | `--ffmpeg` | auto | path to an ffmpeg — needed for the loudness pass only |
 
-Three things in there are worth not undoing. The reverb send is high-passed
-before the room, because sending low fundamentals into a 2.6-second decay is
-what turns a chord bed into a drone. The pads are voiced above D3 and mixed
-well under the struck notes, for the same reason. And the fade ends in silence
-exactly at 78.0 seconds: the picture decides how long the file is, so anything
-still ringing at the cut gets chopped rather than faded.
+Four things in the mix are load-bearing. The reverb send is high-passed at 320
+Hz, because sending low fundamentals into a two-second decay is what turns a
+chord bed into a drone and a kick into a smear. The pads are voiced above D3
+and sit well under everything with a tune in it. The paper swells are quiet —
+they were the loudest thing in the piece on the first pass, and a whoosh that
+arrives every eight seconds and wins is the fastest way to make a film feel
+cheap. And the fade ends in silence exactly at 78.0 seconds: the picture
+decides how long the file is, so anything still ringing at the cut gets chopped
+rather than faded.
 
 The WAV is not committed — it is 22 MB of PCM that `score.mjs` will write again
 in about a minute, and the take that ships is inside the film's audio track.
