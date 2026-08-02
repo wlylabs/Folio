@@ -1,14 +1,16 @@
 /**
  * The wallet directory behind WalletConnect's own modal, made to arrive.
  *
- * Two things happen here, and both are about the same screen: the picker that
- * opens when a reader asks for a wallet Folio's own list does not name. It is
- * not in the bundle. It is a list fetched from `api.web3modal.org` when that
- * screen opens, followed by one request per wallet icon.
+ * Three things happen here, and all of them are about the same screen: the
+ * picker that opens when a reader asks for a wallet Folio's own list does not
+ * name. It is not in the bundle. It is a list fetched from `api.web3modal.org`
+ * when that screen opens, followed by one request per wallet icon.
  *
  * `warmWalletDirectory` opens the connection to that host early.
  * `unblockWalletDirectoryPaging` removes the wait that made the second page of
- * that list take seconds to appear. See each below.
+ * that list take seconds to appear.
+ * `unstickWalletDirectoryIcons` keeps a tile whose icon request fails from
+ * shimmering forever. See each below.
  */
 
 /**
@@ -166,4 +168,184 @@ export function unblockWalletDirectoryPaging(): void {
       // The controllers could not be loaded. Then there is no list to speed up
       // either, and whatever is wrong will be reported by the modal itself.
     });
+}
+
+/**
+ * Icon requests allowed to be in the air at once.
+ *
+ * Every tile in the grid asks for its own picture the moment it scrolls into
+ * view, and a screenful is about twenty tiles that become visible in the same
+ * frame. Twenty simultaneous requests to one host is how a reader on a shared
+ * address earns a 429; six is roughly what a browser would have allowed itself
+ * over HTTP/1.1, and the queue behind it drains in the order tiles appeared,
+ * which is the order the reader is reading them in.
+ */
+const ICON_CONCURRENCY = 6;
+
+/**
+ * Waits before a second and a third try. Long enough that a rate limiter has
+ * moved on, short enough that a reader still watching the tile sees it fill.
+ */
+const ICON_RETRY_DELAYS_MS = [400, 1200];
+
+let unstuck = false;
+
+/**
+ * Wallet tiles that stop shimmering, whatever the network does.
+ *
+ * ---------------------------------------------------------------------------
+ * The shimmer that never ends
+ * ---------------------------------------------------------------------------
+ *
+ * `w3m-all-wallets-list-item` fetches its own icon when it scrolls into view,
+ * and its body is three lines:
+ *
+ *     this.imageLoading = true;
+ *     this.imageSrc = await AssetUtil.fetchWalletImage(this.wallet.image_id);
+ *     this.imageLoading = false;
+ *
+ * There is no `catch`. `AssetUtil.fetchWalletImage` awaits
+ * `ApiController._fetchWalletImage`, which awaits `FetchUtil.getBlob`, which
+ * throws on any response that is not a 2xx. So one failed icon — a 429, a
+ * dropped connection on a train, a 500 — leaves that tile with `imageLoading`
+ * true for as long as the modal is open. It never renders the wallet image
+ * element at all, only the shimmer, and the reader sees a grid where some
+ * wallets arrived and some are still loading forever. That is the report this
+ * is answering.
+ *
+ * The failures were always possible; what made them visible was taking the
+ * eager per-page prefetch out above. That prefetch ran under
+ * `Promise.allSettled`, which swallows rejections, and it warmed the first
+ * twenty icons of every page into the asset cache before any tile rendered —
+ * so the tiles found their pictures already there and never walked the path
+ * that can throw. Removing it is still right: it held forty wallets' *names*
+ * hostage to twenty pictures. But it means the tiles now do the asking, and
+ * the tiles ask badly.
+ *
+ * ---------------------------------------------------------------------------
+ * What this does about it
+ * ---------------------------------------------------------------------------
+ *
+ * Wraps `_fetchWalletImage` — the one function every one of those paths goes
+ * through — so that it:
+ *
+ *   - answers from the asset cache without a request when the icon is already
+ *     there;
+ *   - shares one request between every caller asking for the same icon at the
+ *     same time, which the stock code does for network images and forgot to do
+ *     for wallet ones;
+ *   - lets only `ICON_CONCURRENCY` requests run at once, so a screenful of
+ *     tiles becomes a queue rather than a burst;
+ *   - tries again, twice, when the failure is the kind that passes;
+ *   - and never rejects.
+ *
+ * That last one is the actual cure. A tile whose icon is genuinely gone now
+ * reaches `this.imageLoading = false` with `imageSrc` undefined, and
+ * `wui-wallet-image` draws its placeholder under the wallet's name — a tile a
+ * reader can read and press. The rest is what keeps that outcome rare.
+ *
+ * The same caveats as the paging patch above: it replaces a method inside
+ * @reown/appkit-controllers, it checks the shape before it touches anything,
+ * and if the shape is not what it expects it leaves the stock behaviour alone.
+ * The stock behaviour is a grid that sometimes shimmers forever, which is
+ * where this started.
+ */
+export function unstickWalletDirectoryIcons(): void {
+  if (unstuck || typeof window === "undefined") return;
+  unstuck = true;
+
+  void import("@reown/appkit-controllers")
+    .then(({ ApiController, AssetController }) => {
+      const fetchIcon = ApiController?._fetchWalletImage;
+      if (
+        typeof fetchIcon !== "function" ||
+        typeof AssetController?.state?.walletImages !== "object"
+      ) {
+        return;
+      }
+
+      /** In-flight requests, by icon, so a shared icon is fetched once. */
+      const pending = new Map<string, Promise<void>>();
+
+      ApiController._fetchWalletImage = (imageId: string): Promise<void> => {
+        if (AssetController.state.walletImages[imageId]) return Promise.resolve();
+
+        const already = pending.get(imageId);
+        if (already) return already;
+
+        const attempt = (async () => {
+          for (let tries = 0; tries <= ICON_RETRY_DELAYS_MS.length; tries += 1) {
+            if (tries > 0) await pause(ICON_RETRY_DELAYS_MS[tries - 1]);
+            await takeIconSlot();
+            try {
+              await fetchIcon(imageId);
+              return;
+            } catch (error) {
+              // Out of tries, or a failure that trying again cannot fix. Give
+              // the caller a resolved promise and an empty cache: the tile
+              // draws its placeholder and stops waiting.
+              if (!worthRetrying(error)) return;
+            } finally {
+              freeIconSlot();
+            }
+          }
+        })();
+
+        pending.set(imageId, attempt);
+        void attempt.then(() => pending.delete(imageId));
+
+        return attempt;
+      };
+    })
+    .catch(() => {
+      // No controllers, no icons to unstick, and nothing this can do about it.
+    });
+}
+
+/**
+ * Whether a failed icon is worth asking for again.
+ *
+ * `FetchUtil` throws `new Error(..., { cause: response })`, so a request that
+ * reached the host and came back unhappy carries its status here. A rate limit,
+ * a timeout and anything the server calls its own fault all pass if they are
+ * asked again a moment later. A 404 for an icon the directory no longer has
+ * does not, and neither does a 403; those tiles want their placeholder now
+ * rather than after two more round trips. No status at all means the fetch
+ * never got an answer — offline, DNS, a connection cut mid-flight — which is
+ * the most retryable case there is.
+ */
+function worthRetrying(error: unknown): boolean {
+  const cause = (error as { cause?: unknown } | null | undefined)?.cause;
+  const status = (cause as { status?: unknown } | null | undefined)?.status;
+  if (typeof status !== "number") return true;
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+let iconsInFlight = 0;
+const iconQueue: (() => void)[] = [];
+
+/** Wait for one of the `ICON_CONCURRENCY` slots, taking it on the way through. */
+function takeIconSlot(): Promise<void> {
+  if (iconsInFlight < ICON_CONCURRENCY) {
+    iconsInFlight += 1;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    iconQueue.push(() => {
+      iconsInFlight += 1;
+      resolve();
+    });
+  });
+}
+
+/** Hand the slot to whoever has been waiting longest, or back to the pool. */
+function freeIconSlot(): void {
+  iconsInFlight -= 1;
+  iconQueue.shift()?.();
+}
+
+function pause(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
