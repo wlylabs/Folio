@@ -1,0 +1,1165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Folio — intro</title>
+
+<!--
+  The Folio intro film, as a deterministic web page.
+
+  Nothing here animates on its own: there is not a single CSS transition or
+  keyframe in the file. Every visible property is a pure function of one
+  number — `seek(t)`, the time in seconds — which is what lets render.mjs
+  step a headless browser frame by frame and get the same film every time,
+  however slowly the machine draws it. Wall-clock animation would render
+  whatever the screenshot loop happened to catch.
+
+  Open it in a browser on its own and the last line of the script starts a
+  requestAnimationFrame clock, so it plays like a video while you edit it.
+  render.mjs sets `window.FOLIO_MANUAL = true` before the page loads, which
+  suppresses that clock and hands timing to the renderer.
+
+  The typefaces are the site's own — Playfair Display, PT Serif, Inter — and
+  render.mjs injects them, base64'd, into the <style id="fonts"> below. With
+  no injection the page falls back to system serifs and still plays; it just
+  isn't on brand.
+-->
+
+<style id="fonts">/* render.mjs replaces this element's contents with the embedded webfonts */</style>
+
+<style>
+/* ==========================================================================
+   Tokens — lifted from app/globals.css so the film and the site are the same
+   object. Warm paper, one ink, hairline rules, square corners.
+   ========================================================================== */
+:root {
+  --paper: #f7f6f2;
+  --paper-raised: #fffdf8;
+  --paper-sunk: #efece3;
+  --ink: #14120e;
+  --ink-soft: #55514a;
+  --ink-muted: #6f6a61;
+  --rule: #dbd6cb;
+  --rule-strong: #b6b0a2;
+  --up: #00761f;
+  --down: #bd3311;
+  --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-text: "PT Serif", Georgia, "Times New Roman", serif;
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "DejaVu Sans Mono", Menlo, monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-text);
+  /* The film is rendered at a fixed size and never resized, so text can be
+     tuned to the pixel. */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+#stage {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+/* The grain. A single static turbulence tile at low opacity — the page is
+   paper, and paper is never flat. It does not move, so it costs nothing per
+   frame. */
+#grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+  opacity: 0.32;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'>\
+<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/>\
+<feColorMatrix type='saturate' values='0'/></filter>\
+<rect width='220' height='220' filter='url(%23n)' opacity='0.36'/></svg>");
+}
+
+/* A vignette so the frame has edges the way a printed page does. */
+#vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 59;
+  background: radial-gradient(120% 90% at 50% 45%, rgba(20,18,14,0) 52%, rgba(20,18,14,0.09) 100%);
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+  display: none;
+  padding: 96px 140px;
+  will-change: opacity, transform;
+}
+.scene.on { display: block; }
+
+/* --- Shared type ---------------------------------------------------------- */
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.03;
+  letter-spacing: -0.018em;
+}
+.lede {
+  font-family: var(--font-text);
+  font-size: 30px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  max-width: 900px;
+}
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.ui   { font-family: var(--font-ui); }
+
+/* A word or line that fades up. The renderer writes opacity/transform per
+   frame; these are only the resting styles. */
+.rv { display: inline-block; opacity: 0; will-change: opacity, transform; }
+.line { display: block; overflow: hidden; }
+
+/* A hairline that draws itself by scaling on X from the left. */
+.rule {
+  height: 1px;
+  background: var(--rule-strong);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+/* --- Lower-third caption -------------------------------------------------- *
+ *
+ * The film has no voice track, so the narration is on the glass. It sits in
+ * its own layer above every scene and is timed independently of them, which
+ * means a sentence can hold across a cut the way a voice would.
+ */
+#caption {
+  position: absolute;
+  left: 140px;
+  right: 140px;
+  bottom: 92px;
+  z-index: 55;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+#caption .bar {
+  width: 46px;
+  height: 3px;
+  background: var(--ink);
+  margin-bottom: 22px;
+}
+#caption .txt {
+  font-family: var(--font-text);
+  font-size: 34px;
+  line-height: 1.38;
+  /* Per-caption, set by seek(): a line has to clear whatever is on screen
+     beside it, and that is different in every scene. */
+  max-width: 1180px;
+  color: var(--ink);
+}
+#caption.invert .bar { background: var(--paper); }
+#caption.invert .txt { color: var(--paper); }
+
+/* ==========================================================================
+   Scene 1 — masthead
+   ========================================================================== */
+#s1 .wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+#s1 .mark { width: 132px; height: 132px; color: var(--ink); margin-bottom: 46px; }
+#s1 .wordmark {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 176px;
+  letter-spacing: 0.14em;
+  text-indent: 0.14em; /* balances the trailing letter-space */
+  line-height: 1;
+}
+#s1 .wordmark span { display: inline-block; opacity: 0; will-change: opacity, transform; }
+#s1 .hair {
+  width: 620px;
+  height: 1px;
+  background: var(--rule-strong);
+  margin: 44px 0 38px;
+  transform: scaleX(0);
+}
+#s1 .tag {
+  font-family: var(--font-text);
+  font-style: italic;
+  font-size: 40px;
+  color: var(--ink-soft);
+  opacity: 0;
+}
+
+/* ==========================================================================
+   Scene 2 — the usual launch
+   ========================================================================== */
+#s2 .head { margin-top: 40px; }
+/* Held clear of the card, which starts at x=1220. */
+#s2 .display { font-size: 104px; max-width: 1000px; margin-top: 34px; }
+#s2 .card {
+  position: absolute;
+  right: 140px;
+  top: 250px;
+  width: 560px;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  padding: 42px 44px;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+#s2 .card .tick {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 62px;
+  line-height: 1;
+}
+#s2 .card .row {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-ui);
+  font-size: 21px;
+  color: var(--ink-muted);
+  padding: 20px 0;
+  border-top: 1px solid var(--rule);
+  margin-top: 26px;
+}
+#s2 .card .row + .row { margin-top: 0; }
+#s2 .card .blurb {
+  font-family: var(--font-text);
+  font-size: 26px;
+  color: var(--ink-soft);
+  margin-top: 26px;
+  position: relative;
+}
+#s2 .card .strike {
+  position: absolute;
+  left: 0; top: 50%;
+  height: 2px;
+  width: 0;
+  background: var(--down);
+}
+#s2 .foot { position: absolute; left: 140px; top: 640px; }
+</style>
+
+<style>
+/* ==========================================================================
+   Scene 3 — the listing is the article
+   ========================================================================== */
+#s3 .display { font-size: 92px; max-width: 900px; }
+#s3 .page {
+  position: absolute;
+  right: 140px;
+  top: 110px;
+  width: 800px;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  padding: 52px 56px;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+#s3 .page .kicker {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+#s3 .page h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 58px;
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+  margin: 22px 0 28px;
+}
+#s3 .byline {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-family: var(--font-ui);
+  font-size: 20px;
+  color: var(--ink-soft);
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--rule);
+}
+#s3 .chip {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--up);
+  border: 1px solid var(--up);
+  padding: 5px 12px;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+#s3 .body {
+  font-family: var(--font-text);
+  font-size: 25px;
+  line-height: 1.62;
+  color: var(--ink);
+  margin-top: 30px;
+}
+#s3 .body p + p { margin-top: 22px; }
+#s3 .foot { position: absolute; left: 140px; top: 620px; max-width: 780px; }
+
+/* The trade strip at the foot of the article — the one place the piece stops
+   being prose. It is the whole argument of the film in one element, so it
+   arrives last, after the words it is priced against. */
+#s3 .pricebar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  border-top: 1px solid var(--rule);
+  margin-top: 36px;
+  padding-top: 28px;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+#s3 .pricebar .k {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+#s3 .pricebar .v {
+  font-family: var(--font-mono);
+  font-size: 30px;
+  margin-top: 8px;
+}
+#s3 .pricebar .buy {
+  background: var(--up);
+  color: #fffdf8;
+  font-family: var(--font-ui);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 16px 40px;
+}
+
+/* ==========================================================================
+   Scene 4 — how a launch works
+   ========================================================================== */
+/* Four rows plus a headline have to finish above the caption, so this scene
+   runs tighter than the rest and starts higher up the page. */
+#s4 { padding-top: 72px; }
+#s4 .display { font-size: 76px; }
+#s4 .steps { margin-top: 54px; }
+#s4 .step {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  align-items: baseline;
+  gap: 40px;
+  padding: 24px 0;
+  border-top: 1px solid var(--rule);
+  opacity: 0;
+  will-change: opacity, transform;
+}
+#s4 .step .n {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  color: var(--ink-muted);
+  letter-spacing: 0.06em;
+}
+#s4 .step .t {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 40px;
+  line-height: 1.14;
+}
+#s4 .step .d {
+  font-family: var(--font-text);
+  font-size: 22px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin-top: 10px;
+  max-width: 1300px;
+}
+
+/* ==========================================================================
+   Scene 5 — the curve
+   ========================================================================== */
+#s5 .display { font-size: 78px; max-width: 780px; }
+#s5 .chartwrap { position: absolute; left: 140px; top: 330px; width: 900px; }
+#s5 svg { display: block; overflow: visible; }
+#s5 .axis { stroke: var(--rule); stroke-width: 1; }
+#s5 .curve { fill: none; stroke: var(--ink); stroke-width: 3; }
+#s5 .fillunder { fill: rgba(0, 118, 31, 0.10); }
+#s5 .dot { fill: var(--up); }
+#s5 .axlabel {
+  font-family: var(--font-ui);
+  font-size: 17px;
+  fill: var(--ink-muted);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+#s5 .panel {
+  position: absolute;
+  right: 140px;
+  top: 230px;
+  width: 620px;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  opacity: 0;
+  will-change: opacity, transform;
+}
+#s5 .panel .tabs { display: flex; border-bottom: 1px solid var(--rule); }
+#s5 .panel .tab {
+  flex: 1;
+  text-align: center;
+  padding: 22px 0;
+  font-family: var(--font-ui);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+#s5 .panel .tab.sel { background: var(--up); color: #fffdf8; }
+#s5 .panel .pad { padding: 34px 38px 38px; }
+#s5 .panel .lbl {
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+#s5 .panel .amt {
+  font-family: var(--font-mono);
+  font-size: 46px;
+  margin-top: 10px;
+  font-variant-numeric: tabular-nums;
+}
+#s5 .panel .out {
+  font-family: var(--font-mono);
+  font-size: 34px;
+  margin-top: 10px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+#s5 .panel .meta {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-ui);
+  font-size: 19px;
+  color: var(--ink-muted);
+  border-top: 1px solid var(--rule);
+  margin-top: 30px;
+  padding-top: 22px;
+}
+#s5 .panel .barwrap {
+  height: 10px;
+  background: var(--paper-sunk);
+  margin-top: 16px;
+  border: 1px solid var(--rule);
+}
+#s5 .panel .bar { height: 100%; width: 0; background: var(--up); }
+#s5 .quotehint {
+  font-family: var(--font-ui);
+  font-size: 17px;
+  color: var(--ink-muted);
+  margin-top: 18px;
+  opacity: 0;
+}
+
+/* ==========================================================================
+   Scene 6 — the rails
+   ========================================================================== */
+#s6 .display { font-size: 72px; }
+#s6 .cols {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  margin-top: 86px;
+}
+#s6 .col {
+  padding: 0 52px;
+  border-left: 1px solid var(--rule);
+  opacity: 0;
+  will-change: opacity, transform;
+}
+#s6 .col:first-child { padding-left: 0; border-left: 0; }
+#s6 .col .k {
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+#s6 .col h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 44px;
+  line-height: 1.1;
+  margin: 22px 0 24px;
+}
+#s6 .col p {
+  font-family: var(--font-text);
+  font-size: 24px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+/* ==========================================================================
+   Scene 7 — the one inverted frame
+   ========================================================================== */
+#s7 { background: var(--ink); color: var(--paper); }
+#s7 .wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 200px;
+}
+#s7 .eyebrow { color: rgba(247,246,242,0.62); }
+#s7 .display { font-size: 96px; color: var(--paper); margin-top: 34px; max-width: 1360px; }
+#s7 .lede { color: rgba(247,246,242,0.78); font-size: 32px; margin-top: 46px; max-width: 1180px; }
+#s7 .hair { height: 1px; background: rgba(247,246,242,0.28); margin-top: 54px; transform: scaleX(0); transform-origin: left center; }
+
+/* ==========================================================================
+   Scene 8 — outro
+   ========================================================================== */
+#s8 .wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+#s8 .mark { width: 92px; height: 92px; color: var(--ink); margin-bottom: 36px; opacity: 0; }
+#s8 .wordmark {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 128px;
+  letter-spacing: 0.14em;
+  text-indent: 0.14em;
+  opacity: 0;
+}
+#s8 .tag {
+  font-family: var(--font-text);
+  font-style: italic;
+  font-size: 36px;
+  color: var(--ink-soft);
+  margin-top: 26px;
+  opacity: 0;
+}
+#s8 .cta {
+  margin-top: 62px;
+  font-family: var(--font-ui);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border: 1.5px solid var(--ink);
+  padding: 22px 52px;
+  opacity: 0;
+}
+#s8 .fine {
+  margin-top: 40px;
+  font-family: var(--font-ui);
+  font-size: 19px;
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+  opacity: 0;
+}
+</style>
+</head>
+
+<body>
+<div id="stage">
+
+  <!-- ===================== 1 · masthead ===================== -->
+  <section class="scene" id="s1">
+    <div class="wrap">
+      <!-- The site's own mark: a sheet folded once. It draws itself here,
+           sheet first and then the crease, because that is the order a fold
+           happens in. -->
+      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="butt">
+        <rect id="s1sheet" x="4" y="2.5" width="16" height="19" stroke-width="1.5" />
+        <path id="s1crease" d="M12 2.5V21.5" stroke-width="2.25" />
+      </svg>
+      <div class="wordmark" id="s1word"></div>
+      <div class="hair" id="s1hair"></div>
+      <div class="tag" id="s1tag">Every token, told as a story</div>
+    </div>
+  </section>
+
+  <!-- ===================== 2 · the usual launch ===================== -->
+  <section class="scene" id="s2">
+    <div class="head">
+      <div class="eyebrow rv" data-rv>The usual launch</div>
+      <h1 class="display" id="s2h">A ticker, a supply, and a promise.</h1>
+    </div>
+    <div class="foot">
+      <div class="rule" id="s2rule" style="width:520px"></div>
+      <p class="lede rv" data-rv style="margin-top:38px; max-width:760px">
+        Every launchpad hands a founder the same form to fill in.
+        Nobody has ever read a form.
+      </p>
+    </div>
+
+    <div class="card" id="s2card">
+      <div class="tick">$MOON</div>
+      <div class="row"><span>Supply</span><span class="mono">1,000,000,000</span></div>
+      <div class="row"><span>Decimals</span><span class="mono">18</span></div>
+      <div class="row"><span>Description</span><span class="mono">—</span></div>
+      <div class="blurb">
+        “biggest community coin, huge things coming, lfg 🚀”
+        <span class="strike" id="s2strike"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 3 · the listing is the article ===================== -->
+  <section class="scene" id="s3">
+    <div class="eyebrow rv" data-rv style="margin-top:40px">Folio</div>
+    <h1 class="display" id="s3h" style="margin-top:34px">The listing <em>is</em> the article.</h1>
+    <div class="foot">
+      <div class="rule" id="s3rule" style="width:520px"></div>
+      <p class="lede rv" data-rv style="margin-top:38px">
+        No description field beside a ticker. You write the piece, you publish it,
+        and the token it describes is minted from the page.
+      </p>
+    </div>
+
+    <div class="page" id="s3page">
+      <div class="kicker">Published · Robinhood Chain</div>
+      <h2>A reading room that settles its own trades</h2>
+      <div class="byline">
+        <span class="mono">0x8f3c…21ab</span>
+        <span class="chip" id="s3chip">Verified</span>
+        <span style="color:var(--ink-muted)">2 min read</span>
+      </div>
+      <div class="body" id="s3body">
+        <p>We are building the thing we kept wishing existed: a place where the case for a token has to be made in sentences before anybody is asked for a single wei.</p>
+        <p>Read the piece. If it convinces you, the price is quoted at the bottom of it — by the contract, as you read.</p>
+      </div>
+      <div class="pricebar" id="s3price">
+        <div>
+          <div class="k">Price now</div>
+          <div class="v">0.0000241 ETH</div>
+        </div>
+        <div class="buy">Buy</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 4 · how a launch works ===================== -->
+  <section class="scene" id="s4">
+    <div class="eyebrow rv" data-rv style="margin-top:24px">How a launch works</div>
+    <h1 class="display" id="s4h" style="margin-top:30px">Four steps, one transaction.</h1>
+    <div class="steps">
+      <div class="step" data-step>
+        <div class="n">01</div>
+        <div>
+          <div class="t">Write the piece</div>
+          <div class="d">Headline, byline, body — the editor a magazine would give you.</div>
+        </div>
+      </div>
+      <div class="step" data-step>
+        <div class="n">02</div>
+        <div>
+          <div class="t">Publish it</div>
+          <div class="d">One call to the factory. No listing fee and no pool to seed: a launch costs its creator nothing but gas.</div>
+        </div>
+      </div>
+      <div class="step" data-step>
+        <div class="n">03</div>
+        <div>
+          <div class="t">An ERC20 that is its own market maker is cloned</div>
+          <div class="d">Name, symbol, supply, curve terms and creator fee are frozen at that moment. No admin key here can rewrite them.</div>
+        </div>
+      </div>
+      <div class="step" data-step>
+        <div class="n">04</div>
+        <div>
+          <div class="t">The article prices the trade</div>
+          <div class="d">Its address is read out of the receipt — never computed, never assumed — and the piece goes live with both legs on it.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 5 · the curve ===================== -->
+  <section class="scene" id="s5">
+    <div class="eyebrow rv" data-rv style="margin-top:24px">The market</div>
+    <h1 class="display" id="s5h" style="margin-top:30px">Both sides, quoted by the contract.</h1>
+
+    <div class="chartwrap">
+      <svg width="900" height="480" viewBox="0 0 900 480">
+        <path id="s5fill" class="fillunder" d="" />
+        <line class="axis" x1="70" y1="20"  x2="70"  y2="410" />
+        <line class="axis" x1="70" y1="410" x2="880" y2="410" />
+        <path id="s5curve" class="curve" d="" />
+        <circle id="s5dot" class="dot" cx="70" cy="410" r="9" opacity="0" />
+        <text class="axlabel" x="70" y="446">Supply sold</text>
+        <text class="axlabel" x="70" y="10" transform="rotate(-90 70 10)" text-anchor="end" dx="-14">Price</text>
+      </svg>
+    </div>
+
+    <div class="panel" id="s5panel">
+      <div class="tabs">
+        <div class="tab sel">Buy</div>
+        <div class="tab">Sell</div>
+      </div>
+      <div class="pad">
+        <div class="lbl">You pay</div>
+        <div class="amt"><span id="s5eth">0.000</span> ETH</div>
+        <div class="lbl" style="margin-top:30px">You receive (quoted live)</div>
+        <div class="out"><span id="s5tok">0</span> MOON</div>
+        <div class="meta">
+          <span>Slippage tolerance</span><span class="mono">1.0%</span>
+        </div>
+        <div class="meta" style="border-top:0; margin-top:14px; padding-top:0">
+          <span>Reserve backing</span><span class="mono"><span id="s5res">0</span>%</span>
+        </div>
+        <div class="barwrap"><div class="bar" id="s5bar"></div></div>
+        <div class="quotehint" id="s5hint">Opening window · 1 min 12 s left · cap per wallet 0.25 ETH</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 6 · the rails ===================== -->
+  <section class="scene" id="s6">
+    <div class="eyebrow rv" data-rv style="margin-top:24px">What holds it up</div>
+    <h1 class="display" id="s6h" style="margin-top:30px">Enforced where a component cannot skip it.</h1>
+    <div class="cols">
+      <div class="col" data-col>
+        <div class="k">01 · Bylines</div>
+        <h3>Signed, or it says so</h3>
+        <p>The wallet signs a message naming this site and this address — free, no gas. Postgres refuses any listing whose byline did not sign for it. Anything published another way is labelled an unverified byline.</p>
+      </div>
+      <div class="col" data-col>
+        <div class="k">02 · Articles</div>
+        <h3>Nothing gets rewritten</h3>
+        <p>People traded on the words, so the piece that was traded on stays the piece that was traded on. Second thoughts are appended — dated, signed, and impossible to withdraw. Including by the author.</p>
+      </div>
+      <div class="col" data-col>
+        <div class="k">03 · Trades</div>
+        <h3>Guarded before you sign</h3>
+        <p>Slippage floors go on chain, so a moved price reverts instead of filling. An opening window caps each wallet and refunds the overage in the same transaction. Selling back is never closed.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 7 · real money ===================== -->
+  <section class="scene" id="s7">
+    <div class="wrap">
+      <div class="eyebrow rv" data-rv>Before you launch anything</div>
+      <h1 class="display" id="s7h">Every launch here is real money.</h1>
+      <p class="lede rv" data-rv>
+        Folio settles on Robinhood Chain. Real ETH, final trades, no practice mode
+        and no test network. A token bought here can lose every bit of what it cost.
+        It is not an investment, and nobody is underwriting it.
+      </p>
+      <div class="hair" id="s7hair"></div>
+    </div>
+  </section>
+
+  <!-- ===================== 8 · outro ===================== -->
+  <section class="scene" id="s8">
+    <div class="wrap">
+      <svg class="mark" id="s8mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="butt">
+        <rect x="4" y="2.5" width="16" height="19" stroke-width="1.5" />
+        <path d="M12 2.5V21.5" stroke-width="2.25" />
+      </svg>
+      <div class="wordmark" id="s8word">FOLIO</div>
+      <div class="tag" id="s8tag">Every token, told as a story</div>
+      <div class="cta" id="s8cta">Launch a token</div>
+      <div class="fine" id="s8fine">A launchpad where the listing is the article.</div>
+    </div>
+  </section>
+
+  <div id="caption"><div class="bar"></div><div class="txt"></div></div>
+  <div id="vignette"></div>
+  <div id="grain"></div>
+</div>
+
+<script>
+"use strict";
+
+/* ==========================================================================
+   The engine
+   ========================================================================== */
+
+const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+/** Normalised progress through [a, b], clamped at both ends. */
+const seg = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
+const lerp = (a, b, p) => a + (b - a) * p;
+
+/* Two easings and no more. `out` is the one everything enters on — fast off
+   the mark, long settle, which is how paper behaves. `inOut` is for things
+   that both start and stop on screen. */
+const easeOut = (p) => 1 - Math.pow(1 - p, 3);
+const easeInOut = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+
+const $  = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+/** Fade-and-rise, the film's one entrance. `dy` is the distance in px. */
+function rise(el, p, dy = 26) {
+  const e = easeOut(p);
+  el.style.opacity = e;
+  el.style.transform = `translateY(${((1 - e) * dy).toFixed(2)}px)`;
+}
+
+/** The same, staggered across a list. Each item gets `dur` and starts `gap` after the last. */
+function riseEach(els, t, start, gap, dur, dy = 26) {
+  els.forEach((el, i) => rise(el, seg(t, start + i * gap, start + i * gap + dur), dy));
+}
+
+/** Splits an element's text into per-word spans once, and returns them. */
+function words(el) {
+  if (!el.dataset.split) {
+    // The container may itself be a `.rv` (opacity 0 at rest). Once its words
+    // animate individually it must stop hiding them.
+    el.classList.remove("rv");
+    el.style.opacity = "1";
+    // Trimmed first: source indentation would otherwise survive as a real
+    // leading space once each word becomes its own inline-block.
+    const html = el.innerHTML.trim();
+    // Keeps inline markup (<em>) intact by splitting only on whitespace.
+    el.innerHTML = html
+      .split(/(\s+)/)
+      .map((tok) => (/^\s+$/.test(tok) ? tok : `<span class="rv">${tok}</span>`))
+      .join("");
+    el.dataset.split = "1";
+  }
+  return $$(".rv", el);
+}
+
+/** Splits into per-character spans, for the wordmark. */
+function chars(el, text) {
+  if (!el.dataset.split) {
+    el.innerHTML = text.split("").map((c) => `<span>${c}</span>`).join("");
+    el.dataset.split = "1";
+  }
+  return $$("span", el);
+}
+
+/** A number that counts up, formatted. */
+const fmt = (n, dp = 0) =>
+  n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+
+/* ==========================================================================
+   The cut list
+   ========================================================================== */
+
+const SCENES = [
+  { id: "s1", at:  0.0, dur:  7.5 },
+  { id: "s2", at:  7.5, dur:  8.0 },
+  { id: "s3", at: 15.5, dur: 11.0 },
+  { id: "s4", at: 26.5, dur: 12.5 },
+  { id: "s5", at: 39.0, dur: 12.5 },
+  { id: "s6", at: 51.5, dur: 11.5 },
+  { id: "s7", at: 63.0, dur:  7.0 },
+  { id: "s8", at: 70.0, dur:  8.0 },
+];
+
+const DURATION = SCENES[SCENES.length - 1].at + SCENES[SCENES.length - 1].dur;
+
+/* The narration, timed against the same clock. Captions are deliberately not
+   owned by a scene: a sentence can hold across a cut, the way a voice does.
+   `invert` flips the caption to paper-on-ink for the dark frame. */
+const CAPTIONS = [
+  { at:  8.2, out: 14.9, text: "Most tokens arrive as a ticker, a supply, and somebody's word for it." },
+  { at: 16.4, out: 25.6, width: 820,
+    text: "Folio starts from the other end: the listing is an article, and the token is minted out of the page." },
+  { at: 27.4, out: 38.2,
+    text: "Publishing calls the factory once. What comes back is an ERC20 that is also its own bonding-curve market maker." },
+  { at: 39.8, out: 50.6, width: 960,
+    text: "Holders buy from the curve and sell straight back into its reserve. No pool to seed, no counterparty to find." },
+  { at: 52.4, out: 62.4,
+    text: "The promises are kept where a component cannot skip them — in row-level security, and in the contract itself." },
+  { at: 63.8, out: 69.4, invert: true,
+    text: "And the part no intro should bury: this is a mainnet, and the money is real." },
+];
+
+/* ==========================================================================
+   Per-scene renderers. Each takes local time in seconds.
+   ========================================================================== */
+
+const R = {};
+
+/* --- 1 · masthead --------------------------------------------------------- */
+R.s1 = (t, dur) => {
+  const sheet = $("#s1sheet"), crease = $("#s1crease");
+  // The sheet's perimeter and the crease's length, in user units, so the
+  // stroke can be dashed into existence.
+  const perim = 2 * (16 + 19);
+  sheet.style.strokeDasharray = perim;
+  sheet.style.strokeDashoffset = perim * (1 - easeInOut(seg(t, 0.25, 1.85)));
+  crease.style.strokeDasharray = 19;
+  crease.style.strokeDashoffset = 19 * (1 - easeOut(seg(t, 1.5, 2.35)));
+
+  const cs = chars($("#s1word"), "FOLIO");
+  cs.forEach((c, i) => {
+    const p = seg(t, 2.15 + i * 0.11, 2.95 + i * 0.11);
+    const e = easeOut(p);
+    c.style.opacity = e;
+    c.style.transform = `translateY(${((1 - e) * 34).toFixed(2)}px)`;
+  });
+
+  $("#s1hair").style.transform = `scaleX(${easeInOut(seg(t, 3.1, 4.2)).toFixed(4)})`;
+  rise($("#s1tag"), seg(t, 3.6, 4.6), 18);
+
+  // The whole plate drifts in a hair over the shot, then leaves upward.
+  const drift = lerp(1.0, 1.035, easeInOut(seg(t, 0, dur)));
+  const exit = easeInOut(seg(t, dur - 0.85, dur));
+  $("#s1 .wrap").style.transform = `scale(${drift.toFixed(4)}) translateY(${(-38 * exit).toFixed(2)}px)`;
+  $("#s1").style.opacity = (1 - exit).toFixed(3);
+};
+
+/* --- 2 · the usual launch ------------------------------------------------- */
+R.s2 = (t, dur) => {
+  riseEach($$("#s2 [data-rv]").slice(0, 1), t, 0.15, 0, 0.7);
+  riseEach(words($("#s2h")), t, 0.4, 0.055, 0.65, 30);
+  $("#s2rule").style.transform = `scaleX(${easeInOut(seg(t, 1.5, 2.4)).toFixed(4)})`;
+  riseEach(words($$("#s2 [data-rv]")[1]), t, 1.8, 0.026, 0.6, 18);
+
+  rise($("#s2card"), seg(t, 0.9, 1.9), 44);
+  // The blurb is struck through rather than removed: the claim is still there,
+  // it just stopped counting for anything.
+  $("#s2strike").style.width = `${(easeInOut(seg(t, 4.6, 5.6)) * 100).toFixed(1)}%`;
+  const grey = easeInOut(seg(t, 4.8, 6.0));
+  $("#s2card").style.filter = `grayscale(${grey}) opacity(${(1 - grey * 0.45).toFixed(3)})`;
+
+  fadeOutScene("s2", t, dur);
+};
+
+/* --- 3 · the listing is the article --------------------------------------- */
+R.s3 = (t, dur) => {
+  riseEach($$("#s3 [data-rv]").slice(0, 1), t, 0.15, 0, 0.7);
+  riseEach(words($("#s3h")), t, 0.4, 0.075, 0.7, 34);
+  $("#s3rule").style.transform = `scaleX(${easeInOut(seg(t, 2.0, 3.0)).toFixed(4)})`;
+  riseEach(words($$("#s3 [data-rv]")[1]), t, 2.3, 0.024, 0.6, 18);
+
+  rise($("#s3page"), seg(t, 0.8, 1.9), 50);
+
+  // The body sets itself a word at a time — the piece being written, not a
+  // placeholder being filled.
+  const ws = $$("#s3body p").flatMap((p) => words(p));
+  ws.forEach((w, i) => {
+    w.style.opacity = seg(t, 2.4 + i * 0.028, 2.62 + i * 0.028).toFixed(3);
+  });
+
+  // The byline earns its chip only after the piece exists, and the price
+  // arrives after that — in the order a reader meets them.
+  rise($("#s3chip"), seg(t, 6.4, 7.2), 10);
+  rise($("#s3price"), seg(t, 7.4, 8.4), 18);
+
+  fadeOutScene("s3", t, dur);
+};
+
+/* --- 4 · how a launch works ----------------------------------------------- */
+R.s4 = (t, dur) => {
+  riseEach($$("#s4 [data-rv]"), t, 0.15, 0, 0.7);
+  riseEach(words($("#s4h")), t, 0.35, 0.07, 0.7, 30);
+
+  const steps = $$("#s4 [data-step]");
+  steps.forEach((s, i) => {
+    const at = 1.6 + i * 2.1;
+    rise(s, seg(t, at, at + 0.85), 34);
+    // Each step dims as the next takes over, so the eye is always on one line.
+    const next = 1.6 + (i + 1) * 2.1;
+    const dim = i < steps.length - 1 ? easeInOut(seg(t, next, next + 0.7)) : 0;
+    s.style.opacity = (Number(s.style.opacity) * (1 - dim * 0.66)).toFixed(3);
+  });
+
+  fadeOutScene("s4", t, dur);
+};
+
+/* --- 5 · the curve -------------------------------------------------------- */
+R.s5 = (() => {
+  // The shape is the one a linear bonding curve actually traces: price rises
+  // with supply sold, so the reserve under it grows quadratically.
+  const X0 = 70, X1 = 880, Y0 = 410, Y1 = 40;
+  const priceAt = (u) => Math.pow(u, 1.45);            // 0..1 → 0..1
+  const px = (u) => X0 + (X1 - X0) * u;
+  const py = (u) => Y0 - (Y0 - Y1) * priceAt(u);
+
+  const path = (upTo) => {
+    let d = `M ${px(0)} ${py(0)}`;
+    for (let i = 1; i <= 120; i++) {
+      const u = (i / 120) * upTo;
+      d += ` L ${px(u).toFixed(2)} ${py(u).toFixed(2)}`;
+    }
+    return d;
+  };
+
+  return (t, dur) => {
+    riseEach($$("#s5 [data-rv]"), t, 0.15, 0, 0.7);
+    riseEach(words($("#s5h")), t, 0.35, 0.07, 0.7, 30);
+
+    const drawn = easeInOut(seg(t, 1.0, 3.4));
+    $("#s5curve").setAttribute("d", path(Math.max(0.001, drawn)));
+    $("#s5fill").setAttribute(
+      "d",
+      drawn > 0.01
+        ? `${path(drawn)} L ${px(drawn).toFixed(2)} ${Y0} L ${X0} ${Y0} Z`
+        : ""
+    );
+
+    // The marker walks up the curve, pauses where the quote is taken, then
+    // walks back down — a buy, and the sell that can always undo it.
+    const walk = drawn < 1 ? drawn : lerp(1, 0.62, easeInOut(seg(t, 8.4, 10.6)));
+    const dot = $("#s5dot");
+    dot.setAttribute("cx", px(walk).toFixed(2));
+    dot.setAttribute("cy", py(walk).toFixed(2));
+    dot.setAttribute("opacity", seg(t, 1.2, 1.8).toFixed(2));
+    // Set on `style`, not as a presentation attribute: the `.dot` rule would
+    // win over the attribute, and a custom property is not valid there anyway.
+    dot.style.fill = t > 8.6 ? "var(--down)" : "var(--up)";
+
+    rise($("#s5panel"), seg(t, 1.4, 2.4), 46);
+
+    // The quote is re-read on every change to the amount, so it counts.
+    const eth = lerp(0, 0.25, easeOut(seg(t, 2.6, 4.4)));
+    $("#s5eth").textContent = eth.toFixed(3);
+    $("#s5tok").textContent = fmt(Math.round(lerp(0, 1284930, easeOut(seg(t, 2.75, 4.7)))));
+
+    const res = lerp(0, 100, easeInOut(seg(t, 4.4, 6.2)));
+    $("#s5res").textContent = Math.round(res);
+    $("#s5bar").style.width = `${res.toFixed(1)}%`;
+
+    rise($("#s5hint"), seg(t, 6.4, 7.2), 12);
+
+    // The sell leg takes the panel over for the last beat.
+    const sell = easeInOut(seg(t, 8.4, 9.2));
+    const tabs = $$("#s5 .tab");
+    tabs[0].style.background = sell > 0.5 ? "transparent" : "var(--up)";
+    tabs[0].style.color = sell > 0.5 ? "var(--ink-muted)" : "#fffdf8";
+    tabs[1].style.background = sell > 0.5 ? "var(--down)" : "transparent";
+    tabs[1].style.color = sell > 0.5 ? "#fffdf8" : "var(--ink-muted)";
+
+    fadeOutScene("s5", t, dur);
+  };
+})();
+
+/* --- 6 · the rails -------------------------------------------------------- */
+R.s6 = (t, dur) => {
+  riseEach($$("#s6 [data-rv]"), t, 0.15, 0, 0.7);
+  riseEach(words($("#s6h")), t, 0.35, 0.055, 0.7, 30);
+  riseEach($$("#s6 [data-col]"), t, 2.1, 1.35, 1.0, 40);
+  fadeOutScene("s6", t, dur);
+};
+
+/* --- 7 · real money ------------------------------------------------------- */
+R.s7 = (t, dur) => {
+  riseEach($$("#s7 [data-rv]").slice(0, 1), t, 0.2, 0, 0.7);
+  riseEach(words($("#s7h")), t, 0.5, 0.08, 0.75, 34);
+  riseEach(words($$("#s7 [data-rv]")[1]), t, 1.9, 0.026, 0.6, 18);
+  $("#s7hair").style.transform = `scaleX(${easeInOut(seg(t, 3.4, 5.0)).toFixed(4)})`;
+  fadeOutScene("s7", t, dur, 0.7);
+};
+
+/* --- 8 · outro ------------------------------------------------------------ */
+R.s8 = (t, dur) => {
+  rise($("#s8mark"), seg(t, 0.25, 1.1), 22);
+  rise($("#s8word"), seg(t, 0.5, 1.5), 30);
+  rise($("#s8tag"), seg(t, 1.0, 2.0), 20);
+  rise($("#s8cta"), seg(t, 1.6, 2.6), 22);
+  rise($("#s8fine"), seg(t, 2.2, 3.2), 16);
+
+  // Out on paper, not on black: the last thing on screen should be the page.
+  const out = easeInOut(seg(t, dur - 1.6, dur));
+  $("#s8").style.opacity = (1 - out).toFixed(3);
+};
+
+/** The standard cut: a short fade with a small lift, at the tail of a scene. */
+function fadeOutScene(id, t, dur, len = 0.55) {
+  const p = easeInOut(seg(t, dur - len, dur));
+  const el = document.getElementById(id);
+  el.style.opacity = (1 - p).toFixed(3);
+  el.style.transform = `translateY(${(-26 * p).toFixed(2)}px)`;
+}
+
+/* ==========================================================================
+   seek(t) — the whole film, as a function of one number
+   ========================================================================== */
+
+function seek(t) {
+  t = clamp(t, 0, DURATION);
+
+  for (const s of SCENES) {
+    const el = document.getElementById(s.id);
+    const live = t >= s.at && t < s.at + s.dur + 0.001;
+    el.classList.toggle("on", live);
+    if (!live) continue;
+    el.style.opacity = "1";
+    el.style.transform = "none";
+    R[s.id](t - s.at, s.dur);
+  }
+
+  // Captions.
+  const cap = $("#caption");
+  const txt = $(".txt", cap);
+  const active = CAPTIONS.find((c) => t >= c.at - 0.5 && t <= c.out + 0.5);
+  if (active) {
+    if (txt.dataset.k !== active.at + "") {
+      txt.textContent = active.text;
+      txt.style.maxWidth = (active.width || 1180) + "px";
+      txt.dataset.k = active.at + "";
+    }
+    cap.classList.toggle("invert", !!active.invert);
+    const inP = easeOut(seg(t, active.at - 0.5, active.at + 0.35));
+    const outP = easeInOut(seg(t, active.out, active.out + 0.5));
+    cap.style.opacity = (inP * (1 - outP)).toFixed(3);
+    cap.style.transform = `translateY(${((1 - inP) * 16).toFixed(2)}px)`;
+  } else {
+    cap.style.opacity = "0";
+  }
+}
+
+window.seek = seek;
+window.FOLIO_DURATION = DURATION;
+
+seek(0);
+
+/* Play in a real browser; stay still under the renderer. */
+if (!window.FOLIO_MANUAL) {
+  const t0 = performance.now();
+  const tick = () => {
+    const t = (performance.now() - t0) / 1000;
+    seek(t % (DURATION + 1.2));
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+</script>
+</body>
+</html>
