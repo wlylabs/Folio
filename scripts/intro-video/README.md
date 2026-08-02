@@ -15,7 +15,9 @@ scripts/intro-video/
   render.mjs                 renders it to MP4
   folio-intro.mp4            the render (1920×1080, 30 fps, no audio)
   folio-intro-poster.jpg     a still, for a <video poster>
-  README.md                  this file, and the narration below
+  voiceover.md               the VO script, timed to the cut
+  folio-intro.srt            those lines as subtitles
+  README.md                  this file
 ```
 
 ## Rendering it
@@ -84,18 +86,16 @@ is a deliberate default: an intro that autoplays muted on a landing page is the
 common case, and burnt-in captions read in that case where a voice-over does
 not.
 
-If you want a voice-over, the caption text below **is** the script — it is
-timed and it fits. Record it, then mux it in:
+If you want a voice-over, **[voiceover.md](voiceover.md)** is the script: 141
+words, timed to the cut, with the direction, the pronunciations, the six lines
+that have to land on something, and the mastering targets. `folio-intro.srt`
+carries the same lines for accessibility captions on the VO cut.
 
-```
-ffmpeg -i folio-intro.mp4 -i vo.wav -c:v copy -c:a aac -b:a 192k \
-       -shortest folio-intro-vo.mp4
-```
+A voice track *replaces* the burnt-in captions rather than joining them —
+read-and-heard at once is worse than either — so a VO render empties `CAPTIONS`
+first. The whole procedure is at the top of that file.
 
-If you add a voice track, delete the captions from `CAPTIONS` and re-render
-rather than shipping both — read-and-heard at once is worse than either.
-
-### The narration, as timed
+### The burnt-in captions, as timed
 
 | in | out | line |
 | --- | --- | --- |
