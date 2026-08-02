@@ -38,19 +38,23 @@
  * after it:
  *
  *   PANEL  the reader hovers, focuses or presses the Settings button — the
- *          only door to the only wallet control on the site. Releases the
- *          connectors the connect modal actually lists. See
- *          components/SettingsMenu.tsx.
+ *          door to the wallet the site shows. Releases the connectors the
+ *          connect modal actually lists. See components/SettingsMenu.tsx.
  *
- *   MODAL  the connect modal is about to open. Releases RainbowKit's second
- *          WalletConnect connector, the one that opens WalletConnect's own
- *          modal instead of RainbowKit's QR view — half a megabyte that only
- *          matters to a reader who picks that entry by name, and that is one
- *          tap further on from here. See components/WalletButton.tsx.
+ *   MODAL  the connect modal is about to open, or a pointer has arrived at a
+ *          button that opens it. Releases RainbowKit's second WalletConnect
+ *          connector, the one that opens WalletConnect's own modal instead of
+ *          RainbowKit's QR view — half a megabyte that only matters to a
+ *          reader who picks that entry by name. See components/ConnectCue.tsx.
  *
- * A reader who never goes near the settings panel downloads none of it. One
- * who does gets each piece a beat before it is needed, which is what the press
- * used to be paying for.
+ * The second level is the one that matters for a reader who never touches the
+ * masthead, and there are plenty: somebody who lands on a token article from a
+ * link and reaches straight for the trade panel passes no Settings button on
+ * the way. The connect button they do reach for is the signal, and reaching is
+ * a beat earlier than pressing — which is the beat the press used to be paying
+ * for.
+ *
+ * A reader who goes near neither downloads none of it.
  *
  * Neither level is a promise anything is *ready* — they release work, they do
  * not wait for it. Nothing here is on the path of a connect that is already

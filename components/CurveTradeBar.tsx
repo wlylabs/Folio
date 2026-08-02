@@ -7,6 +7,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FOLIO_TOKEN_ABI } from "@/lib/contracts/folioToken";
 import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
+import ConnectCue from "@/components/ConnectCue";
 import FiatValue from "@/components/FiatValue";
 import { GasNotice, fixedChainWayOut } from "@/components/GasNotice";
 import { useTradeDensity } from "@/components/useTradeDensity";
@@ -699,9 +700,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
                           ? "Amount too small"
                           : `Buy $${token.symbol}`
                 }
-                idleLabel={
-                  paused ? "Trading halted" : curveClosed ? "Curve closed" : `Buy $${token.symbol}`
-                }
+                blocked={paused ? "Trading halted" : curveClosed ? "Curve closed" : undefined}
               />
             </div>
           ) : (
@@ -746,18 +745,9 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
                           ? "Amount too small"
                           : `Sell $${token.symbol}`
                 }
-                idleLabel={paused ? "Trading halted" : `Sell $${token.symbol}`}
+                blocked={paused ? "Trading halted" : undefined}
               />
             </div>
-          )}
-
-          {/* Where the wallet is connected, said once. The controls
-              themselves — connect, network, account, and the phone handoff —
-              live in the settings panel and nowhere else. */}
-          {!isConnected && !walletWaking && (
-            <p className="trade-foot">
-              Connect a wallet under Settings in the masthead to trade.
-            </p>
           )}
 
           {/*
@@ -1003,7 +993,7 @@ function Action({
   waking,
   connected,
   label,
-  idleLabel,
+  blocked,
   onClick,
   disabled,
   busy,
@@ -1013,12 +1003,16 @@ function Action({
   connected: boolean;
   label: string;
   /**
-   * What the button reads with no wallet behind it. `label` cannot be reused
-   * there: half of what it says is read off an account that does not exist
+   * Why this side cannot be traded at all right now — a halted contract, a
+   * curve that has graduated — or undefined when the only thing missing is a
+   * wallet.
+   *
+   * It exists so the slot can tell those two apart. `label` cannot be reused
+   * for it: half of what that says is read off an account that does not exist
    * yet, so a reader who has never connected would be told they hold none of a
    * token they never asked about.
    */
-  idleLabel: string;
+  blocked?: string;
   onClick: () => void;
   disabled: boolean;
   busy: boolean;
@@ -1044,14 +1038,19 @@ function Action({
         >
           {label}
         </button>
-      ) : (
-        // No connect control here. The wallet is set in one place — the
-        // settings panel in the masthead — so this slot keeps the trade
-        // button's geometry and says why it cannot be pressed. The line under
-        // the form points at the panel.
+      ) : blocked ? (
+        // Nothing to connect *for*. A dead button naming the reason is the
+        // honest slot here — inviting somebody to fetch a wallet for a curve
+        // that has stopped trading is a wasted trip they take on our word.
         <button type="button" className={`btn ${variant} btn--block`} disabled>
-          {idleLabel}
+          {blocked}
         </button>
+      ) : (
+        // The trade is available and the wallet is the only thing missing, so
+        // the slot asks for one rather than describing where to find the
+        // request. Outline, not the direction colour: this press does not
+        // spend anything, and the green one is still to come. See ConnectCue.
+        <ConnectCue />
       )}
     </div>
   );
