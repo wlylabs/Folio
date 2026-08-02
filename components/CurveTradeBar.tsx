@@ -543,7 +543,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
               // rather than React swapping the text inside one node and the panel
               // appearing to flicker between states.
               key={status.message}
-              className={`status${status.kind === "error" ? " status--error" : ""}`}
+              className={`status status--live${status.kind === "error" ? " status--error" : ""}`}
               role="status"
             >
               {status.message}
@@ -569,7 +569,7 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
             on it, and puts the buttons back.
           */}
           {slow && (
-            <p className="status">
+            <p className="status status--live">
               {phase === "signing"
                 ? "Your wallet hasn't answered — approve it there, or"
                 : "No receipt yet — keep waiting, or"}{" "}
@@ -621,7 +621,10 @@ export default function CurveTradeBar({ token, stats }: { token: Token; stats: C
           )}
 
           {!paused && !curveClosed && windowOpen && side === "buy" && (
-            <p className="status">
+            // Live: whether the opening window is still open, and how much of
+            // the cap this wallet has left, are contract reads that land after
+            // the page is on screen.
+            <p className="status status--live">
               {allowanceWei === null
                 ? `Opening window — every wallet has a buy cap for another ${windowLeftLabel}.`
                 : allowanceWei === 0n

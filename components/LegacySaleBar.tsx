@@ -300,7 +300,7 @@ export default function LegacySaleBar({
               // line and plays the entry animation, rather than the text being
               // swapped inside one node and the panel appearing to flicker.
               key={status.message}
-              className={`status${status.kind === "error" ? " status--error" : ""}`}
+              className={`status status--live${status.kind === "error" ? " status--error" : ""}`}
               role="status"
             >
               {status.message}
@@ -318,7 +318,7 @@ export default function LegacySaleBar({
           {/* A wait that has gone on too long, and the way out of it. See
               components/useTxPhase.ts. */}
           {slow && (
-            <p className="status">
+            <p className="status status--live">
               {phase === "signing"
                 ? "Your wallet hasn't answered — approve it there, or"
                 : "No receipt yet — keep waiting, or"}{" "}

@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PriceChart from "@/components/PriceChart";
 import FiatValue from "@/components/FiatValue";
 import { explorerTxUrl } from "@/lib/chains";
+import { rememberPanelHeight } from "@/lib/panelHint";
 import { TRADE_SETTLED_EVENT } from "@/lib/tradeEvents";
 import {
   availableRanges,
@@ -39,6 +40,16 @@ import {
  * them should wait on it. So this mounts empty, says it is reading the log, and
  * fills in.
  *
+ * What it does not do is *grow* while it fills in. A quote, a chart, the range
+ * chips and eight rows of tape are several hundred pixels appearing in the
+ * middle of an article the reader has already been put back into — the single
+ * largest thing left that reads as a refresh glitching. So the height this panel
+ * had here last time is remembered (lib/panelHint.ts) and reserved before the
+ * first paint, and this only ever fills the space it already holds. The
+ * reservation is a hint about layout and nothing else: it is dropped the moment
+ * there is real content, and a launch whose history has changed since is drawn
+ * from the log, never from the memory of it.
+ *
  * It refreshes on a timer, and immediately when a trade settles in the panel
  * below — see lib/tradeEvents.ts for why that is a window event rather than
  * shared state.
@@ -63,6 +74,7 @@ export default function TradeHistoryPanel({ token }: { token: Token }) {
   const [range, setRange] = useState<RangeKey>(DEFAULT_RANGE);
   /** The trade under the pointer on the chart, or null when nobody is on it. */
   const [scrubbed, setScrubbed] = useState<Trade | null>(null);
+  const panel = useRef<HTMLElement>(null);
 
   const address = token.contract_address;
   const chain = token.chain;
@@ -114,6 +126,33 @@ export default function TradeHistoryPanel({ token }: { token: Token }) {
 
   const trades = useMemo(() => history?.trades ?? [], [history]);
 
+  /** Nothing to show yet, and the reserved space still standing in for it. */
+  const filling = loading && trades.length === 0;
+
+  /**
+   * What to reserve here next time.
+   *
+   * Observed rather than measured once, because the height goes on settling for
+   * a moment after the trades land: the fiat line under the quote appears when
+   * the rate arrives, a poll thirty seconds later can add a row, and a rotated
+   * phone is a different width and a different answer. The observer reports all
+   * three; lib/panelHint.ts decides which are worth storing.
+   */
+  useEffect(() => {
+    const node = panel.current;
+    if (filling || !node || typeof ResizeObserver === "undefined") return;
+
+    // Read once: a client navigation away from this listing unmounts the panel,
+    // so the path cannot change under an observer that is still running.
+    const path = window.location.pathname;
+    const observer = new ResizeObserver(() => {
+      rememberPanelHeight(path, node.offsetHeight, window.innerWidth);
+    });
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [filling]);
+
   const ranges = useMemo(() => availableRanges(trades), [trades]);
 
   /**
@@ -146,7 +185,14 @@ export default function TradeHistoryPanel({ token }: { token: Token }) {
   }
 
   return (
-    <section className="factbox" aria-label="Price history">
+    <section
+      ref={panel}
+      className="factbox factbox--history"
+      // While this is here the panel holds the height it had on this page last
+      // time — see lib/panelHint.ts and the `.factbox--history` rule.
+      data-filling={filling || undefined}
+      aria-label="Price history"
+    >
       <h2 className="factbox__head">
         <span>Price on the curve</span>
         <span>

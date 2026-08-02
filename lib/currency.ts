@@ -146,6 +146,61 @@ export function formatFiat(value: number | null | undefined, code: CurrencyCode)
 /** The rates /api/eth-price serves: fiat per one ETH, one entry per currency. */
 export type EthRates = Record<CurrencyCode, number>;
 
+/** localStorage key holding the last rates this browser was served. */
+export const RATES_KEY = "folio_eth_rates";
+
+/**
+ * How old a remembered rate may be and still be worth printing for the moment
+ * before the live one lands.
+ *
+ * Half a day, and the reason it can be that generous is what the remembered
+ * rate is for: it fills the second between the page appearing and
+ * `/api/eth-price` answering, and is overwritten the instant it does. Nothing
+ * is ever priced, quoted or traded from it — every figure it decorates is an
+ * ETH amount the contract itself charges, printed beside it.
+ */
+const RATES_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * The last rates served to this browser, if they are recent enough to stand in.
+ *
+ * Null on the server, in a browser without storage, and for anything stale —
+ * all of which the caller reads the same way it reads a feed that is down: no
+ * conversion, and the ETH figure carries on alone.
+ */
+export function readCachedRates(): EthRates | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(RATES_KEY);
+    if (!raw) return null;
+
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return null;
+
+    const { at, rates } = parsed as { at?: unknown; rates?: unknown };
+    if (typeof at !== "number" || !Number.isFinite(at)) return null;
+    // A clock that has moved backwards since — a corrected device, a restored
+    // backup — makes the age meaningless rather than small.
+    const age = Date.now() - at;
+    if (age < 0 || age > RATES_MAX_AGE_MS) return null;
+
+    return parseRates(rates);
+  } catch {
+    return null;
+  }
+}
+
+/** Keep the rates just served, for the first moment of the next page load. */
+export function writeCachedRates(rates: EthRates): void {
+  try {
+    window.localStorage.setItem(RATES_KEY, JSON.stringify({ at: Date.now(), rates }));
+  } catch {
+    // Storage unavailable. The next load simply opens without an estimate,
+    // which is where this started.
+  }
+}
+
 /** A rates payload as it arrives over the wire, before it is trusted. */
 export function parseRates(value: unknown): EthRates | null {
   if (typeof value !== "object" || value === null) return null;

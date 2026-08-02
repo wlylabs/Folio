@@ -13,6 +13,13 @@ import { useCurrency } from "@/components/CurrencyProvider";
  * and every page load while the price feed is down. The `≈ $0.00` that a
  * missing rate would otherwise produce would read as "this is free", so the
  * line is dropped instead and the ETH stands on its own.
+ *
+ * Nothing, in the stacked case, still leaves its line behind. A conversion set
+ * under a figure is a whole line of the layout, and it arrives a beat after the
+ * page does; without the blank the fact table it sits in grows by one line per
+ * figure while the reader is already reading it. The blank is inert to
+ * assistive technology and says nothing on screen — the space is held, no
+ * estimate is claimed.
  */
 export default function FiatValue({
   eth,
@@ -30,7 +37,15 @@ export default function FiatValue({
 }) {
   const { toFiat } = useCurrency();
   const amount = toFiat(eth);
-  if (amount === null) return null;
+
+  if (amount === null) {
+    if (!block) return null;
+    return (
+      <span className="fiat fiat--block fiat--held" aria-hidden="true">
+        &nbsp;
+      </span>
+    );
+  }
 
   return (
     <span className={`fiat${block ? " fiat--block" : ""}`}>

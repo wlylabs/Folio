@@ -79,7 +79,9 @@ export function GasNotice({
   const addressUrl = address ? explorerAddressUrl(chain, address) : null;
 
   return (
-    <div className={`notice${unreadable ? " notice--alert" : ""}`}>
+    // `notice--live` because this one arrives: it is drawn from a balance read
+    // after a wallet has connected, never from the server's HTML.
+    <div className={`notice notice--live${unreadable ? " notice--alert" : ""}`}>
       {unreadable ? (
         <>
           <p className="notice__title">Balance unavailable</p>
