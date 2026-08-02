@@ -849,9 +849,17 @@ p {
 
 /*
  * Connection state, at the size the masthead can spare: a filled square when a
- * wallet is attached, a hairline outline when none is. The address itself is
- * one click away inside the panel, which is where it can be read without
- * being abbreviated to six characters.
+ * wallet is attached and can trade, a hairline outline when none is. The
+ * address itself is one click away inside the panel, which is where it can be
+ * read without being abbreviated to six characters.
+ *
+ * The third state is a wallet that is connected and can do nothing with it —
+ * the wrong network. It turns the same square through 45°, and takes the alert
+ * colour the button inside the panel will be wearing when the reader gets
+ * there. The rotation is what carries it, not the colour: the trigger inverts
+ * to ink while its panel is open, and a dark red on near-black is a mark
+ * nobody can see. So the colour is dropped there and the diamond is left to
+ * say it alone, which at seven pixels it still can.
  */
 .settings__dot {
   width: 0.4375rem;
@@ -860,7 +868,22 @@ p {
   border: 1px solid currentColor;
 }
 
-.settings__dot--on {
+.settings__dot--ready {
+  background: currentColor;
+}
+
+.settings__dot--attention {
+  border-color: var(--alert);
+  background: var(--alert);
+  /* Slightly smaller: a rotated square measures wider across its diagonal, and
+     two marks in the same row should sit on the same optical size. */
+  width: 0.375rem;
+  height: 0.375rem;
+  transform: rotate(45deg);
+}
+
+.settings .btn[aria-expanded="true"] .settings__dot--attention {
+  border-color: currentColor;
   background: currentColor;
 }
 
@@ -979,6 +1002,22 @@ p {
   font-size: var(--fs-micro);
   line-height: 1.55;
   color: var(--ink-soft);
+}
+
+/*
+ * The panel's own line under the wallet control — "Reading needs no wallet.
+ * Connect one to publish a launch…" — is written for the ordinary case, and
+ * stands down when the button has something more urgent to say. Two paragraphs
+ * of small grey type, the second of them explaining what a wallet is *for* to
+ * somebody who has just been told theirs isn't answering, is one paragraph too
+ * many.
+ *
+ * Done here rather than by handing the panel the button's state: which states
+ * carry a line is the button's business, and this way the panel does not have
+ * to be told about each new one.
+ */
+.wallet-mount:has(.wallet-note) + .settings__note {
+  display: none;
 }
 
 /*

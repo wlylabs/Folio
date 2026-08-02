@@ -9,11 +9,35 @@ import WalletHandoff from "@/components/WalletHandoff";
 import CurrencySelector from "@/components/CurrencySelector";
 import ThemeSelector from "@/components/ThemeSelector";
 import InstallControl from "@/components/InstallControl";
-import { DEFAULT_CHAIN_SLUG, chainLabel } from "@/lib/chains";
+import { DEFAULT_CHAIN_SLUG, chainLabel, isSupportedChainId } from "@/lib/chains";
 import { FACTORY_DEPLOYMENTS } from "@/lib/contracts/deployment";
 import { CONSENT_EVENT, readConsent, writeConsent, type ConsentChoice } from "@/lib/consent";
 import { CONTACT_EMAIL } from "@/lib/contact";
 import { bootWallets } from "@/lib/walletBoot";
+
+/**
+ * What the masthead says about the wallet, before the panel is opened.
+ *
+ * Three states rather than two. A wallet parked on a network Folio does not
+ * support is connected in every sense wagmi cares about and useless in every
+ * sense the reader does — it cannot buy, sell or launch anything — so a dot
+ * that filled in for it was announcing a readiness that wasn't there, and the
+ * reader found out at the trade button instead. The needs-attention state is
+ * the one the panel can actually fix, which is the whole reason to draw it
+ * where the panel's own button is.
+ */
+type WalletState = "none" | "ready" | "attention";
+
+function walletState(isConnected: boolean, chainId: number | undefined): WalletState {
+  if (!isConnected) return "none";
+  return isSupportedChainId(chainId) ? "ready" : "attention";
+}
+
+const WALLET_STATE_LABEL: Record<WalletState, string> = {
+  none: "no wallet connected",
+  ready: "wallet connected",
+  attention: "wallet on an unsupported network",
+};
 
 /**
  * Everything the reader can set, in one place behind one button.
@@ -30,7 +54,8 @@ import { bootWallets } from "@/lib/walletBoot";
  */
 export default function SettingsMenu() {
   const [open, setOpen] = useState(false);
-  const { isConnected } = useAccount();
+  const { isConnected, chainId } = useAccount();
+  const wallet = walletState(isConnected, chainId);
   const pathname = usePathname();
   const panelId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -78,6 +103,15 @@ export default function SettingsMenu() {
         aria-expanded={open}
         aria-controls={panelId}
         /*
+         * The dot is decoration, so the state it carries has to reach a screen
+         * reader some other way. All three states, not only the interesting
+         * ones: a name that appears when something is wrong and vanishes when
+         * it isn't is a name that cannot be trusted to mean anything. The
+         * visible word stays first in it, so "click Settings" still works for
+         * anyone driving by voice.
+         */
+        aria-label={`Settings — ${WALLET_STATE_LABEL[wallet]}`}
+        /*
          * The wallet SDKs are not downloaded until somebody looks like they
          * are heading for them, and this button is the only way in — see
          * lib/walletBoot.ts. Three events rather than one because they cover
@@ -92,10 +126,7 @@ export default function SettingsMenu() {
         onPointerDown={() => bootWallets()}
         onClick={() => setOpen((was) => !was)}
       >
-        <span
-          className={`settings__dot${isConnected ? " settings__dot--on" : ""}`}
-          aria-hidden="true"
-        />
+        <span className={`settings__dot settings__dot--${wallet}`} aria-hidden="true" />
         Settings
       </button>
 
