@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { useAccountEffect, useConfig } from "wagmi";
 import { forgetWalletChoice } from "@/lib/walletChoice";
+import { forgetCreatorSession } from "@/lib/walletAuth";
 
 /**
  * Put the connect modal back to its default state when a wallet goes away.
@@ -31,6 +32,12 @@ export default function WalletChoiceReset() {
 
   const onDisconnect = useCallback(() => {
     forgetWalletChoice();
+
+    // The sign-in that proved the last wallet's address goes with the wallet.
+    // It is scoped to that address and would be refused for any other, so
+    // keeping it would only ever mean one stale token sitting in a tab — and a
+    // reader who disconnects has said what they want done with it.
+    forgetCreatorSession();
 
     // wagmi's own note, which it keeps through a disconnect — it only ever
     // overwrites it, with whichever connection is left, and a full disconnect

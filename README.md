@@ -30,13 +30,34 @@ script's confirmation banner. `deployments/robinhood-mainnet.json` ships with an
 empty `factory`, so nothing launches until a deploy fills it in — see
 [DEPLOYMENT.md](DEPLOYMENT.md) section 3.
 
-One thing is worth knowing before you rely on any of it:
-`creator_wallet` is a **claim, not a proof**. The browser talks to Supabase with
-the public anon key, which carries no wallet identity, so anyone could insert a
-row attributing a launch to someone else's address. Verifying authorship needs
-signature-based auth (Sign-In With Ethereum minting a Supabase JWT), which isn't
-implemented here. Row-level security in `lib/schema.sql` blocks client-side
-updates and deletes, so existing listings can't be tampered with.
+One thing is worth knowing before you rely on any of it: `creator_wallet` is a
+claim **unless the listing says otherwise**. The browser talks to Supabase with
+the public anon key, which carries no wallet identity, so a row inserted with it
+could attribute a launch to anyone's address — and rows written that way are
+stamped `creator_verified = false` and render as "Unverified byline".
+
+Publishing through the site proves it instead, where the deploy has
+`SUPABASE_JWT_SECRET` set. The wallet signs an EIP-4361 message naming this
+site, this address and a server-issued nonce — free, no transaction, no gas —
+`/api/auth/verify` checks it and mints a Supabase JWT carrying the address, and
+the insert policy in `lib/schema.sql` refuses any row whose `creator_wallet` is
+not that address. The comparison happens in Postgres, so no component can skip
+it, and the listing reads "Verified" beside the byline. See **Proving a byline**
+below. Row-level security also blocks client-side updates and deletes, so
+existing listings can't be tampered with either way.
+
+Powers that move money are still not decided from any of this: `claimFees` and
+the migration prompt read `creator()` off the contract, because a database row —
+verified or not — is the wrong authority for a payout.
+
+**A factory older than this checkout still works.** `CurveConfig` grew three
+fields when the opening window and migration arrived, which changed
+`createToken`'s widest selector and `TokenCreated`'s topic — so a site built
+from this repository could not launch on, or index, a factory deployed before
+that. It reads the factory instead of assuming: `lib/contracts/folioFactoryLegacy.ts`
+carries the older shapes, the create form offers the opening-window fields only
+where the factory has them, and the indexer and the watcher filter on both
+topics. See **Two generations of factory** below.
 
 `TERMS.md` and `PRIVACY.md` hold draft policies, and `/terms` and `/privacy`
 render those two files directly — the markdown at the repo root is the only
@@ -365,6 +386,85 @@ Two colours reach controls, and only inside a trade panel: green to buy, red to
 sell. Everywhere else the primary action is ink, because everywhere else there
 is only one of them.
 
+## Proving a byline
+
+A launch has an author, and until a signature is asked for, that author is
+whatever the browser typed into a column. Setting `SUPABASE_JWT_SECRET` turns
+the column into a fact.
+
+The exchange is one signature, at the top of the publish flow:
+
+1. The create page asks `/api/auth/nonce` for a single-use nonce — which also
+   answers `configured: false` on a deployment with no secret, and the page
+   publishes as it always did.
+2. It builds an EIP-4361 message (`lib/siwe.ts`) naming the site's own host, the
+   connected address, the chain, that nonce and a ten-minute expiry, and asks
+   the wallet to sign it. **A signature, not a transaction**: it costs no gas
+   and moves nothing, and the sentence the wallet renders says so.
+3. `/api/auth/verify` re-reads the message with the same parser, and checks
+   every claim in it against something it already knew — the grammar, the
+   statement byte for byte, the domain and URI against the request's own host,
+   the nonce against its own HMAC and against the nonces already spent, the
+   clock, the chain. The signature is checked last, offline first (plain ECDSA
+   recovery, no network) and through the chain only for a signature that needs
+   EIP-1271 — a Safe, or a smart account.
+4. It mints a Supabase JWT carrying `wallet`, and the insert goes out under
+   that token instead of the bare anon key.
+
+Which is where the guarantee actually lives. The policy in `lib/schema.sql`
+compares `creator_wallet` against `auth.jwt() ->> 'wallet'` and only lets a
+matching row set `creator_verified`; the anon policy may still publish, and may
+only publish rows that call themselves unverified. Neither of those is a check
+a component could forget to make.
+
+The signature is asked for **before** the launch transaction on purpose. The
+article is inserted at the end of the flow, long after the token exists — a
+signature requested there and declined would leave a live token with no listing
+and real gas spent. Asked for first, declining costs nothing.
+
+The session lives in `sessionStorage`, keyed to the address it proves, and is
+dropped when the wallet disconnects. That is a step down from where the theme
+and the currency live: a palette surviving a closed tab is a courtesy, a
+credential surviving one is a credential left on a shared machine.
+
+Two things this does not buy, stated plainly. It proves control of a key at a
+moment in time, not that the signer is who the name suggests. And it says
+nothing about the launch — the contract is still the authority on the market.
+
+## Two generations of factory
+
+`contracts/src/types/CurveConfig.sol` gained `sniperWindowSeconds`,
+`sniperMaxEthPerWallet` and `migrator` after the factory on Robinhood Chain was
+deployed. That struct is an argument to `createToken`'s widest overload and a
+member of the `TokenCreated` event, so growing it changed a function selector
+and an event topic — and a frontend built from this repository would have met a
+factory that has neither.
+
+The failure had three faces and none of them looked like a version mismatch:
+
+- a launch reverts, the chain declining a function that is not there;
+- had it not, the create page would have confirmed a transaction and then
+  reported that its token "never turned up", because the log it went looking
+  for was filtered on the wrong topic;
+- and `/api/indexer` would answer `found: 0` on a factory with launches in it,
+  forever, with nothing anywhere looking broken.
+
+So the app asks the factory what it is, the same way `lib/tokenStats.ts` has
+always asked a listing. `MAX_SNIPER_WINDOW_SECONDS` is a constant that arrived
+with the window, so a factory that answers it has the six-argument
+`createToken`; one that reverts gets the four-argument form, which both
+generations have. The create form offers the two opening-window fields only
+where they can be honoured — a field whose value the contract has no argument
+to receive is a promise the launch cannot keep — and says why when it withholds
+them. `lib/indexer.ts` and `scripts/watch-launches.mjs` filter on both topics,
+and `lib/contracts/folioFactoryLegacy.ts` holds the older shapes, written out by
+hand because `npm run compile:contracts` emits the ABI of the source in front of
+it and the point here is the source that is not in front of it any more.
+
+`test/factory.test.mjs` pins the legacy topic to the value read out of the live
+factory's bytecode. A contract already on chain cannot change shape, so if that
+constant ever needs editing, the edit is the bug.
+
 ## Claiming creator fees
 
 The creator's share of every leg accrues in `feesAccrued` and comes out with
@@ -400,10 +500,21 @@ under it are still live.
 npm run compile:contracts   # regenerate lib/contracts/*.ts from the .sol files
 npm run forge:test          # the contract test suite
 npm run watch:launches      # index TokenCreated events as they land
+
+npm run typecheck           # tsc over the whole app
+npm run lint                # next lint
+npm run test:web            # the node suites under test/ — sign-in, factory ABIs
+npm test                    # test:web, then the retired FolioSale suite
 ```
 
 The compiled ABIs are committed, so builds and deploys never need a Solidity
 compiler — only edits to a `.sol` file do.
+
+`test/` runs the app's own TypeScript modules directly, through node's type
+stripping and a small resolver for the `@/` alias (`test/alias.mjs`) — so the
+things under test are the modules the app imports, not copies of them. That
+needs **Node 22.6 or newer**; `.github/workflows/web.yml` pins 22 and runs the
+four checks above on every push.
 
 ## Notes
 
@@ -549,20 +660,31 @@ comparison over two hashes. Neither returns an exception's message to the
 caller — those go to the log, because a thrown RPC or Postgres error names
 endpoints and occasionally carries a key.
 
-**What is not solved.** `creator_wallet` is a claim, not an authenticated fact:
-the anon key carries no wallet identity, and proving it needs Sign-In With
-Ethereum issuing a Supabase JWT. Everything that decides what a creator may do
-reads `creator()` from the contract instead. The in-process rate limiter is
-per-instance and best-effort; real rate limiting belongs at the edge.
+**Authorship.** `creator_wallet` is proved by signature where
+`SUPABASE_JWT_SECRET` is set, and labelled unproved where it is not — see
+**Proving a byline**. Everything that decides what a creator may *do* reads
+`creator()` from the contract either way.
+
+**What is not solved.** Nonces are single-use through an in-process set, so a
+deployment running several instances enforces that per instance rather than
+globally; the ten-minute expiry and the domain binding are what hold in the
+meantime, and a durable store would close the rest. The rate limiter on
+`/api/rpc` has the same shape and the same caveat: real rate limiting belongs at
+the edge, where a request can be refused before it costs anything to receive.
 
 ## Possible next steps
 
-- [ ] Sign-In With Ethereum so `creator_wallet` is verified rather than claimed
+- [x] Sign-In With Ethereum so `creator_wallet` is verified rather than claimed
+- [x] Graduation handling beyond closing the curve — `FolioMigrator` moves a
+      graduated launch into a locked Uniswap v4 position, and the token page now
+      offers the transaction that does it (`components/MigrationPrompt.tsx`).
+      Whether a deployment *opts in* is still a decision: no migrator named in
+      the factory's config means the curve stays terminal and the panel never
+      appears
 - [ ] Persisting the trade log, so a chart doesn't cost a fresh scan — the scan
-      window is bounded (about six days of Base blocks), which is why the panel
+      window is bounded (about six days of blocks), which is why the panel
       says "the last N trades" rather than claiming to show every one
-- [ ] Graduation handling beyond closing the curve — the contract emits
-      `Graduated` and stops there on purpose; migrating that liquidity to a DEX
-      is an off-chain decision nobody has made yet
-- [ ] Mainnet support, which needs a real audit first
+- [ ] Nonce and rate-limit state in a store the whole deployment shares, rather
+      than one process at a time
+- [ ] A real audit before this carries meaningful value
 - [ ] Richer editor (images inside articles, embeds) with the allowlist widened to match

@@ -1,6 +1,6 @@
-import { formatUnits, getAbiItem } from "viem";
+import { formatUnits } from "viem";
 import { publicClientFor } from "@/lib/chains";
-import { FOLIO_FACTORY_ABI } from "@/lib/contracts/folioFactory";
+import { TOKEN_CREATED_EVENTS } from "@/lib/contracts/folioFactoryLegacy";
 import {
   FACTORY_DEPLOYMENTS,
   deploymentFor,
@@ -42,16 +42,24 @@ import { serverSupabase } from "@/lib/supabaseAdmin";
  */
 
 /**
- * Taken from the generated ABI rather than written out here.
+ * Both generations of the event, derived rather than written out here.
  *
  * The event carries a `CurveConfig`, so every field added to that struct changes
  * the event's signature and therefore its topic0. A hand-copied string goes stale
  * silently the first time one is: the filter stops matching, the scan reports
  * `found: 0`, and nothing anywhere looks broken. Deriving it means a struct change
  * reaches this file through `npm run compile:contracts` like it reaches
- * everything else. `app/create/LaunchForm.tsx` reads the same item the same way.
+ * everything else. `app/create/LaunchForm.tsx` reads the same items the same way.
+ *
+ * And that struct *has* grown once already, which is why this is a list. A
+ * factory deployed before the opening window emits the five-field version, so a
+ * scan filtered on the current topic alone answers `found: 0` on a factory with
+ * launches in it — the exact silent failure the paragraph above is about,
+ * arriving through the deployment rather than through a copied string. Both
+ * topics are asked for; a chain that only ever had one simply never matches the
+ * other. See lib/contracts/folioFactoryLegacy.ts.
  */
-const TOKEN_CREATED = getAbiItem({ abi: FOLIO_FACTORY_ABI, name: "TokenCreated" });
+const TOKEN_CREATED = TOKEN_CREATED_EVENTS;
 
 /**
  * Blocks per `eth_getLogs` call. Public RPCs cap the range — Base's rejects
@@ -227,7 +235,7 @@ async function syncChain(
 
       const logs = await client.getLogs({
         address: deployment.factory,
-        event: TOKEN_CREATED,
+        events: TOKEN_CREATED,
         fromBlock: from,
         toBlock: to,
       });
@@ -298,16 +306,16 @@ type LaunchArgs = {
   name: string;
   symbol: string;
   totalSupply: bigint;
-  config: {
-    virtualEthReserve: bigint;
-    maxReserveCap: bigint;
-    graduationThreshold: bigint;
-    feeBps: number;
-    priceMoveAlertBps: number;
-    sniperWindowSeconds: number;
-    sniperMaxEthPerWallet: bigint;
-    migrator: `0x${string}`;
-  };
+  /**
+   * The curve terms frozen into this launch.
+   *
+   * Only `virtualEthReserve` is read from it — that is the whole of the opening
+   * price — and it is the one member both generations of the struct have. Typed
+   * to that member alone rather than to the current struct, so a log decoded
+   * from the older event is a value this file can use instead of one it has to
+   * pretend about.
+   */
+  config: { virtualEthReserve: bigint };
 };
 
 type LaunchLog = {

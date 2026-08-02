@@ -1,0 +1,91 @@
+name: web
+
+# The site, on every change that can reach it.
+#
+# `contracts.yml` covers the Solidity and has since the contracts existed; this
+# is the half in front of them, which until now was checked only by whoever
+# remembered to run the scripts locally. Four things, in the order that fails
+# fastest first:
+#
+#   typecheck   tsc over the whole app. Seconds, and catches most of it.
+#   lint        next lint, which is where the React and a11y rules live.
+#   test        the node suites under test/ — the wallet sign-in and the two
+#               factory generations. No network, no secrets, no chain.
+#   build       next build, the only step that exercises the server components,
+#               the route handlers and the static generation together.
+#
+# Deliberately no deploy step and no secrets. Everything here runs on a fork's
+# pull request, because everything here is a check on the code rather than on an
+# environment — the app boots without Supabase or WalletConnect configured, by
+# design, so a build with no environment at all is a real build.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "app/**"
+      - "components/**"
+      - "lib/**"
+      - "scripts/**"
+      - "test/**"
+      - "deployments/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "next.config.js"
+      - ".eslintrc.json"
+      - ".github/workflows/web.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - "components/**"
+      - "lib/**"
+      - "scripts/**"
+      - "test/**"
+      - "deployments/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "next.config.js"
+      - ".eslintrc.json"
+      - ".github/workflows/web.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 22 rather than the 20 the contract jobs use: `npm run test:web`
+          # runs the TypeScript modules directly through node's type stripping,
+          # which arrived in 22.6.
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test:web
+
+      - name: Build
+        run: npm run build
+        env:
+          # Off in CI. The build fetches Google Fonts, and a runner that cannot
+          # reach them should fail on that rather than on telemetry.
+          NEXT_TELEMETRY_DISABLED: "1"

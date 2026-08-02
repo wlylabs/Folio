@@ -179,10 +179,15 @@ export default async function HomePage() {
               every trade on this site moves real money.
             </p>
             <p style={{ margin: "0 0 var(--sp-3)" }}>
-              A byline is a claim, not a proof. Folio records the wallet that
-              published an article but cannot yet verify it signed anything, so
-              treat the author of a listing as unconfirmed until wallet
-              sign-in ships.
+              A byline is a claim unless it carries the mark. Publishing
+              through this site asks the wallet for a signature — free, no
+              transaction — and a listing whose address signed for it reads
+              &ldquo;Verified&rdquo; beside the byline. Everything else says
+              &ldquo;Unverified byline&rdquo;: a launch indexed from the
+              factory&rsquo;s event log, one published before the signature was
+              asked for, or one from a deployment that does not check. Either
+              way, what a creator may actually <em>do</em> is decided by the
+              contract, never by the byline.
             </p>
             <p style={{ margin: 0 }}>
               The <Link href="/terms">terms</Link> and{" "}
