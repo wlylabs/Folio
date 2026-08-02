@@ -14,7 +14,6 @@ import {
   DEFAULT_THEME,
   isThemePreference,
   readTheme,
-  resolveTheme,
   systemTheme,
   THEME_EVENT,
   THEME_KEY,
@@ -59,18 +58,33 @@ export function useTheme(): ThemeContextValue {
  * up a frame later, which is when the settings panel starts showing the right
  * chip pressed and the wallet modal starts opening in the right theme.
  *
+ * That placeholder first render is also why this component writes nothing to
+ * the document until it has read the reader's answer, and why the resolved
+ * theme below is derived rather than stored. Both are the same bug seen from
+ * two sides: a state that says "light" for one pass because the server had to
+ * say something, and a second state that would have to be walked from it to the
+ * truth in steps. Applying either — the placeholder, or an intermediate step
+ * through the system's answer for a reader who chose against it — repaints a
+ * night page in daylight for a frame, hydration being long past the point where
+ * `data-booting` holds transitions still. The reader sees the flash on every
+ * refresh.
+ *
  * Three things can change the answer afterwards, and all three are listened
  * for: the panel in this tab, the same panel in another tab, and the operating
  * system flipping under a reader who is on `system`.
  */
 export default function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [preference, setPreferenceState] = useState<ThemePreference>(DEFAULT_THEME);
-  const [theme, setTheme] = useState<ResolvedTheme>("light");
+  const [system, setSystem] = useState<ResolvedTheme>("light");
+  /** Whether the two above are the reader's answer yet, or still the server's. */
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const stored = readTheme() ?? DEFAULT_THEME;
-    setPreferenceState(stored);
-    setTheme(resolveTheme(stored));
+    // One batched update, so the first render that has any of this has all of
+    // it: `ready` never turns true alongside a stale preference.
+    setPreferenceState(readTheme() ?? DEFAULT_THEME);
+    setSystem(systemTheme());
+    setReady(true);
   }, []);
 
   // Other trees and other tabs. A choice made in one settings panel should not
@@ -96,33 +110,42 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
   }, []);
 
   /**
-   * The system's answer, while the reader is deferring to it.
+   * The system's answer, kept current while the reader is deferring to it.
    *
    * Only subscribed on `system` — a reader who has explicitly asked for the
    * light page should not have it go dark at sunset because their laptop does.
+   * It is tracked separately from the preference rather than folded into a
+   * single "current theme", so that switching to `dark` is one change of one
+   * value and not a handover between two.
    */
   useEffect(() => {
-    if (preference !== "system") {
-      setTheme(preference);
-      return;
-    }
-
-    setTheme(systemTheme());
-
+    if (preference !== "system") return;
     if (typeof window.matchMedia !== "function") return;
+
     const query = window.matchMedia(DARK_QUERY);
-    const onChange = (event: MediaQueryListEvent) => setTheme(event.matches ? "dark" : "light");
+    const onChange = (event: MediaQueryListEvent) => setSystem(event.matches ? "dark" : "light");
+
+    // The machine may have flipped while this tab was on an explicit choice.
+    setSystem(query.matches ? "dark" : "light");
 
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);
   }, [preference]);
 
+  const theme: ResolvedTheme = preference === "system" ? system : preference;
+
   // Separate from the state above so it runs for every route of this session,
   // including the ones the boot script never saw: client navigations do not
   // re-run a script in the head.
+  //
+  // Held until `ready`, because until then the value above is the server's
+  // placeholder and the document is already correct — the boot script put the
+  // reader's own palette there before the first paint. Writing to it in that
+  // window would only ever overwrite a right answer with a provisional one.
   useEffect(() => {
+    if (!ready) return;
     applyTheme(theme);
-  }, [theme]);
+  }, [ready, theme]);
 
   const setPreference = useCallback((next: ThemePreference) => {
     setPreferenceState(next);
