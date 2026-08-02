@@ -50,6 +50,10 @@ const CRF = Number(opts.crf ?? 18);
 const OUT = path.resolve(opts.out ?? path.join(HERE, "folio-intro.mp4"));
 const POSTER = opts.poster ? path.resolve(opts.poster) : null;
 const POSTER_AT = Number(opts["poster-at"] ?? 4.6);
+/** A sound track to mux in — narrate.mjs's output, or a recorded take. */
+const AUDIO = opts.audio ? path.resolve(String(opts.audio)) : null;
+/** Burnt-in captions. Off for the voiced cut: see `SHOW_CAPTIONS` in intro.html. */
+const CAPTIONS = !opts["no-captions"];
 
 /* -------------------------------------------------------------------------- */
 /* Fonts                                                                      */
@@ -198,10 +202,12 @@ async function main() {
     deviceScaleFactor: SCALE,
   });
 
-  // Told before the document runs, so the page never starts its own clock.
-  await page.addInitScript(() => {
+  // Told before the document runs, so the page never starts its own clock —
+  // and knows whether this cut carries its narration on the glass.
+  await page.addInitScript((captions) => {
     window.FOLIO_MANUAL = true;
-  });
+    window.FOLIO_CAPTIONS = captions;
+  }, CAPTIONS);
 
   await page.goto("file://" + path.join(HERE, "intro.html"), { waitUntil: "load" });
   await page.evaluate((css) => {
@@ -218,9 +224,24 @@ async function main() {
 
   console.log(`· chromium ${browser.version()}`);
   console.log(`· ffmpeg   ${ffmpeg}`);
-  console.log(`· ${W}×${H} · ${FPS} fps · ${(end - start).toFixed(1)}s · ${frames} frames`);
+  if (AUDIO) console.log(`· audio    ${AUDIO}`);
+  console.log(
+    `· ${W}×${H} · ${FPS} fps · ${(end - start).toFixed(1)}s · ${frames} frames` +
+      (CAPTIONS ? "" : " · no captions")
+  );
 
+  if (AUDIO && !fs.existsSync(AUDIO)) throw new Error(`No such audio file: ${AUDIO}`);
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
+
+  // The track is on the film's clock, so a slice of the film takes the same
+  // slice of it — seeking the audio input rather than the output keeps the two
+  // in step when --start is used to render one scene.
+  const audioIn = AUDIO
+    ? [...(start ? ["-ss", String(start)] : []), "-i", AUDIO]
+    : [];
+  const audioOut = AUDIO
+    ? ["-map", "0:v:0", "-map", "1:a:0", "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-shortest"]
+    : [];
 
   const enc = spawn(
     ffmpeg,
@@ -231,6 +252,8 @@ async function main() {
       "-f", "image2pipe",
       "-framerate", String(FPS),
       "-i", "-",
+      ...audioIn,
+      ...audioOut,
       "-c:v", "libx264",
       "-preset", "slow",
       "-crf", String(CRF),
