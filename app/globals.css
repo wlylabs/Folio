@@ -42,6 +42,36 @@
      blur behind it is tuned for. */
   --paper-veil: rgba(247, 246, 242, 0.88);
 
+  /*
+   * The ink, as three numbers.
+   *
+   * For the one place that needs the ink at an opacity the palette does not
+   * name: WalletConnect's modal, which builds a dozen of its surfaces out of
+   * the same colour at a dozen alphas (see the wallet-modal section at the
+   * bottom of this file). `rgba(var(--ink-rgb), 0.05)` is the only way to hand
+   * a *theme-dependent* colour to a rule that also sets its own opacity, and it
+   * is what keeps that block from having to be written out twice.
+   */
+  --ink-rgb: 20, 18, 14;
+
+  /*
+   * Two colours the wallet modal needs and Folio otherwise does not.
+   *
+   * `--wallet-accent` is the modal's one accent, and it does two jobs at once:
+   * it tints icons and links standing on the modal's own paper, and it fills
+   * buttons whose label is white no matter what (that colour is hard-coded in
+   * the modal's own stylesheet and cannot be re-pointed). In daylight the ink
+   * does both without argument. After dark those two jobs pull apart — see the
+   * night palette.
+   *
+   * `--wallet-veil` is the page behind that modal, pushed back. It is the same
+   * value lib/walletTheme.ts gives RainbowKit's `modalBackdrop`, because the
+   * two modals can be open one on top of the other and a reader should not be
+   * able to tell where one dressing room ends and the next begins.
+   */
+  --wallet-accent: #14120e;
+  --wallet-veil: rgba(20, 18, 14, 0.45);
+
   /* --- Direction -------------------------------------------------------- *
    *
    * Green up, red down: the one convention this interface borrows wholesale,
@@ -161,6 +191,30 @@
   --bar-ink: #f3f1ea;
 
   --paper-veil: rgba(13, 13, 12, 0.86);
+
+  /* The ink, as three numbers — bone, after dark. */
+  --ink-rgb: 243, 241, 234;
+
+  /*
+   * The wallet modal's accent, after dark, is the one colour on this page that
+   * is not simply its daylight self inverted.
+   *
+   * Inverting it would make it bone, and bone is right for half of what that
+   * token does — an icon or a link standing on the night modal's paper — and
+   * wrong for the other half, because the modal fills its primary buttons with
+   * this colour and writes the label in white regardless. A bone button with a
+   * white label is a button nobody can read.
+   *
+   * So this is the tone that holds both jobs: about 4.3:1 against the night
+   * paper, about 5.2:1 under a white label. It is the daylight `--ink-muted`,
+   * which is why it still reads as belonging to this palette rather than as a
+   * grey borrowed from somewhere else.
+   */
+  --wallet-accent: #6f6a61;
+
+  /* Heavier than the day veil: a dark modal over a dark page needs the page
+     pushed further back to read as being behind it at all. */
+  --wallet-veil: rgba(0, 0, 0, 0.66);
 
   /* The originals, at home on black. See the note in the day palette. */
   --up: #00c805;
@@ -2804,6 +2858,149 @@ p {
    * nothing else in Folio has a rounded corner.
    */
   border-radius: 0 !important;
+}
+
+/* ==========================================================================
+   WalletConnect's own modal
+
+   The second modal — the one that opens on top of RainbowKit's when a reader
+   picks "Other wallets", and shows the full directory of everything that pairs
+   over the relay. It is Reown's AppKit, it is not in Folio's bundle, and it
+   draws itself in web components whose styles live inside shadow roots this
+   stylesheet cannot reach.
+
+   What it does read is custom properties, because those inherit through a
+   shadow boundary like any other inherited value. AppKit builds its entire
+   palette out of two families of them — `--w3m-*` for the handful it treats as
+   settings, `--wui-*` for every colour its components actually paint with —
+   and writes both into `:root` from a <style> tag it injects when the modal
+   first opens. So this block is Folio answering in the same language: every
+   value below is a Folio token, and the modal follows the page into the dark
+   and back out again, live, because these are the same properties the night
+   palette at the top of this file re-points.
+
+   `html:root` rather than `:root` on purpose. AppKit's tag is injected into
+   <head> when the modal opens, which is always after this stylesheet — so
+   matching its specificity would lose on order. Adding the element selector
+   costs nothing and wins regardless of when the tag arrives.
+
+   Two things are deliberately left alone:
+
+    - `--wui-color-inverse-100`, the white AppKit uses for a QR code's card. A
+      QR code is dark marks on a light field: that is what a scanner is written
+      against, and an inverted one is read by some phones and not others. It
+      stays white after dark for the same reason a printed sticker would.
+    - the success, warning and error washes, which are translucent tints of
+      their own hue and sit correctly on either paper.
+   ========================================================================== */
+
+html:root {
+  /* --- Settings --------------------------------------------------------- */
+
+  /* The modal's own Inter is fetched from Google Fonts by an @import in its
+     stylesheet, which Folio's connect-src does not allow — and would not want
+     to allow for a face already self-hosted. This is that face, from
+     next/font. */
+  --w3m-font-family: var(--font-ui);
+
+  /* Every radius in the modal is a multiple of this one. Zero squares off the
+     card, the wallet tiles, the search field and the pills in one line —
+     nothing else in Folio has a rounded corner. */
+  --w3m-border-radius-master: 0px;
+
+  /* Above RainbowKit's dialog (2147483646), because when both are open this is
+     the one being spoken to. AppKit's own default is 999, which is under it.
+     One rule inside AppKit asks for this plus one; the browser clamps that back
+     to this, which is the same layer and inside the same stacking context. */
+  --w3m-z-index: 2147483647;
+
+  --w3m-accent: var(--wallet-accent);
+  --w3m-default: var(--ink);
+  /* AppKit tints its surfaces toward this colour at `mix-strength`, which is
+     0% here: the surfaces below are stated outright rather than mixed. */
+  --w3m-color-mix: var(--paper);
+  --w3m-color-mix-strength: 0%;
+  --w3m-card-embedded-shadow-color: transparent;
+
+  /* --- Paper ------------------------------------------------------------ */
+
+  --wui-color-modal-bg-base: var(--paper);
+  --wui-color-modal-bg: var(--paper);
+  /* The page behind the modal. */
+  --wui-cover: var(--wallet-veil);
+
+  --wui-color-bg-100: var(--paper);
+  --wui-color-bg-125: var(--paper-raised);
+  --wui-color-bg-150: var(--paper-raised);
+  --wui-color-bg-175: var(--paper-sunk);
+  --wui-color-bg-200: var(--paper-sunk);
+  /* 225–300 are the shimmer's sweep and the borders under it: a hairline's
+     worth of difference from the paper, not a second surface. */
+  --wui-color-bg-225: var(--rule);
+  --wui-color-bg-250: var(--rule);
+  --wui-color-bg-275: var(--rule);
+  --wui-color-bg-300: var(--rule);
+  --wui-color-bg-325: var(--paper-sunk);
+  /* The one inverted surface in AppKit's set — white on its dark theme, near
+     black on its light one. Folio's ink is exactly that. */
+  --wui-color-bg-350: var(--ink);
+
+  --wui-wallet-button-bg-base: var(--paper-raised);
+  --wui-all-wallets-bg-100: var(--paper-sunk);
+  --wui-avatar-border-base: var(--rule);
+  --wui-thumbnail-border-base: var(--rule);
+  --wui-color-dark-glass-100: var(--rule);
+
+  /* --- Ink -------------------------------------------------------------- */
+
+  --wui-color-fg-100: var(--ink);
+  --wui-color-fg-125: var(--ink);
+  --wui-color-fg-150: var(--ink-soft);
+  --wui-color-fg-175: var(--ink-soft);
+  --wui-color-fg-200: var(--ink-soft);
+  --wui-color-fg-225: var(--ink-muted);
+  --wui-color-fg-250: var(--ink-muted);
+  --wui-color-fg-275: var(--ink-muted);
+  --wui-color-fg-300: var(--ink-muted);
+  --wui-color-fg-325: var(--ink-muted);
+  --wui-color-fg-350: var(--rule);
+
+  /* --- The ink, thinned ------------------------------------------------- *
+   *
+   * AppKit's "gray glass": the wash under a wallet tile, the tint a press
+   * leaves, the hairline around the card. White at these alphas on its dark
+   * theme, black at them on its light one — which is to say Folio's ink,
+   * whichever ink that currently is.
+   */
+  --wui-color-gray-glass-001: rgba(var(--ink-rgb), 0.01);
+  --wui-color-gray-glass-002: rgba(var(--ink-rgb), 0.02);
+  --wui-color-gray-glass-005: rgba(var(--ink-rgb), 0.05);
+  --wui-color-gray-glass-010: rgba(var(--ink-rgb), 0.1);
+  --wui-color-gray-glass-015: rgba(var(--ink-rgb), 0.15);
+  --wui-color-gray-glass-020: rgba(var(--ink-rgb), 0.2);
+  --wui-color-gray-glass-025: rgba(var(--ink-rgb), 0.25);
+  --wui-color-gray-glass-030: rgba(var(--ink-rgb), 0.3);
+  --wui-color-gray-glass-060: rgba(var(--ink-rgb), 0.6);
+  --wui-color-gray-glass-080: rgba(var(--ink-rgb), 0.8);
+  --wui-color-gray-glass-090: rgba(var(--ink-rgb), 0.9);
+
+  /* --- Figures ---------------------------------------------------------- */
+
+  --wui-color-error-base-100: var(--alert);
+  --wui-color-error-base-125: var(--alert);
+  --wui-color-success-base-100: var(--up);
+  --wui-color-success-base-125: var(--up);
+  /* AppKit's blue is a switch track carrying a white knob, so it is a mid tone
+     rather than an ink — the strong rule is Folio's. */
+  --wui-color-blue-base-100: var(--rule-strong);
+  --wui-color-blue-base-90: var(--rule-strong);
+  --wui-color-blueberry-100: var(--wallet-accent);
+  --wui-color-blueberry-090: var(--wallet-accent);
+  --wui-color-blueberry-080: var(--wallet-accent);
+  /* The tinted boxes behind an icon. The two neutral ones become paper; the
+     two that report something — error, success — keep their own hue. */
+  --wui-icon-box-bg-blue-base-100: var(--paper-sunk);
+  --wui-icon-box-bg-inverse-base-100: var(--paper-sunk);
 }
 
 /* ==========================================================================
