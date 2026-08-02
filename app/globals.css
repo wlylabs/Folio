@@ -2415,9 +2415,109 @@ p {
   content: " ↓";
 }
 
+/*
+ * The readership line, directly under the byline — which is where a blog puts
+ * its view counter, and the point of the comparison.
+ *
+ * Set as quietly as the byline itself. It is evidence rather than a headline:
+ * the reader who wants to know how many people backed this will look for it,
+ * and the reader who does not should not have a number shouted at them before
+ * the first paragraph.
+ */
+.article__readership {
+  padding-top: var(--sp-3);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  color: var(--ink-muted);
+  /* The `title` explains what makes the figure expensive to fake. */
+  cursor: help;
+}
+
 .article__body {
   min-width: 0;
   max-width: var(--measure);
+}
+
+/*
+ * Additions: what the author said after publishing.
+ *
+ * Drawn as a continuation of the article rather than as a comment thread — same
+ * measure, same prose type — because that is what it is. The left rule is the
+ * only thing separating them from the body above, and it does the whole job: an
+ * addition is the piece, marked as having arrived later.
+ */
+.addenda {
+  min-width: 0;
+  max-width: var(--measure);
+  margin-top: var(--sp-6);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--ink);
+}
+
+.addenda__title {
+  font-size: var(--fs-h2);
+  margin-bottom: var(--sp-2);
+}
+
+.addenda__note {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  color: var(--ink-muted);
+  max-width: var(--measure);
+}
+
+.addenda__list {
+  list-style: none;
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+}
+
+.addendum + .addendum {
+  margin-top: var(--sp-5);
+}
+
+.addendum {
+  border-left: 2px solid var(--rule-strong);
+  padding-left: var(--sp-3);
+}
+
+.addendum__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--sp-2);
+  margin-bottom: var(--sp-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+/* One step down from the body: an addition is a footnote to the piece, not a
+   second piece competing with it for the reader's attention. */
+.addendum__body {
+  font-size: 1rem;
+}
+
+/*
+ * The author's composer. Only ever rendered for the address on the byline, and
+ * only ever appends — see components/AddendumComposer.tsx.
+ */
+.addenda__compose {
+  min-width: 0;
+  max-width: var(--measure);
+  margin-top: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  align-items: flex-start;
+}
+
+.addenda__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
 }
 
 /*

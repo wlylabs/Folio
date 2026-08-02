@@ -44,6 +44,45 @@ export function sanitizeArticleHtml(html: string | null | undefined): string {
   return sanitizeHtml(html, OPTIONS);
 }
 
+/**
+ * Plain text into paragraph HTML, with every angle bracket escaped.
+ *
+ * What the addition composer writes with (see components/AddendumComposer.tsx).
+ * An addition is a paragraph or two of prose typed into a textarea, and it is
+ * stored as HTML so that one render path serves it and the article body alike.
+ *
+ * Escaping rather than sanitising is the whole point of this function.
+ * {@link sanitizeArticleHtml} answers "which tags may survive" and its answer
+ * for anything it does not recognise is to *drop* it — which is right for an
+ * editor that emits markup and quietly wrong for a person typing, because
+ * "a < b" would lose the rest of the sentence and nothing would say so. Here
+ * the input is not markup at all, so every bracket is text and is written as
+ * text. The result still goes through the sanitiser on the way out; this is the
+ * belt, that is the braces.
+ */
+export function paragraphsToHtml(text: string | null | undefined): string {
+  if (!text) return "";
+
+  return text
+    .replace(/\r\n/g, "\n")
+    // A blank line is a paragraph break, the way it is in every plain-text
+    // composer; a single newline is a line break inside one.
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => `<p>${escapeHtml(block).replace(/\n/g, "<br />")}</p>`)
+    .join("");
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /** Plain text version of an article body, tags and entities gone. */
 export function articleText(html: string | null | undefined): string {
   // Stripping the tags outright welds the last word of one block to the first

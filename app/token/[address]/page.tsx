@@ -10,7 +10,11 @@ import Mark from "@/components/Mark";
 import CreatorMark from "@/components/CreatorMark";
 import FiatValue from "@/components/FiatValue";
 import JsonLd from "@/components/JsonLd";
+import Addenda from "@/components/Addenda";
+import AddendumComposer from "@/components/AddendumComposer";
 import { sanitizeArticleHtml } from "@/lib/sanitize";
+import { fetchAddenda } from "@/lib/addenda";
+import { fetchReadership, readershipLine, READERSHIP_NOTE } from "@/lib/readership";
 import { fetchTokenStats } from "@/lib/tokenStats";
 import { chainBySlug, chainLabel, explorerAddressUrl } from "@/lib/chains";
 import {
@@ -104,7 +108,21 @@ export default async function TokenPage({
   const token = await getToken(params.address);
   if (!token) return notFound();
 
-  const stats = await fetchTokenStats(token);
+  /*
+   * Three reads with nothing to say to each other, so none of them waits on
+   * another: the contract's live figures, whatever the author added after
+   * publishing, and how many addresses have actually bought.
+   *
+   * Both of the new ones answer with "nothing" rather than throwing — an
+   * article whose additions or whose readership could not be read is still an
+   * article, and a listing page that 500s over a footnote would be a worse
+   * failure than the one it is reporting.
+   */
+  const [stats, addenda, readership] = await Promise.all([
+    fetchTokenStats(token),
+    fetchAddenda(token),
+    fetchReadership(token),
+  ]);
   const explorer = explorerAddressUrl(token.chain, token.contract_address);
 
   return (
@@ -124,6 +142,9 @@ export default async function TokenPage({
       <JsonLd
         data={tokenArticleJsonLd(token, {
           authorUrl: explorerAddressUrl(token.chain, token.creator_wallet),
+          // The article body cannot change; what can is how much of the piece
+          // there is. The last addition is the honest dateModified.
+          modified: addenda.at(-1)?.created_at ?? null,
         })}
       />
 
@@ -156,6 +177,22 @@ export default async function TokenPage({
             Buy or sell
           </a>
         </div>
+
+        {/*
+          Where a blog would print a view counter, and the reason this one is
+          worth printing: every address in it paid gas on a network settling in
+          real ETH to be counted. A view is a request; this is a decision.
+
+          Absent, rather than zero, wherever the trade log has not been recorded
+          — see lib/readership.ts. "Nobody has bought this yet" is a fact about
+          a launch; the same sentence printed by a deployment that is not
+          counting would be a lie about one.
+        */}
+        {readership && (
+          <p className="article__readership" title={READERSHIP_NOTE}>
+            {readershipLine(readership)}
+          </p>
+        )}
       </div>
 
       <article
@@ -164,6 +201,18 @@ export default async function TokenPage({
         // anon key, so it is untrusted input.
         dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(token.article_body) }}
       />
+
+      {/*
+        What the author added after publishing, and — for the author — the box
+        that adds one.
+
+        Between the article and the trade panel on purpose. A correction the
+        reader meets after the buy button is a correction that arrived too late
+        to be worth publishing, and the whole reason this exists rather than an
+        edit button is that on Folio somebody traded on the words.
+      */}
+      <Addenda addenda={addenda} />
+      <AddendumComposer token={token} />
 
       <section id="trade" className="article__decision" aria-labelledby="trade-heading">
         <h2 id="trade-heading" className="decision__title">
