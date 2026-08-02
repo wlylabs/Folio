@@ -1,7 +1,8 @@
 # The Folio intro film
 
 A 27-second introduction to Folio: what it is, what the curve does, that the
-money is real, and where to go.
+money is real, and where to go — plus a 7-second announcement made of its first
+scene.
 
 It is built out of the same things the site is: `app/globals.css`'s palette,
 the three faces `app/layout.tsx` self-hosts, the mark from `components/Logo.tsx`,
@@ -17,7 +18,9 @@ there is one worth muxing: `render.mjs --audio`.
 scripts/intro-video/
   intro.html                 the material: eight scenes, and the cuts made of them
   render.mjs                 renders a cut to MP4
+  sting.mjs                  writes the seven-second cut's sound
   folio-intro-short.mp4      27.6s · 1920×1080 · 30 fps · captions · silent
+  folio-live.mp4             7.0s · the announcement · with a sting
   folio-intro-poster.jpg     a still, for a <video poster>
   README.md                  this file, and the narration below
 ```
@@ -45,6 +48,7 @@ want to re-render.
 ```
 node scripts/intro-video/render.mjs --scale 0.5 --fps 24    # fast proof
 node scripts/intro-video/render.mjs --start 14 --end 19.2   # one scene
+node scripts/intro-video/render.mjs --cut live             # the 7-second announcement
 node scripts/intro-video/render.mjs --cut full             # the 78-second film
 node scripts/intro-video/render.mjs --audio track.wav      # with a sound track
 node scripts/intro-video/render.mjs --out /tmp/folio.mp4 --crf 18
@@ -57,7 +61,7 @@ node scripts/intro-video/render.mjs --out /tmp/folio.mp4 --crf 18
 | `--crf` | `18` | x264 quality; lower is bigger. The committed file is 21 |
 | `--start`, `--end` | whole film | render a slice, in seconds |
 | `--poster`, `--poster-at` | — | also write a still, at `t` seconds |
-| `--cut` | `short` | `full` renders the 78-second film from the same material |
+| `--cut` | `short` | `live` (7s) or `full` (78s), out of the same material |
 | `--no-captions` | off | leave the narration off the glass — for a voiced cut |
 | `--audio` | — | a track to mux in as AAC; sliced with `--start` so it stays in step |
 | `--ffmpeg` | auto | path to an H.264-capable ffmpeg |
@@ -90,8 +94,10 @@ The shape of it:
 - `SHOW_CAPTIONS` decides whether they are drawn at all. `?captions=0` in the
   browser, `--no-captions` under the renderer — for the case where a voice is
   carrying the narration instead.
-- `SHORT` and `SHORT_CAPTIONS` are the advertisement, and `CUT` picks between
-  them and the full film. `?cut=short` in the browser, `--cut short` under the
+- `CUTS` is the list of assemblies — `short` (the advertisement), `full` (the
+  78-second film) and `live` (the 7-second announcement) — and each is a list
+  of segments naming a scene, a window inside it, and optionally elements to
+  `hide` or text to replace. `?cut=live` in the browser, `--cut live` under the
   renderer.
 - `rise`, `riseEach`, `words` and `chars` are the only entrances the film has.
   One vocabulary, used everywhere.
@@ -135,9 +141,56 @@ The captions are two lines instead of six, and both scenes they sit under have
 headlines of their own. An advertisement that talks over its own pictures is
 worse than one that trusts them.
 
-## Sound
+## The announcement cut
 
-There is none, and that is a position rather than an omission. The film plays
+Seven seconds, one scene, no captions:
+
+```
+node scripts/intro-video/sting.mjs
+node scripts/intro-video/render.mjs --cut live --audio folio-live-sting.wav --crf 21
+```
+
+It is the first seven seconds of the film with one word changed. `LIVE` is a
+single segment of scene 1, and the segment carries `text: { "#s1tag": "Folio is
+live" }` — the tagline slot says what the post is about instead of what the
+product is. That is the whole difference, which is the point: an announcement
+should look like the thing it is announcing, not like a different piece of
+design that happens to share a logo.
+
+The beats are the scene's own, so nothing had to be re-timed: the sheet draws
+its outline (0.25–1.85), the crease closes (1.5–2.35), `FOLIO` lands a letter
+at a time (2.15–3.5), the hairline opens (3.1–4.2), the line arrives
+(3.6–4.6), and the plate leaves upward (6.15–7.0).
+
+Swap the line for the next announcement and re-render — a listing going live, a
+milestone, a date. It is one string in `intro.html`.
+
+### The sting
+
+This one does have sound, and `sting.mjs` writes it: a swell while the mark
+draws itself, one mallet note as the letters land, and F major arriving with
+the line — the relative major of the D minor the rest of the film sits in,
+which is the smallest way to sound pleased without changing key. Thirteen cues,
+and it rings out rather than stopping.
+
+It is synthesised, like everything else here, and that is still its limit —
+approximate where the pictures are exact. Seven seconds is short enough that
+the trade is worth making, and a sting is a shape rather than a performance. A
+real recording would still be better, and `--audio` takes one.
+
+| flag | default | what it does |
+| --- | --- | --- |
+| `--lufs` | `-18` | integrated loudness |
+| `--out` | `folio-live-sting.wav` | where to write |
+| `--ffmpeg` | auto | path to an ffmpeg — for the loudness pass only |
+
+It refuses to write a sting whose length does not match the cut, which it reads
+out of `intro.html`. Lengthen the announcement and the sting has to be
+lengthened with it, on purpose rather than by accident.
+
+## Sound, on the 27-second cut
+
+There is none, and that is a position rather than an omission. That cut plays
 where video autoplays muted — a post, a pre-roll, the top of a page — so the
 captions carry the narration and nothing is lost with the sound off.
 

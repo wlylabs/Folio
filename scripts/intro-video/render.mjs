@@ -47,17 +47,24 @@ const FPS = Number(opts.fps ?? 30);
 const SCALE = Number(opts.scale ?? 1);
 const QUALITY = Number(opts.quality ?? 94);
 const CRF = Number(opts.crf ?? 18);
-const OUT = path.resolve(
-  opts.out ?? path.join(HERE, opts.cut === "full" ? "folio-intro.mp4" : "folio-intro-short.mp4")
-);
+/** Which cut to render. The short one is what ships, so it is the default. */
+const CUTS = {
+  short: "folio-intro-short.mp4",
+  full: "folio-intro.mp4",
+  live: "folio-live.mp4",
+};
+const CUT = CUTS[String(opts.cut)] ? String(opts.cut) : "short";
+if (opts.cut && !CUTS[String(opts.cut)]) {
+  throw new Error(`no such cut: ${opts.cut}. One of ${Object.keys(CUTS).join(", ")}.`);
+}
+const OUT = path.resolve(opts.out ?? path.join(HERE, CUTS[CUT]));
 const POSTER = opts.poster ? path.resolve(opts.poster) : null;
 const POSTER_AT = Number(opts["poster-at"] ?? 4.6);
 /** A sound track to mux in. The film ships silent; this is how one arrives. */
 const AUDIO = opts.audio ? path.resolve(String(opts.audio)) : null;
 /** Burnt-in captions. Off under a voice: see `SHOW_CAPTIONS` in intro.html. */
 const CAPTIONS = !opts["no-captions"];
-/** Which cut to render. The short one is what ships, so it is the default. */
-const CUT = opts.cut === "full" ? "full" : "short";
+
 
 /* -------------------------------------------------------------------------- */
 /* Fonts                                                                      */
@@ -232,7 +239,7 @@ async function main() {
   if (AUDIO) console.log(`· audio    ${AUDIO}`);
   console.log(
     `· ${W}×${H} · ${FPS} fps · ${(end - start).toFixed(1)}s · ${frames} frames` +
-      (CUT === "full" ? " · full cut" : "") +
+      (CUT === "short" ? "" : ` · ${CUT} cut`) +
       (CAPTIONS ? "" : " · no captions")
   );
 
@@ -277,6 +284,16 @@ async function main() {
 
   const done = new Promise((resolve, reject) => {
     enc.on("error", reject);
+    // ffmpeg closing the pipe before the last frame means it decided the
+    // output was over — with --shortest, an audio track shorter than the cut
+    // does exactly that, and the useful thing to say is which.
+    enc.stdin.on("error", (err) =>
+      reject(
+        err.code === "EPIPE" && AUDIO
+          ? new Error(`ffmpeg stopped early: is ${path.basename(AUDIO)} shorter than the cut?`)
+          : err
+      )
+    );
     enc.on("close", (code) =>
       code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`))
     );

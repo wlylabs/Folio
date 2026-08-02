@@ -927,6 +927,15 @@ const SHORT_CAPTIONS = [
 
 const FULL = SCENES.map((s) => ({ ...s, from: 0 }));
 
+/* Seven seconds of masthead, for an announcement rather than an introduction:
+   the mark drawing itself, the wordmark landing, and one line under it saying
+   the thing the post is about. `text` swaps the tagline for that line, which
+   is the only difference between this and the first seven seconds of the film.
+   No captions — there is nothing to narrate. */
+const LIVE = [
+  { id: "s1", at: 0.0, dur: 7.0, from: 0, text: { "#s1tag": "Folio is live" } },
+];
+
 /* The narration, timed against the same clock. Captions are deliberately not
    owned by a scene: a sentence can hold across a cut, the way a voice does.
    `invert` flips the caption to paper-on-ink for the dark frame.
@@ -948,15 +957,18 @@ const CAPTIONS = [
 ];
 
 /**
- * Which cut this page is playing. The short one is what ships, so it is the
- * default; the long film is still assembled from the same material and can be
- * played with `window.FOLIO_CUT = "full"` or `?cut=full`, but nothing renders
- * it unless asked.
+ * The cuts this page can play. `short` is what ships, so it is the default;
+ * the others are the same material assembled differently and are rendered only
+ * when asked for by name — `window.FOLIO_CUT = "live"`, or `?cut=live`.
  */
+const CUTS = {
+  short: { scenes: SHORT, captions: SHORT_CAPTIONS },
+  full: { scenes: FULL, captions: CAPTIONS },
+  live: { scenes: LIVE, captions: [] },
+};
+
 const CUT =
-  (window.FOLIO_CUT || new URLSearchParams(location.search).get("cut")) === "full"
-    ? { scenes: FULL, captions: CAPTIONS }
-    : { scenes: SHORT, captions: SHORT_CAPTIONS };
+  CUTS[window.FOLIO_CUT || new URLSearchParams(location.search).get("cut")] || CUTS.short;
 
 const DURATION = CUT.scenes[CUT.scenes.length - 1].at + CUT.scenes[CUT.scenes.length - 1].dur;
 
@@ -1183,6 +1195,10 @@ function seek(t) {
     el.style.opacity = "1";
     el.style.transform = "none";
     if (s.hide) for (const n of $$(s.hide, el)) n.style.display = "none";
+    if (s.text) for (const [sel, str] of Object.entries(s.text)) {
+      const n = $(sel, el);
+      if (n && n.textContent !== str) n.textContent = str;
+    }
     // The scene is told its own length is where this segment ends, so its exit
     // plays out inside the cut rather than being clipped by it.
     R[s.id](s.from + t - s.at, s.from + s.dur);
