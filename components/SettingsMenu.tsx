@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAccount } from "wagmi";
 import WalletButton from "@/components/WalletButton";
-import WalletHandoff from "@/components/WalletHandoff";
 import CurrencySelector from "@/components/CurrencySelector";
 import ThemeSelector from "@/components/ThemeSelector";
 import InstallControl from "@/components/InstallControl";
@@ -149,14 +148,6 @@ export default function SettingsMenu() {
                 trade from an article.
               </p>
             )}
-            {/*
-              The other way in, for a phone that cannot pair from a browser tab
-              — including the case this panel used to describe in prose, a
-              deployment with no WalletConnect project ID. It says the same
-              thing and hands over a link that works. Renders nothing when the
-              connect button is enough.
-            */}
-            <WalletHandoff />
           </section>
 
           <section className="settings__group">

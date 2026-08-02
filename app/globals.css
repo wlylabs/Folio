@@ -1110,9 +1110,10 @@ p {
  * The wallet handoff: the way into a wallet's own browser, for a phone where
  * connecting from a browser tab does not work. See components/WalletHandoff.
  *
- * One quiet line until it is asked for. It sits under a Connect button that
- * most readers will never have trouble with, and a paragraph about app links
- * printed above the fold would be an answer to a question nobody had yet.
+ * One quiet line until it is asked for. It sits under every Connect button on
+ * the site — wherever a reader was stopped, which is where they need it — and a
+ * paragraph about app links printed above the fold would be an answer to a
+ * question nobody had yet.
  */
 .handoff {
   display: flex;

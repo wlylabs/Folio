@@ -221,7 +221,9 @@ function deferBoot(createWallet: CreateWalletFn): CreateWalletFn {
            * would build the expensive one for every reader who ever paired
            * over the cheap one. Everything else has an id of its own, and
            * `recentConnectorId` is wagmi's own record of which connector this
-           * reader last connected with.
+           * reader last connected with — cleared when they disconnect, so a
+           * reader who left stops paying for the SDK they left behind. See
+           * components/WalletChoiceReset.tsx.
            */
           const restoring = async () => {
             if (connector.type === "walletConnect") {
