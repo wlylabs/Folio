@@ -12,6 +12,7 @@
     "watch:launches": "node scripts/watch-launches.mjs",
     "token:list": "node scripts/delete-token.mjs --list",
     "token:delete": "node scripts/delete-token.mjs",
+    "token:prune-testnet": "node scripts/prune-testnet.mjs",
     "test": "node contracts/test/folioSale.test.mjs",
     "forge:build": "forge build",
     "forge:test": "forge test",
