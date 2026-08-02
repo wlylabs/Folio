@@ -1,6 +1,25 @@
-import { getDefaultConfig, getDefaultWallets } from "@rainbow-me/rainbowkit";
+import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import type { WalletList } from "@rainbow-me/rainbowkit";
-import { coinbaseWallet, injectedWallet, safeWallet } from "@rainbow-me/rainbowkit/wallets";
+import {
+  binanceWallet,
+  bitgetWallet,
+  bybitWallet,
+  coinbaseWallet,
+  imTokenWallet,
+  injectedWallet,
+  ledgerWallet,
+  metaMaskWallet,
+  okxWallet,
+  oneInchWallet,
+  rainbowWallet,
+  safepalWallet,
+  safeWallet,
+  tokenPocketWallet,
+  trustWallet,
+  uniswapWallet,
+  walletConnectWallet,
+  zerionWallet,
+} from "@rainbow-me/rainbowkit/wallets";
 import { fallback, http, type Chain, type Transport } from "viem";
 import { DEFAULT_CHAIN_SLUG, SUPPORTED_CHAINS, chainBySlug, rpcProxyPath } from "./chains";
 import {
@@ -10,6 +29,7 @@ import {
   onWalletBoot,
   walletBootLevel,
 } from "./walletBoot";
+import { warmWalletDirectory } from "./walletDirectory";
 import { walletConnectMetadata } from "./walletMetadata";
 import { hasStoredWalletConnectSession } from "./walletSession";
 
@@ -123,12 +143,88 @@ const transports = Object.fromEntries(
  *  - `safeWallet` — only appears inside a Safe app frame, and costs nothing
  *    elsewhere.
  *
- * Only used when there is no project ID. With one, the list is RainbowKit's
- * own default, unchanged apart from every wallet in it going through
- * deferBoot below.
+ * Only used when there is no project ID. With one, the list is the one below.
  */
 const relaylessWallets: WalletList = [
   { groupName: "Available here", wallets: [injectedWallet, coinbaseWallet, safeWallet] },
+];
+
+/**
+ * The wallets the connect modal offers when there *is* a relay.
+ *
+ * ---------------------------------------------------------------------------
+ * Why this is written out rather than left to getDefaultWallets()
+ * ---------------------------------------------------------------------------
+ *
+ * RainbowKit's default is five entries — Safe, Rainbow, Base, MetaMask, and
+ * "WalletConnect". A reader holding any of the wallets people actually arrive
+ * with finds none of them there, and the only entry left for them is that last
+ * one.
+ *
+ * "WalletConnect" is not a wallet. Pressing it builds Reown's AppKit and opens
+ * a second modal on top of this one, whose wallet picker is not in the bundle:
+ * it is a list fetched from api.web3modal.org, followed by one request per
+ * icon, twenty of them, all awaited before a single tile appears. So the
+ * reader with Trust or OKX on their phone was routed, unavoidably, through the
+ * slowest screen in the app to reach a wallet this list could simply have
+ * named. On mobile data that screen is several seconds of grey placeholders,
+ * and until lib/securityHeaders.js learned about that origin it was grey
+ * placeholders for ever.
+ *
+ * Naming the wallets costs close to nothing, which is the part that makes this
+ * worth doing rather than merely nice. Every entry here beyond MetaMask and
+ * Coinbase pairs over WalletConnect, and RainbowKit hands them all the *same*
+ * connector: `getWalletConnectConnector` caches on the serialised parameters,
+ * so twenty wallets share one provider, one relay socket and one session
+ * store. What each entry adds is a name, a deep link, and an inlined SVG of
+ * about a kilobyte. No directory, no round trip, no second modal — the picker
+ * renders from the bundle, at the speed of the modal that is already open.
+ *
+ * `walletConnectWallet` stays, last and alone. It is still the only way to
+ * reach a wallet nobody thought to list, and a reader who needs it can still
+ * get there; it is no longer the road everybody else is sent down. Keeping it
+ * is also what keeps `deferBoot`'s MODAL level meaningful — it is the one
+ * entry that pulls in @reown/appkit.
+ *
+ * Order is by who is likely to be holding what, not by preference. Wallets a
+ * reader has *installed* never come from this list at all: those are announced
+ * over EIP-6963 and RainbowKit puts them in their own group above everything
+ * here.
+ */
+const pairingWallets: WalletList = [
+  {
+    groupName: "Popular",
+    wallets: [
+      metaMaskWallet,
+      trustWallet,
+      coinbaseWallet,
+      okxWallet,
+      bitgetWallet,
+      binanceWallet,
+      rainbowWallet,
+    ],
+  },
+  {
+    groupName: "More wallets",
+    wallets: [
+      uniswapWallet,
+      zerionWallet,
+      bybitWallet,
+      imTokenWallet,
+      tokenPocketWallet,
+      safepalWallet,
+      oneInchWallet,
+      ledgerWallet,
+      safeWallet,
+    ],
+  },
+  {
+    // Everything above is a wallet; this is a directory of the rest. Named for
+    // what it does rather than "WalletConnect", which reads like a sixth
+    // wallet and is the reason readers pressed it by mistake.
+    groupName: "Other wallets",
+    wallets: [walletConnectWallet],
+  },
 ];
 
 /** One entry in a WalletList. RainbowKit names this `CreateWalletFn` but does
@@ -282,6 +378,18 @@ function deferBoot(createWallet: CreateWalletFn): CreateWalletFn {
   };
 }
 
+/*
+ * The directory's host, introduced at the same moment as the SDK that will ask
+ * it for the wallet list — a pointer arriving at a connect button, rather than
+ * the press itself. Registered here because MODAL is the level that releases
+ * @reown/appkit, and the directory is the first thing it reaches for. See
+ * lib/walletDirectory.ts for why the handshake is worth moving, and why a
+ * reader who never approaches a connect button never opens it.
+ */
+if (hasWalletConnectProjectId) {
+  onWalletBoot(WALLET_BOOT_MODAL, warmWalletDirectory);
+}
+
 /** Every wallet in a list, deferred. */
 function deferred(wallets: WalletList): WalletList {
   return wallets.map((group) => ({
@@ -405,12 +513,10 @@ const walletConnectParameters = {
 
 export const wagmiConfig = getDefaultConfig({
   appName: "Folio",
-  // RainbowKit's own default list when there is a relay to reach the phone
-  // wallets over, asked for by name rather than left to the `undefined`
-  // default so every wallet in it can go through deferBoot above.
-  wallets: deferred(
-    hasWalletConnectProjectId ? getDefaultWallets().wallets : relaylessWallets
-  ),
+  // Named rather than left to the `undefined` default for two reasons: so the
+  // list is the one above rather than RainbowKit's five, and so every wallet
+  // in it goes through deferBoot.
+  wallets: deferred(hasWalletConnectProjectId ? pairingWallets : relaylessWallets),
   // Coinbase Wallet's own connector shows this rather than reading the
   // WalletConnect metadata below, so it is set in both places.
   appIcon: walletConnectMetadata.icons[0],
