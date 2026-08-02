@@ -52,9 +52,9 @@ broadcast/
 # live in DEPLOYMENT.md, which is the version worth reading.
 slither-report.md
 
-# What the intro film fetches to build itself: half a megabyte of base64
-# webfonts for render.mjs, and a ~120 MB voice model for narrate.mjs. Both are
-# one URL away and neither belongs in the tree. The films themselves are
-# committed, and so is the narration — inside the voiced cut's audio track.
+# The intro film's webfont cache: half a megabyte of base64 that render.mjs
+# fetches once and can fetch again. The film itself is committed — and so is
+# its score, inside the film's audio track, which is why the 22 MB of PCM that
+# score.mjs writes on the way there is not.
 scripts/intro-video/.cache/
 scripts/intro-video/*.wav

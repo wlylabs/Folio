@@ -896,10 +896,9 @@ const DURATION = SCENES[SCENES.length - 1].at + SCENES[SCENES.length - 1].dur;
    owned by a scene: a sentence can hold across a cut, the way a voice does.
    `invert` flips the caption to paper-on-ink for the dark frame.
 
-   This array is the script in both cuts: printed on the glass in the silent
-   one, spoken in the voiced one. narrate.mjs lifts it out of this file by name
-   and synthesises it against these same in-points, so a line moved here moves
-   in the voice too — keep it a plain literal of plain values. */
+   These in-points are also the score's: score.mjs cues the music against the
+   scenes rather than the captions, but a line moved far enough to change what
+   is on screen when is worth re-reading the cue list beside. */
 const CAPTIONS = [
   { at:  8.2, out: 14.9, text: "Most tokens arrive as a ticker, a supply, and somebody's word for it." },
   { at: 16.4, out: 25.6, width: 820,
@@ -1118,10 +1117,10 @@ function fadeOutScene(id, t, dur, len = 0.55) {
    ========================================================================== */
 
 /* Captions are burnt in by default: the common case is a hero video autoplaying
-   muted, where a caption reads and a voice does not. The voiced cut turns them
-   off — `window.FOLIO_CAPTIONS = false` before the document runs, or
-   `?captions=0` when opening the page by hand — because narration read and
-   heard at once is worse than either alone. */
+   muted, where a caption reads and a voice does not. They can be turned off —
+   `window.FOLIO_CAPTIONS = false` before the document runs, or `?captions=0`
+   when opening the page by hand — for a cut where a recorded voice carries the
+   narration instead, since read and heard at once is worse than either. */
 const SHOW_CAPTIONS =
   window.FOLIO_CAPTIONS !== false &&
   new URLSearchParams(location.search).get("captions") !== "0";

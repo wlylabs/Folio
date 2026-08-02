@@ -50,9 +50,9 @@ const CRF = Number(opts.crf ?? 18);
 const OUT = path.resolve(opts.out ?? path.join(HERE, "folio-intro.mp4"));
 const POSTER = opts.poster ? path.resolve(opts.poster) : null;
 const POSTER_AT = Number(opts["poster-at"] ?? 4.6);
-/** A sound track to mux in — narrate.mjs's output, or a recorded take. */
+/** A sound track to mux in — score.mjs's output, or a recorded voice. */
 const AUDIO = opts.audio ? path.resolve(String(opts.audio)) : null;
-/** Burnt-in captions. Off for the voiced cut: see `SHOW_CAPTIONS` in intro.html. */
+/** Burnt-in captions. Off under a voice: see `SHOW_CAPTIONS` in intro.html. */
 const CAPTIONS = !opts["no-captions"];
 
 /* -------------------------------------------------------------------------- */
