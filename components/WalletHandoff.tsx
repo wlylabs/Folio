@@ -13,12 +13,27 @@ import { currentPageLink, shouldOfferHandoff, walletAppLinks } from "@/lib/walle
  * that is not this one. Opening Folio inside the wallet's own browser skips all
  * of it: the page runs where the wallet already is. See lib/walletHandoff.ts.
  *
- * Shut by default and one line tall, because it is the second answer, not the
- * first — a reader whose wallet connects normally should never have to read
- * past the button. It hides itself entirely on a desktop with an extension, and
- * on any page opened inside a wallet browser, where the trip is already over.
+ * Shut by default and one line tall, because a reader whose wallet connects
+ * normally should never have to read past the button. It hides itself entirely
+ * on a desktop with an extension, and on any page opened inside a wallet
+ * browser, where the trip is already over.
+ *
+ * What changed is what the line *says*. "Wallet not connecting?" is a
+ * troubleshooting label: it only makes sense to somebody who has already tried
+ * and failed, so it reads as a support link and gets skipped by everyone else.
+ * But on a phone this is not the fallback — it is the path that does not need a
+ * relay, a chain the wallet has never heard of, or an app switch to survive. So
+ * it is offered as what it is, and only names the failure once there has been
+ * one.
+ *
+ * `stalled` is that failure: a connect that has stopped answering, twenty
+ * foreground seconds in (see lib/walletPhase.ts). It opens the panel, because
+ * the reader watching that button is exactly who this was written for, and
+ * turns the label back into the question they are now asking. Opening is a one
+ * -way nudge — closing it again sticks, since the effect only runs when the
+ * stall itself changes.
  */
-export default function WalletHandoff() {
+export default function WalletHandoff({ stalled = false }: { stalled?: boolean }) {
   const { isConnected } = useAccount();
   const [open, setOpen] = useState(false);
   const [offer, setOffer] = useState(false);
@@ -32,6 +47,10 @@ export default function WalletHandoff() {
     setOffer(shouldOfferHandoff(hasWalletConnectProjectId));
     setLinks(walletAppLinks());
   }, []);
+
+  useEffect(() => {
+    if (stalled) setOpen(true);
+  }, [stalled]);
 
   if (isConnected || !offer || links.length === 0) return null;
 
@@ -56,7 +75,11 @@ export default function WalletHandoff() {
         aria-expanded={open}
         onClick={() => setOpen((was) => !was)}
       >
-        {open ? "Hide wallet app options" : "Wallet not connecting?"}
+        {open
+          ? "Hide wallet app options"
+          : stalled
+            ? "Wallet not connecting?"
+            : "Open in your wallet app"}
       </button>
 
       {open && (

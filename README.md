@@ -415,10 +415,15 @@ compiler — only edits to a `.sol` file do.
   Pairing from a phone browser needs WalletConnect's relay, a wallet that
   recognises the chain in the proposal, and something to hand the reader back —
   and when any of it fails the reader is told "not supported" by an app that is
-  not this one. `components/WalletHandoff.tsx` sits under the connect button as
-  one quiet line, and opens into links that load the current page inside
-  MetaMask's, Coinbase Wallet's or Trust's own browser, plus a copy-link for
-  every wallet not on that list. There the page runs where the wallet already
+  not this one. `components/WalletHandoff.tsx` sits under every connect button
+  on the site as one quiet line — it is mounted by `ConnectCue`, so it is
+  wherever the reader was actually stopped rather than in the settings panel
+  they would have to go looking for — and opens into links that load the current
+  page inside MetaMask's, Coinbase Wallet's or Trust's own browser, plus a
+  copy-link for every wallet not on that list. On a phone it is offered as what
+  it is ("Open in your wallet app"), not as a support link; it only calls itself
+  "Wallet not connecting?" once a connect has actually stalled, which is also
+  when it opens itself. There the page runs where the wallet already
   is: `window.ethereum` is present, the connection is local, and there is no app
   switch to survive. It hides itself entirely where it is not needed — a desktop
   with an extension, or a page already opened inside a wallet browser. The same

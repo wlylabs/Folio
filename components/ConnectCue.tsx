@@ -2,6 +2,7 @@
 
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
+import WalletHandoff from "@/components/WalletHandoff";
 import { WALLET_BOOT_MODAL, bootWallets } from "@/lib/walletBoot";
 import { useConnectPhase } from "@/lib/walletPhase";
 
@@ -48,6 +49,15 @@ import { useConnectPhase } from "@/lib/walletPhase";
  * that was going to be empty anyway. Otherwise the same outline button in every
  * one of them, carrying the three states of useConnectPhase — an offer, a
  * connection being picked up, and a connection that has stopped answering.
+ *
+ * And, on a phone, the other way in underneath it. WalletHandoff used to be
+ * mounted in the settings panel alone, which put it in the one place a stopped
+ * reader is not: somebody who pressed Connect at the trade panel and was
+ * refused by their wallet had to scroll to the masthead, open a panel and
+ * expand a disclosure to find the route that would have worked. That is the
+ * same four-gestures-for-one problem described above, and it has the same
+ * answer — the offer belongs where the reader was stopped. It renders nothing
+ * on a desktop with an extension, and nothing inside a wallet's own browser.
  *
  * `onOpenModal` fires just before the connect modal is asked to open. The
  * settings panel uses it to close itself first; nowhere else needs it.
@@ -105,6 +115,8 @@ export default function ConnectCue({ onOpenModal }: { onOpenModal?: () => void }
           nothing opened, press Connect wallet again.
         </p>
       )}
+
+      <WalletHandoff stalled={phase === "stalled"} />
     </>
   );
 }
