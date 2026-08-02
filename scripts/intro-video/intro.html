@@ -927,13 +927,15 @@ const SHORT_CAPTIONS = [
 
 const FULL = SCENES.map((s) => ({ ...s, from: 0 }));
 
-/* Seven seconds of masthead, for an announcement rather than an introduction:
-   the mark drawing itself, the wordmark landing, and one line under it saying
-   the thing the post is about. `text` swaps the tagline for that line, which
-   is the only difference between this and the first seven seconds of the film.
-   No captions — there is nothing to narrate. */
-const LIVE = [
-  { id: "s1", at: 0.0, dur: 7.0, from: 0, text: { "#s1tag": "Folio is live" } },
+/* Seven seconds of masthead on its own: the mark drawing itself, the wordmark
+   landing, and the tagline under it. A bumper — the thing that goes at the head
+   of a post, a talk or a clip, where a twenty-seven-second advertisement is
+   twenty-three seconds too long. No captions; there is nothing to narrate.
+
+   For an announcement, `text` swaps a line without touching the scene:
+   `text: { "#s1tag": "Folio is live" }` puts the news where the tagline is. */
+const BUMPER = [
+  { id: "s1", at: 0.0, dur: 7.0, from: 0 },
 ];
 
 /* The narration, timed against the same clock. Captions are deliberately not
@@ -959,12 +961,12 @@ const CAPTIONS = [
 /**
  * The cuts this page can play. `short` is what ships, so it is the default;
  * the others are the same material assembled differently and are rendered only
- * when asked for by name — `window.FOLIO_CUT = "live"`, or `?cut=live`.
+ * when asked for by name — `window.FOLIO_CUT = "bumper"`, or `?cut=bumper`.
  */
 const CUTS = {
   short: { scenes: SHORT, captions: SHORT_CAPTIONS },
   full: { scenes: FULL, captions: CAPTIONS },
-  live: { scenes: LIVE, captions: [] },
+  bumper: { scenes: BUMPER, captions: [] },
 };
 
 const CUT =

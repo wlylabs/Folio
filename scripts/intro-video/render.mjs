@@ -51,7 +51,7 @@ const CRF = Number(opts.crf ?? 18);
 const CUTS = {
   short: "folio-intro-short.mp4",
   full: "folio-intro.mp4",
-  live: "folio-live.mp4",
+  bumper: "folio-bumper.mp4",
 };
 const CUT = CUTS[String(opts.cut)] ? String(opts.cut) : "short";
 if (opts.cut && !CUTS[String(opts.cut)]) {

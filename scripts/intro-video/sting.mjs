@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Writes the sting under the seven-second announcement cut.
+ * Writes the sting under the seven-second bumper.
  *
  * A sting is not a score, and this is deliberately not written like one. There
  * is no groove, no hook and nothing to develop: a swell while the mark draws
@@ -9,12 +9,12 @@
  * exactly where the picture does.
  *
  *   node scripts/intro-video/sting.mjs
- *   node scripts/intro-video/render.mjs --cut live --audio folio-live-sting.wav --crf 21
+ *   node scripts/intro-video/render.mjs --cut bumper --audio folio-bumper-sting.wav --crf 21
  *
  * It resolves to F major — the relative major of the D minor everything else
- * in the film sits in. An announcement is the one place this brand is allowed
- * to sound pleased with itself, and that is the smallest way to do it without
- * changing key.
+ * in the film sits in. A bumper is the one place this brand is allowed to sound
+ * pleased with itself, and that is the smallest way to do it without changing
+ * key.
  *
  * Everything here is synthesised: no sample, no library, nothing to license.
  * That is also its limit, and it is worth saying plainly — synthesised audio
@@ -50,7 +50,7 @@ function args(argv) {
 }
 
 const opts = args(process.argv.slice(2));
-const OUT = path.resolve(opts.out ?? path.join(HERE, "folio-live-sting.wav"));
+const OUT = path.resolve(opts.out ?? path.join(HERE, "folio-bumper-sting.wav"));
 const SR = 48000;
 /** Integrated loudness. A sting can sit where the rest of the web sits. */
 const LUFS = Number(opts.lufs ?? -18);
@@ -95,7 +95,7 @@ const paper = (at, dur, gain = 0.1, rise = false) =>
  *   1.50–2.35  the crease
  *   2.15–3.50  F-O-L-I-O lands, one letter at a time
  *   3.10–4.20  the hairline opens under it
- *   3.60–4.60  "Folio is live"
+ *   3.60–4.60  the tagline
  *   6.15–7.00  the plate leaves upward
  */
 
@@ -113,7 +113,7 @@ pluck(2.7, "A4", 0.19, 0.16);
 paper(2.9, 1.4, 0.12, true);
 chord(3.1, 1.3, ["D3", "A3", "F4"], 0.16);
 
-/* "Folio is live." Everything lands together: F major with its ninth, the root
+/* The line arrives. Everything lands together: F major with its ninth, the root
    under it, and one bell. This is the only moment in the piece, and it gets
    three and a half seconds to ring out rather than a hit and a cut. */
 bass(3.6, 3.0, "F1", 0.32);
@@ -429,10 +429,10 @@ function findFfmpeg() {
   );
 }
 
-/** The live cut's length, read out of intro.html rather than written twice. */
+/** The bumper's length, read out of intro.html rather than written twice. */
 function cutDuration() {
   const page = fs.readFileSync(path.join(HERE, "intro.html"), "utf8");
-  const open = page.indexOf("[", page.indexOf("const LIVE = ["));
+  const open = page.indexOf("[", page.indexOf("const BUMPER = ["));
   const close = page.indexOf("];", open);
   const seg = page.slice(open, close + 1);
   const at = Number(/at:\s*([0-9.]+)/.exec(seg)[1]);
@@ -449,7 +449,7 @@ async function main() {
 
   const picture = cutDuration();
   if (Math.abs(picture - DURATION) > 0.001) {
-    throw new Error(`the live cut is ${picture}s in intro.html but ${DURATION}s here`);
+    throw new Error(`the bumper is ${picture}s in intro.html but ${DURATION}s here`);
   }
 
   const frames = Math.round(DURATION * SR);
