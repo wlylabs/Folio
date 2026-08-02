@@ -96,7 +96,9 @@ releases the connectors then, which is after the banner has had its chance.
      which rejects an unknown project ID. Without it the settings panel says so,
      and only browser-extension wallets can connect.
 5. Run `lib/schema.sql` in Supabase's SQL editor. It creates the `tokens` table,
-   the avatar storage bucket, and the row-level security policies.
+   the trade log, the additions table, the avatar storage bucket, and the
+   row-level security policies. It is safe to re-run, and an existing project
+   needs a re-run to pick up anything added since it was last run.
 6. `npm run dev` → Codespaces gives you a forwarded URL to preview in browser.
 7. Fund the wallet on Robinhood Chain — deploying costs gas. It is a mainnet
    and has no faucet, so that ETH has to be bridged or bought. To develop
@@ -141,6 +143,52 @@ the opening market cap is `virtualEthReserve` whatever supply you pick.
 If the token is created but the database insert fails, the error message
 includes the address so the launch isn't lost — and `/api/indexer` will list it
 from the event log regardless.
+
+## Changing your mind after publishing
+
+A blog corrects itself by rewriting the paragraph. The sentence that made the
+case disappears, the date at the top does not, and a reader arriving afterwards
+cannot tell that the piece in front of them is not the piece anybody acted on.
+That is a small dishonesty on a blog and a large one here, because on Folio
+somebody bought on the strength of the words.
+
+So the article is fixed at publication — the policies in `lib/schema.sql` grant
+no update and no delete on `tokens` to any client, which was already true before
+this feature and is what makes the rest of it work — and second thoughts are
+**appended**. An addition lands in `token_addenda`, is dated, is rendered
+between the article and the trade panel, and stays there.
+
+Two properties are worth stating exactly, because both are enforced in Postgres
+rather than in a component:
+
+- **Signed, always.** There is no anonymous insert policy on that table at all,
+  which is the one place Folio is stricter about additions than about bylines. A
+  listing published with the public anon key is honestly labelled an unverified
+  byline and left alone; a *change of story* is worth nothing unless the address
+  on the article signed for it. So an addition needs the same EIP-4361 session a
+  verified byline needs (see **Proving a byline**), and the insert policy checks
+  the signed `wallet` claim against the listing's own `creator_wallet`. A
+  deployment with no `SUPABASE_JWT_SECRET` simply has no additions, and the
+  composer says so rather than offering a box that fails on submit.
+- **Permanent.** No update policy and no delete policy, so no client can rewrite
+  or withdraw one — including the author, which is the entire point. An author
+  who retracts cannot later retract the retraction. (The service role still
+  bypasses row-level security, as it does everywhere in that file: this is a
+  promise about what the site's visitors can do, not a claim that the database
+  has no operator.)
+
+The composer renders for the byline address and nobody else, takes plain text
+rather than markup — `paragraphsToHtml` in `lib/sanitize.ts` escapes every
+bracket rather than guessing which ones the author meant as tags — and the
+result is sanitised again on render exactly like the article body.
+
+One consequence worth noticing: the trade log is on the same page. A reader can
+see that the author changed their mind, when they changed it, and what the price
+was doing at the time.
+
+`dateModified` in the listing's schema.org payload is the last addition's date
+where there is one, and the publication date where there is not. The body never
+changes; how much of the piece there is does.
 
 ## Taking a listing down
 
@@ -331,6 +379,33 @@ direction are two different facts and neither is ever left to a hue alone.
 Under the chart is the trade tape: side, size, trader and how long ago, each row
 linking to the transaction. It doubles as the chart's table view, and hovering a
 point on the chart highlights its row.
+
+## The readership figure
+
+Every blog prints a view counter and none of them is worth reading: a view costs
+one request to manufacture, so the number measures traffic at best and a script
+at worst. A launch on a curve has a better figure lying around unused — the
+count of distinct addresses that have bought it. Forging *that* costs a
+transaction per address on a network settling in real ETH, and every one of them
+is in the contract's own event log where anybody can recount them. It is
+printed under the byline, which is where a blog puts its views.
+
+It is counted in Postgres (`folio_listing_readership`, in `lib/schema.sql`)
+because `count(distinct ...)` is not something PostgREST can be asked for, and
+the alternative is shipping every trade row of a busy launch to a server
+component so that JavaScript can count them.
+
+Two things it will not say:
+
+- **Not holders.** Balances move by ERC20 `transfer` as well as through the
+  curve, and the trade log only knows the curve — "still holding" would be a
+  guess wearing a count's clothes. What the log can support is *bought and never
+  sold back to the curve*, and that is how the line is worded.
+- **Not zero, when the truth is "unknown".** The count comes from the recorded
+  `trades` table, which needs `SUPABASE_SERVICE_ROLE_KEY` to exist at all. A
+  deployment without one records nothing, and "nobody has bought this" would be
+  a lie about a launch rather than a fact about it. The function reports whether
+  the launch has been walked; where it has not, the line is absent entirely.
 
 ## The interface
 
@@ -714,6 +789,10 @@ the edge, where a request can be refused before it costs anything to receive.
       appears
 - [x] Persisting the trade log, so a chart doesn't cost a fresh scan and isn't
       bounded by how far one page load can walk — see **The price history**
+- [x] Signed, permanent additions to a published article, so a correction cannot
+      be a silent edit — see **Changing your mind after publishing**
+- [x] A readership figure that costs money to inflate, in place of a view
+      counter — see **The readership figure**
 - [ ] Nonce and rate-limit state in a store the whole deployment shares, rather
       than one process at a time
 - [ ] A real audit before this carries meaningful value

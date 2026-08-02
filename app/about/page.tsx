@@ -77,10 +77,19 @@ export default function AboutPage() {
             is always the one that costs real ETH.
           </p>
           <p>
-            One limitation is worth stating plainly: a byline is a claim, not a
-            proof. Folio records the wallet that published an article but cannot
-            yet verify that wallet signed anything, so the author of a listing
-            is unconfirmed until wallet sign-in ships.
+            A byline is a claim unless the listing says otherwise. Publishing
+            through this site proves it — the wallet signs a message naming this
+            site and this address, which costs no gas and moves nothing, and the
+            listing then reads &ldquo;Verified&rdquo;. Anything published another
+            way records the address without proving it, and says
+            &ldquo;Unverified byline&rdquo; instead.
+          </p>
+          <p>
+            An article cannot be edited after it is published, by its author or
+            by us — people trade on the words, so the piece that was traded on
+            has to stay the piece that was traded on. What an author can do is
+            add to it: additions are signed by the byline, dated, shown above the
+            trade panel, and cannot be removed afterwards either.
           </p>
 
           <h2>What Folio stores</h2>

@@ -220,11 +220,21 @@ const PUBLISHER = {
  */
 export function tokenArticleJsonLd(
   token: Token,
-  options: { authorUrl?: string | null } = {}
+  options: { authorUrl?: string | null; modified?: string | null } = {}
 ): Record<string, unknown> {
   const url = absoluteUrl(tokenPath(token));
   const image = socialImage(token.avatar_url, tokenHeadline(token));
   const published = toIsoDate(token.created_at);
+  /*
+   * The last addition, where the author has made one.
+   *
+   * `dateModified` used to repeat `datePublished`, which was true of an article
+   * nothing can edit — and stopped being the whole truth when additions
+   * arrived. The body above is still fixed; what changed is that there is more
+   * of the piece than there was. Falling back to the publication date keeps the
+   * old behaviour for every listing with no additions.
+   */
+  const modified = toIsoDate(options.modified) ?? published;
 
   return {
     "@context": "https://schema.org",
@@ -236,7 +246,7 @@ export function tokenArticleJsonLd(
     headline: (token.article_title?.trim() || tokenHeadline(token)).slice(0, 110),
     description: tokenDescription(token),
     image: [image.url.startsWith("/") ? absoluteUrl(image.url) : image.url],
-    ...(published ? { datePublished: published, dateModified: published } : {}),
+    ...(published ? { datePublished: published, dateModified: modified ?? published } : {}),
     author: {
       "@type": "Person",
       // The short form is what the byline renders; the full address is the

@@ -312,6 +312,171 @@ create policy "delistings are publicly readable"
   using (true);
 
 -- ---------------------------------------------------------------------------
+-- Additions to a published article
+--
+-- A blog edits itself in place. The paragraph that made the case changes, the
+-- date at the top does not, and a reader who arrives afterwards has no way of
+-- knowing that the piece they are reading is not the piece anybody acted on.
+-- That is a small dishonesty on a blog and a large one here, because on Folio
+-- somebody bought on the strength of the words — so the article a launch was
+-- sold on has to stay the article a launch was sold on.
+--
+-- Hence a separate table rather than a second `article_body`. `tokens` already
+-- refuses updates and deletes from every client (the policies above), which
+-- means the original is fixed the moment it is published; an author who wants
+-- to correct, retract or continue it writes an *addition*, which is appended
+-- underneath with its own date and its own signature. Nothing is overwritten
+-- and nothing disappears. A reader can see the author changed their mind, when
+-- they changed it, and — because the trade log is on the same page — what the
+-- price was doing when they did.
+--
+-- Two properties are enforced here rather than in a component:
+--
+--   signed        There is no anon insert policy at all, which is the one place
+--                 this table is deliberately stricter than `tokens`. A listing
+--                 published with the public key is honestly labelled an
+--                 unverified byline and that is good enough for a byline; an
+--                 addition is a *change of story* and it is worth nothing
+--                 unless the address on the article signed for it. So the only
+--                 way in is an authenticated session minted by
+--                 app/api/auth/verify/route.ts, and a deployment with no
+--                 SUPABASE_JWT_SECRET simply has no additions.
+--   append-only   No update policy and no delete policy, so no client can
+--                 rewrite or withdraw one — including the author, which is the
+--                 entire point. The service role still bypasses RLS, as it does
+--                 everywhere in this file: this is a promise about what the
+--                 site's own visitors can do, not a claim that the database has
+--                 no operator.
+-- ---------------------------------------------------------------------------
+create table if not exists token_addenda (
+  id uuid primary key default gen_random_uuid(),
+  -- Lowercased, matching tokens.contract_address. Not a foreign key: a listing
+  -- can be delisted (see delisted_tokens) and the additions to it should go the
+  -- same way as the article, by the same delete, rather than blocking it.
+  contract_address text not null,
+  chain text not null,                 -- slug from SUPPORTED_CHAINS
+  -- HTML, built from the author's plain text by lib/sanitize.ts and sanitised
+  -- again on render exactly like article_body. Treat it as attacker-controlled
+  -- for the same reason: it arrives from a browser.
+  body text not null,
+  -- The wallet that signed the session this row was inserted with. Equal to the
+  -- listing's creator_wallet by the policy below, so it is not a second byline
+  -- — it is the proof that the byline wrote this.
+  author_wallet text not null,
+  created_at timestamptz not null default now()
+);
+
+-- The one query the article page makes: every addition to one listing, oldest
+-- first, because they are read in the order they were written.
+create index if not exists token_addenda_token_idx
+  on token_addenda (contract_address, created_at);
+
+alter table token_addenda enable row level security;
+
+drop policy if exists "additions are publicly readable" on token_addenda;
+create policy "additions are publicly readable"
+  on token_addenda for select
+  using (true);
+
+drop policy if exists "a proved author may add to their own listing" on token_addenda;
+create policy "a proved author may add to their own listing"
+  on token_addenda for insert
+  to authenticated
+  with check (
+    -- Long enough for a retraction and a reason, short of an essay. The
+    -- composer shows the same ceiling; this is the one that is the rule.
+    length(body) between 1 and 5000
+    and contract_address ~ '^0x[0-9a-f]{40}$'
+    -- The claim minted after an EIP-4361 signature, the same one the listing
+    -- insert policy reads.
+    and lower(author_wallet) = lower(coalesce(auth.jwt() ->> 'wallet', ''))
+    -- ...and it has to be the address the article is published under. Not the
+    -- contract's creator(): that is the right authority for a payout and the
+    -- wrong one for authorship, and this table decides who may speak in the
+    -- article rather than who may be paid by it.
+    and exists (
+      select 1
+      from public.tokens t
+      where t.contract_address = token_addenda.contract_address
+        and t.chain = token_addenda.chain
+        and lower(t.creator_wallet) = lower(token_addenda.author_wallet)
+    )
+  );
+
+-- ---------------------------------------------------------------------------
+-- How many people actually backed a launch
+--
+-- A page view is the cheapest number on the internet: it costs a request to
+-- manufacture, which is why every blog has one and no blog's is worth reading.
+-- A launch on a bonding curve has a better one lying around unused — the number
+-- of distinct addresses that have bought it. Forging that costs a transaction
+-- per address, on a network with real ETH, and every one of them is in the
+-- contract's own event log where anybody can recount them.
+--
+-- So this is the readership figure Folio prints, and it is computed here rather
+-- than in the page for one reason: `count(distinct ...)` is not something
+-- PostgREST can be asked for, and the alternative is shipping every trade row
+-- of a busy launch to a server component so that JavaScript can count them.
+--
+-- What it deliberately does not report is holders. Balances move by ERC20
+-- `transfer` as well as through the curve, and this table only knows the curve
+-- — so "still holding" would be a guess dressed as a count. `never_sold` is the
+-- claim the trade log can actually support, and it is worded on the page as
+-- exactly what it is: bought, and never sold back to the curve.
+--
+-- `recorded` is the honesty valve. The `trades` table is written by the
+-- recorder, which needs SUPABASE_SERVICE_ROLE_KEY; without it there is no log
+-- here at all, and a count of zero would read as "nobody bought this" when the
+-- truth is "this deployment is not counting". A launch with a cursor row has
+-- been walked, so zero from it is a real zero.
+-- ---------------------------------------------------------------------------
+drop function if exists public.folio_listing_readership(text, text);
+create function public.folio_listing_readership(
+  p_chain text,
+  p_token_address text
+) returns table (
+  recorded boolean,
+  buyers bigint,
+  never_sold bigint,
+  first_buy timestamptz
+)
+language sql
+stable
+as $$
+  with traders as (
+    select
+      trader,
+      bool_or(side = 'buy') as bought,
+      bool_or(side = 'sell') as sold,
+      -- Deliberately not named `first_buy`: that is one of this function's
+      -- output columns, and an output name is in scope inside the body — a
+      -- column that shares it makes the reference below ambiguous, which is an
+      -- error at call time rather than at creation time.
+      min(block_time) filter (where side = 'buy') as first_buy_at
+    from public.trades
+    where chain = p_chain and token_address = p_token_address
+    group by trader
+  )
+  select
+    exists (
+      select 1
+      from public.trade_cursors
+      where chain = p_chain and token_address = p_token_address
+    ),
+    count(*) filter (where bought)::bigint,
+    count(*) filter (where bought and not sold)::bigint,
+    -- Null wherever the block headers could not be read when the trades were
+    -- recorded. The page drops the "since" clause rather than inventing a date.
+    min(first_buy_at)
+  from traders
+$$;
+
+-- Read by the article page through the public anon key. The function is
+-- `security invoker`, so it reads `trades` under the caller's own row-level
+-- security — which is the select policy above, and public.
+grant execute on function public.folio_listing_readership(text, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
 -- Storage bucket for token avatars.
 --
 -- Uploads are open — publishing a launch is a public act and there is no
