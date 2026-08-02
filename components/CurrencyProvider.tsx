@@ -10,7 +10,9 @@ import {
   isCurrencyCode,
   parseRates,
   preferredCurrency,
+  readCachedRates,
   readCurrency,
+  writeCachedRates,
   writeCurrency,
   type CurrencyCode,
   type EthRates,
@@ -127,7 +129,30 @@ export default function CurrencyProvider({ children }: { children: React.ReactNo
     retry: 1,
   });
 
-  const rate = rates?.[currency] ?? null;
+  /**
+   * The rates this browser was served last time, standing in for the second
+   * before the request above answers.
+   *
+   * Read in an effect and not during render, for the same reason the currency
+   * above is: the server has no localStorage, and a first client render that
+   * disagreed with the server's HTML is a hydration error. That costs the very
+   * first paint, which has no conversions on it either way — what it buys is the
+   * rest of the page load, where every figure is converted from the moment
+   * React is running rather than from whenever the network gets back.
+   *
+   * It is a stand-in and never an authority: `rates` is preferred the instant it
+   * exists, and lib/currency.ts refuses anything stale enough to be misleading.
+   */
+  const [cached, setCached] = useState<EthRates | null>(null);
+  useEffect(() => setCached(readCachedRates()), []);
+
+  // Written on every answer, so a page opened tomorrow starts from the last
+  // price this reader was actually shown.
+  useEffect(() => {
+    if (rates) writeCachedRates(rates);
+  }, [rates]);
+
+  const rate = (rates ?? cached)?.[currency] ?? null;
 
   const value = useMemo<CurrencyContextValue>(
     () => ({

@@ -208,24 +208,31 @@
 
    The frame between "the browser has the HTML" and "the page is on screen".
 
-   `data-booting` is put on <html> by lib/boot.ts and taken off two animation
-   frames later, and while it is there this page does not move. That is worth
-   spelling out, because the things it holds still are things that only ever
-   happen on a reload:
+   Two marks, on <html>, from lib/boot.ts. Both hold something still while the
+   page opens, and they end at different moments because what they hold is
+   settled at different moments.
 
-    - The scroll position. A browser restores it on refresh, and with
-      `scroll-behavior: smooth` below, it *animates* down to it — the page opens
-      at the top and scrolls itself to where the reader was, every time. There is
-      no reader who asked for that.
-    - Every transition. Anything whose final colour, position or size is settled
-      by script rather than by the server — the palette, the masthead's own
-      layout — would otherwise be watched crossfading into place.
+   `data-booting` lasts two animation frames and holds every transition.
+   Anything whose final colour, position or size is decided by script rather
+   than by the server — the palette, the masthead's own layout — would otherwise
+   be watched crossfading into place. It ends as early as it can: a reader who
+   presses something in the first second should see the press.
 
-   It is a floor, not a ceiling: entrance animations are left alone, because an
+   `data-settling` lasts until the page has loaded, and holds the document's
+   smooth scrolling. A browser restores the scroll position of a refresh and
+   keeps adjusting it while the page settles — with `scroll-behavior: smooth`
+   below, every one of those adjustments is an animation, and the page is
+   watched scrolling itself down to where the reader already was. There is no
+   reader who asked for that.
+
+   Both are floors, not ceilings: entrance animations are left alone, because an
    element that arrives after the page has settled *should* read as arriving.
+   What must not carry one is an element that was in the server's HTML — it did
+   not arrive, it was always there — which is a question of which selectors get
+   an animation, not of this block.
    ========================================================================== */
 
-:root[data-booting] {
+:root[data-settling] {
   scroll-behavior: auto !important;
 }
 
@@ -1368,6 +1375,21 @@ p {
 }
 
 /*
+ * The price panel, holding its own space while it reads the log.
+ *
+ * `--panel-hint` is the height this panel had on this exact page the last time
+ * this browser saw it, written onto <html> by the boot script before the first
+ * paint (lib/panelHint.ts). `data-filling` is on the panel until it has
+ * something to draw, so the reservation lasts exactly as long as the wait does
+ * and never a frame longer — a listing whose history has changed since is laid
+ * out by its content, and a first visit, which has no memory to draw on, behaves
+ * as it always did.
+ */
+.factbox--history[data-filling] {
+  min-height: var(--panel-hint, 0px);
+}
+
+/*
  * Contract data, folded shut.
  *
  * Quieter than the panel it sits under — a hairline and no black bar — because
@@ -1875,6 +1897,27 @@ p {
   margin-top: 0.15em;
 }
 
+/*
+ * The line's space, held while there is no rate to write in it.
+ *
+ * A stacked conversion is a whole line under a figure, and the rate arrives a
+ * few hundred milliseconds after the page does — so without this, every listing
+ * and every fact table grows by a line, one beat after the reader is looking at
+ * it. The held line is empty and hidden from assistive technology
+ * (components/FiatValue.tsx): there is no estimate yet, and a page that reserves
+ * space for one is not a page that claims one.
+ *
+ * Only the stacked variant. The inline one sits at the end of a line of type
+ * that reflows around it, and a blank gap mid-sentence is worse than the reflow.
+ *
+ * `visibility` rather than a height: the element holds a single blank character
+ * in the same face at the same size, so the space it reserves is measured by the
+ * browser from the line it will be replaced by, not guessed at here.
+ */
+.fiat--held {
+  visibility: hidden;
+}
+
 /* A row of toggle chips: the USD/IDR pair and the cookie answer, both in the
    settings panel. */
 .chip-row {
@@ -2372,9 +2415,16 @@ p {
  * them reads as one thing progressing instead of as the panel flickering. The
  * component re-keys these on the message text, which is what makes the
  * animation run again on each new one rather than only on the first.
+ *
+ * `--live` is what marks a line as one that *arrives*: a step of a trade, a
+ * wait that has gone on too long, a balance that has just been read. The panel's
+ * standing advisories — trading halted, curve closed, terms unverified — are in
+ * the server's HTML and carry no modifier, because an element that was on the
+ * page before the reader was cannot fade into it. Animating those meant every
+ * refresh of a halted or graduated listing opened with its panel fading up.
  */
-.trade-panel .status,
-.trade-panel .notice {
+.trade-panel .status--live,
+.trade-panel .notice--live {
   animation: line-in var(--dur) var(--ease) both;
 }
 

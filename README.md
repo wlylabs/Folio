@@ -260,7 +260,7 @@ list in full daylight opened from a dark page is the whole illusion gone.
 
 ### What happens on a reload
 
-Four things are settled by `lib/boot.ts` in the document head, before the
+Everything below is settled by `lib/boot.ts` in the document head, before the
 browser paints anything, because each one is a visible fault if it is settled a
 frame later instead:
 
@@ -269,15 +269,42 @@ frame later instead:
   gesture strip below it — the largest surface on the screen the stylesheet
   cannot reach;
 - **a booting mark**, cleared two animation frames later, which holds every CSS
-  transition and the page's smooth scrolling still while the first paint is
-  assembled. A reload restores the scroll position, and with smooth scrolling
-  on the document the browser *animates* down to it — a stutter on every
-  refresh;
+  transition still while the first paint is assembled. It ends as early as it
+  can: a reader who presses something in the first second should see the press;
+- **a settling mark**, cleared when the page has loaded, which holds the
+  document's smooth scrolling. A browser restores the scroll position of a
+  refresh and keeps adjusting it while the page settles — with smooth scrolling
+  on the document, every one of those adjustments is an *animation* down to
+  where the reader already was;
 - **a wallet hint** (`lib/walletHint.ts`), so the masthead holds the space for
   the reader's own link while wagmi revives a stored session, rather than
   gaining a link and reflowing a beat after the page is on screen. It is a
   guess about layout and never an authority on the connection: wagmi still
-  decides that, and the hint is rewritten every time it answers.
+  decides that, and the hint is rewritten every time it answers;
+- **a panel hint** (`lib/panelHint.ts`), which is the same idea for the one
+  panel that cannot arrive with the page. The price history is a dozen log
+  queries behind `/api/token/<address>/trades`, so it mounts saying it is
+  reading the log and fills in — and what fills in is a quote, a chart, the
+  range chips and eight rows of tape, appearing in the middle of an article the
+  reader has already been put back into. So the height it had on this page last
+  time is reserved before the first paint, and the panel fills the space it
+  already holds. Like the wallet hint it decides nothing: it is dropped the
+  moment there is real content, and a listing whose history has changed since is
+  drawn from the log.
+
+Two more shifts on the same frame are settled outside the boot script. A stacked
+fiat conversion holds its line while there is no rate to write in it
+(`components/FiatValue.tsx`), and the last rate served is remembered so the
+second before `/api/eth-price` answers is not a page with no estimates on it
+(`lib/currency.ts`). And an entrance animation is now only ever on an element
+that *arrives*: the trade panel's standing advisories are in the server's HTML
+and no longer fade up on every refresh — `--live` in `app/globals.css` marks the
+ones that do.
+
+Measured on a production build in Chromium, reloading a listing whose trade log
+and price feed are stubbed to answer in 700ms and 400ms: cumulative layout shift
+0.688 before this, 0.000 on every reload after it. A first visit, which has no
+remembered height to reserve, still shifts — there is nothing to know yet.
 
 ### Installing it
 
