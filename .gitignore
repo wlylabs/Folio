@@ -53,8 +53,9 @@ broadcast/
 slither-report.md
 
 # The intro film's webfont cache: half a megabyte of base64 that render.mjs
-# fetches once and can fetch again. The film itself is committed — and so is
-# its score, inside the film's audio track, which is why the 22 MB of PCM that
-# score.mjs writes on the way there is not.
+# fetches once and can fetch again. The film itself is committed.
+#
+# Sound tracks are not: the film ships silent, and any WAV dropped in here to
+# be muxed is a working file rather than a deliverable.
 scripts/intro-video/.cache/
 scripts/intro-video/*.wav

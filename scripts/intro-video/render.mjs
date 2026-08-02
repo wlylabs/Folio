@@ -48,16 +48,16 @@ const SCALE = Number(opts.scale ?? 1);
 const QUALITY = Number(opts.quality ?? 94);
 const CRF = Number(opts.crf ?? 18);
 const OUT = path.resolve(
-  opts.out ?? path.join(HERE, opts.cut === "short" ? "folio-intro-short.mp4" : "folio-intro.mp4")
+  opts.out ?? path.join(HERE, opts.cut === "full" ? "folio-intro.mp4" : "folio-intro-short.mp4")
 );
 const POSTER = opts.poster ? path.resolve(opts.poster) : null;
 const POSTER_AT = Number(opts["poster-at"] ?? 4.6);
-/** A sound track to mux in — score.mjs's output, or a recorded voice. */
+/** A sound track to mux in. The film ships silent; this is how one arrives. */
 const AUDIO = opts.audio ? path.resolve(String(opts.audio)) : null;
 /** Burnt-in captions. Off under a voice: see `SHOW_CAPTIONS` in intro.html. */
 const CAPTIONS = !opts["no-captions"];
-/** Which cut to render: the 78-second film, or the 27-second one. */
-const CUT = opts.cut === "short" ? "short" : "full";
+/** Which cut to render. The short one is what ships, so it is the default. */
+const CUT = opts.cut === "full" ? "full" : "short";
 
 /* -------------------------------------------------------------------------- */
 /* Fonts                                                                      */
@@ -232,7 +232,7 @@ async function main() {
   if (AUDIO) console.log(`· audio    ${AUDIO}`);
   console.log(
     `· ${W}×${H} · ${FPS} fps · ${(end - start).toFixed(1)}s · ${frames} frames` +
-      (CUT === "short" ? " · short cut" : "") +
+      (CUT === "full" ? " · full cut" : "") +
       (CAPTIONS ? "" : " · no captions")
   );
 

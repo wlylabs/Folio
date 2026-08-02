@@ -931,9 +931,8 @@ const FULL = SCENES.map((s) => ({ ...s, from: 0 }));
    owned by a scene: a sentence can hold across a cut, the way a voice does.
    `invert` flips the caption to paper-on-ink for the dark frame.
 
-   These in-points are also the score's: score.mjs cues the music against the
-   scenes rather than the captions, but a line moved far enough to change what
-   is on screen when is worth re-reading the cue list beside. */
+   These six belong to the 78-second assembly; the cut that ships carries the
+   two in SHORT_CAPTIONS instead. */
 const CAPTIONS = [
   { at:  8.2, out: 14.9, text: "Most tokens arrive as a ticker, a supply, and somebody's word for it." },
   { at: 16.4, out: 25.6, width: 820,
@@ -948,11 +947,16 @@ const CAPTIONS = [
     text: "And the part no intro should bury: this is a mainnet, and the money is real." },
 ];
 
-/** Which cut this page is playing. `window.FOLIO_CUT = "short"`, or `?cut=short`. */
+/**
+ * Which cut this page is playing. The short one is what ships, so it is the
+ * default; the long film is still assembled from the same material and can be
+ * played with `window.FOLIO_CUT = "full"` or `?cut=full`, but nothing renders
+ * it unless asked.
+ */
 const CUT =
-  (window.FOLIO_CUT || new URLSearchParams(location.search).get("cut")) === "short"
-    ? { scenes: SHORT, captions: SHORT_CAPTIONS }
-    : { scenes: FULL, captions: CAPTIONS };
+  (window.FOLIO_CUT || new URLSearchParams(location.search).get("cut")) === "full"
+    ? { scenes: FULL, captions: CAPTIONS }
+    : { scenes: SHORT, captions: SHORT_CAPTIONS };
 
 const DURATION = CUT.scenes[CUT.scenes.length - 1].at + CUT.scenes[CUT.scenes.length - 1].dur;
 
