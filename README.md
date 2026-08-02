@@ -152,6 +152,36 @@ delete anyone on the internet could perform.
 went with it — and the next indexer run relists the launch from its event log
 with a placeholder article.
 
+### Clearing out the testnet rows
+
+Folio rehearsed on Base Sepolia, and on a Robinhood testnet before that. The
+listings those launches wrote are still in `tokens`, and their `chain` slug no
+longer resolves to anything — no explorer link, no RPC to read the curve from,
+and a network label that falls back to "Unsupported network".
+
+```
+npm run token:prune-testnet -- --dry-run    # what would go
+npm run token:prune-testnet
+```
+
+Retired is defined by the code rather than a list in the script: it reads
+`SUPPORTED_CHAINS` from `lib/chains.ts` and deletes every row whose chain is not
+in it, avatars included. Nothing is hardcoded, so putting a chain back in that
+list takes its rows out of range. If that array can't be parsed the script stops
+instead of guessing, because "no chain is supported" and "every row is retired"
+are the same sentence to it.
+
+It writes no tombstones, and that is the difference from `token:delete`. A
+tombstone stops `/api/indexer` putting a row back, and the indexer only scans
+chains that have a `deployments/<slug>.json` record — a retired chain has none,
+so nothing is watching and nothing will relist. Pass `--chain <slug>` to prune
+one retired network at a time; naming a *live* chain is refused rather than
+performed, since that is what `token:delete` is for.
+
+Doing it by hand in the SQL editor works too — `delete from tokens where chain
+<> 'robinhood-mainnet'` — but it leaves the avatars behind in Storage, and the
+anon key cannot run it at all: the policies in `lib/schema.sql` allow no deletes.
+
 ## How trading works
 
 The trade bar on an article page has a buy leg and a sell leg, both settling
