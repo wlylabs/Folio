@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FOLIO_SALE_ABI } from "@/lib/contracts/folioSale";
 import { chainBySlug, explorerAddressUrl, explorerTxUrl } from "@/lib/chains";
+import ConnectCue from "@/components/ConnectCue";
 import FiatValue from "@/components/FiatValue";
 import { GasNotice, fixedChainWayOut } from "@/components/GasNotice";
 import { useGasBalance } from "@/components/useGasBalance";
@@ -388,13 +389,16 @@ export default function LegacySaleBar({
                     >
                       {soldOut ? "Sold out" : pending ? busyLabel : `Buy $${token.symbol}`}
                     </button>
-                  ) : (
-                    // No connect control here — the wallet is set in the
-                    // settings panel alone. The slot keeps its geometry, and
-                    // the line under the form says where to go.
+                  ) : soldOut ? (
+                    // Nothing to connect for: a dead button naming the reason
+                    // beats sending somebody after a wallet they cannot spend.
                     <button type="button" className="btn btn--buy btn--block" disabled>
-                      {soldOut ? "Sold out" : `Buy $${token.symbol}`}
+                      Sold out
                     </button>
+                  ) : (
+                    // The sale is open and the wallet is the only thing
+                    // missing, so the slot asks for one. See ConnectCue.
+                    <ConnectCue />
                   )}
                 </div>
               </div>
@@ -444,10 +448,14 @@ export default function LegacySaleBar({
                             ? `No $${token.symbol} held`
                             : `Sell $${token.symbol}`}
                     </button>
-                  ) : (
+                  ) : !buyback ? (
+                    // A sale with no buyback can never be sold into, wallet or
+                    // no wallet.
                     <button type="button" className="btn btn--sell btn--block" disabled>
-                      {!buyback ? "No buyback" : `Sell $${token.symbol}`}
+                      No buyback
                     </button>
+                  ) : (
+                    <ConnectCue />
                   )}
                 </div>
               </div>
@@ -471,14 +479,6 @@ export default function LegacySaleBar({
             </>
           )}
 
-          {/* Where the wallet is connected, said once. The controls themselves
-              — connect, network, account, and the phone handoff — live in the
-              settings panel and nowhere else. */}
-          {!isConnected && !walletWaking && (
-            <p className="trade-foot">
-              Connect a wallet under Settings in the masthead to trade.
-            </p>
-          )}
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@
 import { useAccount } from "wagmi";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import ConnectCue from "@/components/ConnectCue";
 import Mark from "@/components/Mark";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { chainLabel } from "@/lib/chains";
@@ -60,12 +61,15 @@ export default function ProfilePage() {
           <p className="eyebrow" style={{ marginBottom: "var(--sp-3)" }}>
             Staff page
           </p>
-          {/* The wallet is connected from the settings panel alone, so this
-              page points there rather than carrying a second control. */}
           <p>
-            Connect your wallet under Settings in the masthead to see the
-            launches published from it.
+            This page lists the launches published from a wallet, so it needs one
+            to read.
           </p>
+          {/* The same connect button as everywhere else — one component, so it
+              cannot drift into a third shape. See ConnectCue. */}
+          <div className="connect-cue">
+            <ConnectCue />
+          </div>
         </div>
       </main>
     );

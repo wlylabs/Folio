@@ -22,6 +22,7 @@ import {
   type TransactionReceipt,
 } from "viem";
 import { useRouter } from "next/navigation";
+import ConnectCue from "@/components/ConnectCue";
 import FiatValue from "@/components/FiatValue";
 import { GasNotice } from "@/components/GasNotice";
 import { useGasBalance } from "@/components/useGasBalance";
@@ -789,17 +790,17 @@ export default function LaunchForm() {
       )}
 
       {/*
-        A notice, not a second connect control. The wallet is set in one place
-        — the settings panel in the masthead — so this says where to go and
-        leaves the connecting to it.
+        The notice carries the request rather than describing where to make it.
+        Same button, same label, same states as the one in the settings panel —
+        it is the same component. See ConnectCue.
       */}
       {!isConnected && (
         <div className="notice" style={{ marginBottom: "var(--sp-5)" }}>
           <p className="notice__title">Connect a wallet to sign the launch</p>
-          <p>
-            Open Settings in the masthead to connect one. Nothing is published
-            until you approve the transaction.
-          </p>
+          <p>Nothing is published until you approve the transaction.</p>
+          <div className="connect-cue">
+            <ConnectCue />
+          </div>
         </div>
       )}
 

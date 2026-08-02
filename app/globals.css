@@ -1089,6 +1089,24 @@ p {
 }
 
 /*
+ * The connect button when it stands in prose rather than in a control slot —
+ * the launch notice, the empty profile. See components/ConnectCue.
+ *
+ * In the trade panel it inherits the trade button's geometry, because it is
+ * standing exactly where that button will be a moment later and the two should
+ * not move under the reader's thumb. In a paragraph there is no such
+ * obligation, and a full-measure button under two lines of type reads as a
+ * banner. So it takes the width of a control instead, and centres, because the
+ * boxes it sits in are centred.
+ */
+.connect-cue {
+  margin-top: var(--sp-4);
+  max-width: 18rem;
+  margin-inline: auto;
+  text-align: left;
+}
+
+/*
  * The wallet handoff: the way into a wallet's own browser, for a phone where
  * connecting from a browser tab does not work. See components/WalletHandoff.
  *

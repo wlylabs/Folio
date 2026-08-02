@@ -113,13 +113,16 @@ export default function SettingsMenu() {
         aria-label={`Settings — ${WALLET_STATE_LABEL[wallet]}`}
         /*
          * The wallet SDKs are not downloaded until somebody looks like they
-         * are heading for them, and this button is the only way in — see
-         * lib/walletBoot.ts. Three events rather than one because they cover
-         * three different readers and the earliest one wins: a pointer resting
-         * on the button, a keyboard reaching it, and a finger pressing it on a
-         * phone that has no hover to offer. All three land before the press of
-         * "Connect wallet" inside the panel, which is the press that used to
-         * pay for this.
+         * are heading for them — see lib/walletBoot.ts. Three events rather
+         * than one because they cover three different readers and the earliest
+         * one wins: a pointer resting on the button, a keyboard reaching it,
+         * and a finger pressing it on a phone that has no hover to offer. All
+         * three land before the press of "Connect wallet" inside the panel,
+         * which is the press that used to pay for this.
+         *
+         * Not the only door any more: ConnectCue releases the same work when a
+         * reader reaches for a connect button somewhere else, which is the
+         * route somebody who arrived straight at a token article takes.
          */
         onPointerEnter={() => bootWallets()}
         onFocus={() => bootWallets()}
