@@ -2359,6 +2359,46 @@ p {
 }
 
 /*
+ * The address on the byline and the note saying whether anyone proved it.
+ * Kept on one line — the mark belongs to the address, and a wrap that separates
+ * them turns "unverified byline" into a standalone accusation.
+ */
+.byline__creator {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 0.4em;
+}
+
+/*
+ * Set in the same micro type as the rest of the byline and one step quieter in
+ * colour. This is a footnote about provenance, not a badge: the loudest thing
+ * on a listing should be what the launch is, and the second loudest what it
+ * costs.
+ */
+.byline__proof {
+  font-size: 0.9em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  /* Both states are explained on hover; the cursor is what says so. */
+  cursor: help;
+}
+
+/*
+ * Green, and only here. The palette reserves green and red for the two sides of
+ * a trade, which is a rule worth bending exactly once: a proved byline is the
+ * one other place on a listing where a reader is being told something is
+ * settled. It carries the word as well as the tick, so nothing rests on hue —
+ * the same bargain the trade panel's markers make.
+ */
+.byline__proof--verified {
+  color: var(--up);
+  font-weight: 600;
+}
+
+/*
  * The anchor down to the trade panel, sitting at the end of the byline. Marked
  * as UI rather than as prose, because it is the one thing in that row that does
  * something.

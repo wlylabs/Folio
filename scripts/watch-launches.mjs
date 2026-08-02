@@ -100,10 +100,23 @@ function endpointFor(slug) {
  * available. `lib/indexer.ts` avoids the problem by reading the generated ABI;
  * this is a plain `.mjs` and cannot import the TypeScript module, so the string
  * is maintained by hand and this comment is the reminder that it must be.
+ *
+ * Both generations are watched, because that struct has already grown once and
+ * the failure it caused is the one described above — a factory deployed before
+ * the opening window emits the five-field version, and a watcher listening only
+ * for the eight-field one sits silent through every launch on it. Subscribing
+ * to both costs one more filter and removes the need to know which generation
+ * is at the other end. See lib/contracts/folioFactoryLegacy.ts, which is the
+ * TypeScript side of the same list.
  */
-const TOKEN_CREATED = parseAbiItem(
-  "event TokenCreated(address indexed token, address indexed creator, string name, string symbol, uint256 totalSupply, (uint256 virtualEthReserve, uint256 maxReserveCap, uint256 graduationThreshold, uint16 feeBps, uint16 priceMoveAlertBps, uint16 sniperWindowSeconds, uint256 sniperMaxEthPerWallet, address migrator) config)"
-);
+const TOKEN_CREATED = [
+  parseAbiItem(
+    "event TokenCreated(address indexed token, address indexed creator, string name, string symbol, uint256 totalSupply, (uint256 virtualEthReserve, uint256 maxReserveCap, uint256 graduationThreshold, uint16 feeBps, uint16 priceMoveAlertBps, uint16 sniperWindowSeconds, uint256 sniperMaxEthPerWallet, address migrator) config)"
+  ),
+  parseAbiItem(
+    "event TokenCreated(address indexed token, address indexed creator, string name, string symbol, uint256 totalSupply, (uint256 virtualEthReserve, uint256 maxReserveCap, uint256 graduationThreshold, uint16 feeBps, uint16 priceMoveAlertBps) config)"
+  ),
+];
 
 /**
  * Ask the site to reconcile its table against the chain.
@@ -166,7 +179,7 @@ const unwatchers = deployments.map(({ slug, factory, name }) => {
 
   return client.watchEvent({
     address: factory,
-    event: TOKEN_CREATED,
+    events: TOKEN_CREATED,
     onLogs: (logs) => {
       for (const log of logs) {
         console.log(`[${stamp()}] ${name}: TokenCreated ${log.args.token} (${log.args.symbol})`);

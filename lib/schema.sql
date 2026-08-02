@@ -46,6 +46,16 @@ alter table tokens add column if not exists avatar_url text;
 alter table tokens add column if not exists sold_amount numeric not null default 0;
 alter table tokens add column if not exists deploy_tx text;
 
+-- Whether creator_wallet was proved rather than claimed.
+--
+-- True only for rows inserted through a Sign-In With Ethereum session: the
+-- publisher signed a message naming this site and that address, and the policy
+-- below checked the signed address against the row. Default false, which is
+-- what every row written before verification existed honestly is — and what a
+-- row inserted with the plain anon key stays, because the anon policy refuses
+-- to store anything else.
+alter table tokens add column if not exists creator_verified boolean not null default false;
+
 -- Addresses are stored lowercased so URL lookups are case-insensitive.
 create index if not exists tokens_creator_wallet_idx on tokens (lower(creator_wallet));
 create index if not exists tokens_created_at_idx on tokens (created_at desc);
@@ -58,11 +68,26 @@ create index if not exists tokens_created_at_idx on tokens (created_at desc);
 -- policies allow public reads and inserts (a launch is a public act) but no
 -- updates and no deletes from the client.
 --
--- Note this cannot prove the inserted creator_wallet belongs to the caller —
--- the anon key carries no wallet identity. Treat creator_wallet as a claim,
--- not an authenticated fact. Verifying it needs signature-based auth
--- (Sign-In With Ethereum) issuing a Supabase JWT, which this scaffold does
--- not implement.
+-- There are two insert policies, and the difference between them is the whole
+-- of Folio's wallet verification:
+--
+--   anon           the public key, which carries no wallet identity. It may
+--                  still publish — a launch is a public act and a deployment
+--                  with verification switched off must keep working — but the
+--                  row it writes is stamped creator_verified = false and it
+--                  cannot say otherwise.
+--   authenticated  a JWT minted by app/api/auth/verify/route.ts after checking
+--                  an EIP-4361 signature. It carries a `wallet` claim, the
+--                  policy below insists the row's creator_wallet is that
+--                  wallet, and only then may the row call itself verified.
+--
+-- So creator_wallet is a claim or a proof, and the row says which. Nothing has
+-- to trust the client about it: the comparison happens in Postgres, where a
+-- component cannot forget to make it.
+--
+-- Powers that move money are still not decided here. claimFees and the
+-- migration prompt read creator() off the contract, because a database row —
+-- verified or not — is the wrong authority for a payout.
 -- ---------------------------------------------------------------------------
 alter table tokens enable row level security;
 
@@ -71,18 +96,36 @@ create policy "tokens are publicly readable"
   on tokens for select
   using (true);
 
-drop policy if exists "anyone may publish a token" on tokens;
-create policy "anyone may publish a token"
-  on tokens for insert
-  with check (
-    length(name) between 1 and 64
-    and length(symbol) between 1 and 16
-    and length(article_title) between 1 and 200
-    and length(article_body) <= 100000
-    and supply > 0
-    and starting_price > 0
-    and contract_address ~ '^0x[0-9a-f]{40}$'
-    and creator_wallet ~ '^0x[0-9a-fA-F]{40}$'
+-- The shape checks both insert policies share.
+--
+-- A function rather than the same fifteen lines written twice: the two policies
+-- differ over *who* may publish and whether the row may call itself verified,
+-- and they must never differ over what a well-formed listing is. Two copies of
+-- that list is two copies to keep in step, and the one that gets forgotten is
+-- the one an attacker finds.
+create or replace function public.folio_listing_is_well_formed(
+  p_name text,
+  p_symbol text,
+  p_article_title text,
+  p_article_body text,
+  p_supply numeric,
+  p_starting_price numeric,
+  p_contract_address text,
+  p_creator_wallet text,
+  p_avatar_url text
+) returns boolean
+language sql
+immutable
+as $$
+  select
+    length(p_name) between 1 and 64
+    and length(p_symbol) between 1 and 16
+    and length(p_article_title) between 1 and 200
+    and length(p_article_body) <= 100000
+    and p_supply > 0
+    and p_starting_price > 0
+    and p_contract_address ~ '^0x[0-9a-f]{40}$'
+    and p_creator_wallet ~ '^0x[0-9a-fA-F]{40}$'
     -- An avatar is a file this site uploaded to its own storage bucket, and a
     -- row is free to carry none. What it may not carry is a URL pointing
     -- anywhere else: the column is rendered into an <img src> on the front
@@ -92,9 +135,40 @@ create policy "anyone may publish a token"
     -- — components/Mark.tsx and the img-src directive in
     -- lib/securityHeaders.js — and this is the one that stops it being stored.
     and (
-      avatar_url is null
-      or avatar_url ~ '^https://[a-z0-9.-]+/storage/v1/object/public/token-avatars/'
+      p_avatar_url is null
+      or p_avatar_url ~ '^https://[a-z0-9.-]+/storage/v1/object/public/token-avatars/'
     )
+$$;
+
+drop policy if exists "anyone may publish a token" on tokens;
+create policy "anyone may publish a token"
+  on tokens for insert
+  to anon
+  with check (
+    public.folio_listing_is_well_formed(
+      name, symbol, article_title, article_body,
+      supply, starting_price, contract_address, creator_wallet, avatar_url
+    )
+    -- The anon key proves nothing about who is holding it, so a row inserted
+    -- with it may not claim its byline was proved. This is the clause that
+    -- makes creator_verified worth reading.
+    and creator_verified = false
+  );
+
+drop policy if exists "a proved wallet may publish under its own address" on tokens;
+create policy "a proved wallet may publish under its own address"
+  on tokens for insert
+  to authenticated
+  with check (
+    public.folio_listing_is_well_formed(
+      name, symbol, article_title, article_body,
+      supply, starting_price, contract_address, creator_wallet, avatar_url
+    )
+    -- The claim minted by app/api/auth/verify/route.ts, which put it there only
+    -- after checking a signature over a message naming this site, this address
+    -- and a nonce it had issued minutes earlier.
+    and lower(creator_wallet) = lower(coalesce(auth.jwt() ->> 'wallet', ''))
+    and creator_verified = true
   );
 
 -- ---------------------------------------------------------------------------

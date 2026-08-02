@@ -4,8 +4,10 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import TradeBar from "@/components/TradeBar";
 import TradeHistoryPanel from "@/components/TradeHistoryPanel";
 import CreatorFees from "@/components/CreatorFees";
+import MigrationPrompt from "@/components/MigrationPrompt";
 import SetupNotice from "@/components/SetupNotice";
 import Mark from "@/components/Mark";
+import CreatorMark from "@/components/CreatorMark";
 import FiatValue from "@/components/FiatValue";
 import JsonLd from "@/components/JsonLd";
 import { sanitizeArticleHtml } from "@/lib/sanitize";
@@ -137,12 +139,11 @@ export default async function TokenPage({
             name={token.name}
             size="sm"
           />
-          <span>
-            by{" "}
-            <b className="mono" style={{ color: "var(--ink)" }}>
-              {shortAddress(token.creator_wallet)}
-            </b>
-          </span>
+          <CreatorMark
+            wallet={token.creator_wallet}
+            verified={token.creator_verified}
+            href={explorerAddressUrl(token.chain, token.creator_wallet)}
+          />
           <span aria-hidden="true">·</span>
           <span>{formatDate(token.created_at)}</span>
 
@@ -216,6 +217,15 @@ export default async function TokenPage({
         )}
 
         <TradeBar token={token} stats={stats} />
+
+        {/*
+          The step after the curve, where a launch has graduated and the
+          deployment named a migrator. It renders nothing in every other case,
+          which is most of them — see the component. Placed directly under the
+          panel because it is the same decision surface: the trade bar has just
+          told the reader buying is closed, and this is what closed means next.
+        */}
+        {stats.kind === "curve" && <MigrationPrompt token={token} stats={stats} />}
 
         {/*
           Everything the contract says, folded. Shut by default because it is

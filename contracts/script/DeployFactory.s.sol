@@ -163,10 +163,28 @@ contract DeployFactory is FolioScript {
             json, _str("graduationThreshold", vm.toString(config.graduationThreshold), 4)
         );
         json = string.concat(json, _num("feeBps", config.feeBps, 4));
-        // Last entry in the object, so no trailing comma.
+        json = string.concat(json, _num("priceMoveAlertBps", config.priceMoveAlertBps, 4));
+        // The three that arrived with the opening window and with migration.
+        //
+        // Written because the frontend reads them: `lib/contracts/deployment.ts`
+        // takes the whole `defaultConfig` off this record, and the create form
+        // states the platform's window and per-wallet cap from it and validates
+        // a creator's tightening against them. A record that omits a field does
+        // not read as "unknown" there — it reads as zero, which is the same
+        // sentence as "this platform has no opening window" and is the wrong
+        // thing to tell a creator about a factory that has one.
+        //
+        // Absent from records written before this line existed, which
+        // `deployment.ts` treats as the honest zero it is for a factory of that
+        // generation.
+        json =
+            string.concat(json, _num("sniperWindowSeconds", config.sniperWindowSeconds, 4));
         json = string.concat(
-            json, '    "priceMoveAlertBps": ', vm.toString(uint256(config.priceMoveAlertBps)), "\n"
+            json, _str("sniperMaxEthPerWallet", vm.toString(config.sniperMaxEthPerWallet), 4)
         );
+        // Last entry in the object, so no trailing comma.
+        json =
+            string.concat(json, '    "migrator": "', vm.toString(config.migrator), '"\n');
         json = string.concat(json, "  }\n}\n");
 
         vm.writeFile(deploymentsPath(), json);

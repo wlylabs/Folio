@@ -35,5 +35,37 @@ export const supabase = new Proxy({} as SupabaseClient, {
   },
 });
 
+/**
+ * A client that speaks as a proved wallet rather than as the anonymous public.
+ *
+ * The token comes from `/api/auth/verify` (see `lib/walletAuth.ts`) and carries
+ * the address the reader signed for. PostgREST validates it against the
+ * project's JWT secret and exposes its claims to the policies, which is what
+ * lets `lib/schema.sql` insist that a row's `creator_wallet` is the wallet that
+ * signed — a check no component can skip, because it is not in a component.
+ *
+ * Deliberately not the shared instance, and deliberately not cached: this
+ * client exists for the length of one publish, and a module-level client
+ * holding a credential is a client that outlives the reason it had one.
+ *
+ * The anon key is still sent alongside. Supabase uses it to route the request
+ * to the project; the `Authorization` header is what decides who is asking.
+ */
+export function supabaseAs(token: string): SupabaseClient {
+  if (!isSupabaseConfigured) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  return createClient(supabaseUrl!, supabaseAnonKey!, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    // There is no Supabase-managed session here — the JWT was minted by
+    // Folio's own route — so there is nothing to persist and nothing to
+    // refresh. Leaving these on makes the client write a session it did not
+    // create into storage and then try to renew it against an endpoint that
+    // never issued it.
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 // The table and storage bucket live in lib/schema.sql — run it in the
 // Supabase SQL editor.

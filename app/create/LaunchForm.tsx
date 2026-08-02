@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useAccount, useConfig } from "wagmi";
+import { useAccount, useConfig, useReadContract } from "wagmi";
 import {
   getAccount,
   getPublicClient,
@@ -16,9 +16,7 @@ import type { Config } from "wagmi";
 import {
   formatEther,
   formatUnits,
-  getAbiItem,
   parseEther,
-  parseEventLogs,
   type TransactionReceipt,
 } from "viem";
 import { useRouter } from "next/navigation";
@@ -26,8 +24,19 @@ import ConnectCue from "@/components/ConnectCue";
 import FiatValue from "@/components/FiatValue";
 import { GasNotice } from "@/components/GasNotice";
 import { useGasBalance } from "@/components/useGasBalance";
-import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { supabase, supabaseAs, isSupabaseConfigured } from "@/lib/supabaseClient";
+import {
+  SignInRefused,
+  ensureCreatorSession,
+  type CreatorSession,
+} from "@/lib/walletAuth";
 import { FOLIO_FACTORY_ABI } from "@/lib/contracts/folioFactory";
+import {
+  GENERATION_PROBE,
+  LEGACY_FOLIO_FACTORY_ABI,
+  TOKEN_CREATED_EVENTS,
+  findTokenCreated,
+} from "@/lib/contracts/folioFactoryLegacy";
 import {
   FACTORY_DEPLOYMENT,
   FACTORY_DEPLOYMENTS,
@@ -133,8 +142,6 @@ class AuthoredFailure extends Error {
   }
 }
 
-const TOKEN_CREATED_EVENT = getAbiItem({ abi: FOLIO_FACTORY_ABI, name: "TokenCreated" });
-
 /**
  * The TokenCreated log for a confirmed launch: the token's address and the
  * supply the factory actually minted, or null if neither can be found.
@@ -149,6 +156,12 @@ const TOKEN_CREATED_EVENT = getAbiItem({ abi: FOLIO_FACTORY_ABI, name: "TokenCre
  *
  * Matched on the transaction hash, so a second launch landing in the same block
  * is never mistaken for this one.
+ *
+ * Both generations of the event are tried, because the config struct inside it
+ * grew and took `topic0` with it — see lib/contracts/folioFactoryLegacy.ts. A
+ * filter on the wrong topic finds nothing, which is indistinguishable from a
+ * launch that did not happen and is exactly the wrong thing to tell somebody
+ * who has just paid for one.
  */
 async function findCreatedToken(
   config: Config,
@@ -159,14 +172,8 @@ async function findCreatedToken(
     receipt,
   }: { factory: `0x${string}`; chainId: number; hash: string; receipt: TransactionReceipt }
 ): Promise<{ token: string; totalSupply: bigint } | null> {
-  const fromReceipt = parseEventLogs({
-    abi: FOLIO_FACTORY_ABI,
-    eventName: "TokenCreated",
-    logs: receipt.logs,
-  }).find((log) => log.address.toLowerCase() === factory.toLowerCase());
-  if (fromReceipt) {
-    return { token: fromReceipt.args.token, totalSupply: fromReceipt.args.totalSupply };
-  }
+  const fromReceipt = findTokenCreated(receipt.logs, factory);
+  if (fromReceipt) return fromReceipt;
 
   const client = getPublicClient(config, { chainId });
   if (!client) return null;
@@ -174,13 +181,12 @@ async function findCreatedToken(
   try {
     const logs = await client.getLogs({
       address: factory,
-      event: TOKEN_CREATED_EVENT,
+      events: TOKEN_CREATED_EVENTS,
       fromBlock: receipt.blockNumber,
       toBlock: receipt.blockNumber,
-      strict: true,
     });
-    const mine = logs.find((log) => log.transactionHash?.toLowerCase() === hash.toLowerCase());
-    return mine ? { token: mine.args.token, totalSupply: mine.args.totalSupply } : null;
+    const mine = logs.filter((log) => log.transactionHash?.toLowerCase() === hash.toLowerCase());
+    return mine.length > 0 ? findTokenCreated(mine, factory) : null;
   } catch (err) {
     // A second lookup that cannot run leaves the receipt's answer standing.
     console.warn("Could not re-read the launch block for TokenCreated:", err);
@@ -188,10 +194,11 @@ async function findCreatedToken(
   }
 }
 
-type Stage = "idle" | "uploading" | "launching" | "confirming" | "saving";
+type Stage = "idle" | "uploading" | "signing" | "launching" | "confirming" | "saving";
 
 const STAGE_LABEL: Record<Exclude<Stage, "idle">, string> = {
   uploading: "Uploading avatar...",
+  signing: "Sign in with your wallet — free, no transaction...",
   launching: "Confirm the launch in your wallet...",
   confirming: "Creating the token on chain...",
   saving: "Publishing article...",
@@ -386,6 +393,31 @@ export default function LaunchForm() {
   // picked, or when none of them has a factory.
   const launchChain = deployment?.chain ?? DEFAULT_CHAIN_SLUG;
 
+  /*
+   * Whether the factory on the other end knows about the opening window.
+   *
+   * The deployment record cannot answer this. It carries the terms the deploy
+   * script wrote down, and a record written by an older script simply has no
+   * opinion about fields that did not exist yet — which reads here as "no
+   * window", indistinguishable from a platform that switched it off. The
+   * contract is the one thing that cannot be out of date about itself, so it is
+   * asked: `MAX_SNIPER_WINDOW_SECONDS` is a constant that arrived with the
+   * mechanism, and a factory without it reverts.
+   *
+   * `retry: false` because a revert is the expected answer half the time and
+   * re-asking is only latency. Undefined while the read is in flight, which the
+   * two fields below treat as "not yet" rather than "no" — offering a control
+   * and taking it away again is worse than offering it a beat late.
+   */
+  const { data: sniperWindowCeiling, isLoading: probingFactory } = useReadContract({
+    ...GENERATION_PROBE,
+    address: deployment?.factory,
+    chainId: chainEntry?.chain.id,
+    query: { enabled: Boolean(deployment?.factory && chainEntry), retry: false, staleTime: Infinity },
+  });
+
+  const openingWindow = sniperWindowCeiling !== undefined;
+
   // Launching costs gas, and a wallet that has never touched this network has
   // none. Read the balance up front so the form can say so instead of letting
   // the wallet reject the signature — and keep reading it, so ETH that arrives
@@ -553,10 +585,60 @@ export default function LaunchForm() {
         });
       }
 
-      // The six-argument overload, always. Zero means "use the platform default"
-      // for each of the three; anything else tightens this launch — a smaller
-      // blast radius, a longer opening window, a smaller bite per wallet. None
-      // of them can go the other way, here or on the factory.
+      /*
+       * Prove the byline before anything is spent proving nothing.
+       *
+       * The article is inserted at the end of this function, long after the
+       * token exists — so a signature asked for *there* is a signature that,
+       * if declined, leaves a live token with no listing and real gas spent.
+       * Asked for here it costs nothing to refuse: no transaction has been
+       * sent, and the reader can simply try again.
+       *
+       * A deployment with no SUPABASE_JWT_SECRET answers `configured: false`
+       * and no wallet is disturbed at all. That is not a degraded path, it is
+       * the path this app had until now: the listing publishes with an
+       * unverified byline and says so on the page.
+       */
+      let session: CreatorSession = { configured: false, token: null, address: null };
+      try {
+        setStage("signing");
+        session = await ensureCreatorSession(config, {
+          address,
+          chainId: chainEntry.chain.id,
+        });
+      } catch (err) {
+        throw new AuthoredFailure({
+          title:
+            err instanceof SignInRefused && err.declined
+              ? "The sign-in was declined"
+              : "Folio could not verify this wallet",
+          body:
+            err instanceof SignInRefused && err.declined
+              ? "Publishing under an address means signing for it once — a signature, not a transaction: it costs no gas and moves nothing. Nothing was sent, so trying again costs nothing either."
+              : `${err instanceof Error ? err.message : String(err)} Nothing was signed and no gas was spent.`,
+        });
+      }
+
+      setStage("launching");
+
+      /*
+       * The widest overload the factory in front of us actually has.
+       *
+       * Zero means "use the platform default" for each of the three tightenings;
+       * anything else tightens this launch — a smaller blast radius, a longer
+       * opening window, a smaller bite per wallet. None of them can go the other
+       * way, here or on the factory.
+       *
+       * The six-argument form arrived with the opening window, and a factory
+       * deployed before it does not have that selector at all. Calling it there
+       * is a revert with nothing in it that names the cause, on a form that has
+       * already asked for a signature — so the overload is chosen from what the
+       * factory answers rather than from what this repository last compiled.
+       * The four-argument form is the same launch minus a mechanism that
+       * factory does not have, which is the honest fallback rather than a
+       * degraded one. `openingWindow` is what decided which fields were even
+       * offered above.
+       */
       const cap = form.maxReserveCap.trim() ? parseEther(form.maxReserveCap.trim()) : 0n;
       const sniperWindow = form.sniperWindowSeconds.trim()
         ? Number(form.sniperWindowSeconds.trim())
@@ -565,7 +647,17 @@ export default function LaunchForm() {
         ? parseEther(form.sniperMaxEthPerWallet.trim())
         : 0n;
 
-      const call = {
+      /*
+       * Two whole calls rather than one with a branching argument list.
+       *
+       * wagmi types `args` off the ABI and the function name together, so a
+       * value that is one shape or the other loses that link and lands as an
+       * unchecked union — which is precisely the check worth keeping on the one
+       * call in this app that costs money. Written out twice, each one is
+       * verified against its own ABI at compile time, and `openingWindow`
+       * chooses between two things that are each known to be right.
+       */
+      const modern = {
         address: deployment.factory,
         abi: FOLIO_FACTORY_ABI,
         functionName: "createToken",
@@ -580,6 +672,14 @@ export default function LaunchForm() {
         chainId: chainEntry.chain.id,
       } as const;
 
+      const legacy = {
+        address: deployment.factory,
+        abi: LEGACY_FOLIO_FACTORY_ABI,
+        functionName: "createToken",
+        args: [form.name.trim(), form.symbol.trim(), BigInt(form.supply.trim()), cap],
+        chainId: chainEntry.chain.id,
+      } as const;
+
       // Ask the chain what this call would do before asking anyone to sign it.
       // The case that matters is an address with no contract behind it: a call
       // to one succeeds, costs gas and emits nothing, which at the receipt is
@@ -587,7 +687,9 @@ export default function LaunchForm() {
       // before the money is spent — as it does a paused factory, or a supply
       // this factory's curve won't take.
       try {
-        await simulateContract(config, { ...call, account: address });
+        await (openingWindow
+          ? simulateContract(config, { ...modern, account: address })
+          : simulateContract(config, { ...legacy, account: address }));
       } catch (err) {
         const refusal = classifyTxError(err);
         if (refusal.reason === "NoContract") {
@@ -608,7 +710,9 @@ export default function LaunchForm() {
         console.warn("Launch preflight could not run:", err);
       }
 
-      const hash = await writeContract(config, call);
+      const hash = openingWindow
+        ? await writeContract(config, modern)
+        : await writeContract(config, legacy);
       sentHash = hash;
       setTxHash(hash);
 
@@ -649,7 +753,11 @@ export default function LaunchForm() {
       const wholeSupply = Number(formatUnits(created.totalSupply, 18));
 
       setStage("saving");
-      const { error } = await supabase.from("tokens").insert({
+      // The proved session where there is one, the public key where there is
+      // not. The policies in lib/schema.sql tell the two apart and stamp the
+      // row accordingly — this side only has to be honest about which it holds.
+      const db = session.configured ? supabaseAs(session.token) : supabase;
+      const { error } = await db.from("tokens").insert({
         contract_address: contractAddress,
         chain: deployment.chain,
         name: form.name.trim(),
@@ -661,6 +769,10 @@ export default function LaunchForm() {
         // never from here.
         starting_price: openingPriceEth(wholeSupply, curve),
         creator_wallet: address.toLowerCase(),
+        // Only ever true alongside a token that proved it. The insert policy
+        // checks the same thing against the JWT's own claim, so this field is a
+        // statement of intent rather than the thing being trusted.
+        creator_verified: session.configured,
         article_title: form.articleTitle.trim(),
         // An untouched editor still serialises to "<p></p>"; store nothing
         // rather than an empty paragraph.
@@ -903,55 +1015,78 @@ export default function LaunchForm() {
             />
           </Field>
 
-          <Field
-            label="Opening window (seconds)"
-            hint={
-              curve
-                ? `Optional. Blank uses the platform default of ${curve.sniperWindowSeconds}s. You may lengthen it, never shorten it — a longer window is more protection from snipers, not less.`
-                : "Optional."
-            }
-            error={errors.sniperWindowSeconds}
-          >
-            <input
-              type="number"
-              min="0"
-              step="1"
-              inputMode="numeric"
-              placeholder={curve ? String(curve.sniperWindowSeconds) : "120"}
-              value={form.sniperWindowSeconds}
-              onChange={(e) => set("sniperWindowSeconds")(e.target.value)}
-              disabled={busy}
-              className="input"
-            />
-          </Field>
+          {/*
+            The opening window, offered only where the factory has one.
+            A field whose value the contract has no argument to receive is a
+            promise the launch cannot keep — the reader would set a cap, watch
+            it be dropped on the way to a four-argument call, and never be told.
+            So the pair is withheld instead, and the line below says why rather
+            than leaving a gap where two controls used to be. Withheld while the
+            probe is still in flight too, since "not yet" is not "no".
+          */}
+          {openingWindow && (
+            <>
+              <Field
+                label="Opening window (seconds)"
+                hint={
+                  curve
+                    ? `Optional. Blank uses the platform default of ${curve.sniperWindowSeconds}s. You may lengthen it, never shorten it — a longer window is more protection from snipers, not less.`
+                    : "Optional."
+                }
+                error={errors.sniperWindowSeconds}
+              >
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="numeric"
+                  placeholder={curve ? String(curve.sniperWindowSeconds) : "120"}
+                  value={form.sniperWindowSeconds}
+                  onChange={(e) => set("sniperWindowSeconds")(e.target.value)}
+                  disabled={busy}
+                  className="input"
+                />
+              </Field>
 
-          <Field
-            label="Opening cap per wallet (ETH)"
-            hint={
-              curve && curve.sniperMaxEthPerWallet > 0n
-                ? `Optional. Blank uses the platform default of ${formatEth(
-                    Number(formatEther(curve.sniperMaxEthPerWallet))
-                  )} ETH. You may lower it, never raise it. It caps addresses, not people — a determined bot can fund more wallets.`
-                : "Optional. This platform sets no default, so a window you switch on needs a cap here."
-            }
-            error={errors.sniperMaxEthPerWallet}
-          >
-            <input
-              type="number"
-              min="0"
-              step="0.0001"
-              inputMode="decimal"
-              placeholder={
-                curve && curve.sniperMaxEthPerWallet > 0n
-                  ? formatEther(curve.sniperMaxEthPerWallet)
-                  : "0.1"
-              }
-              value={form.sniperMaxEthPerWallet}
-              onChange={(e) => set("sniperMaxEthPerWallet")(e.target.value)}
-              disabled={busy}
-              className="input"
-            />
-          </Field>
+              <Field
+                label="Opening cap per wallet (ETH)"
+                hint={
+                  curve && curve.sniperMaxEthPerWallet > 0n
+                    ? `Optional. Blank uses the platform default of ${formatEth(
+                        Number(formatEther(curve.sniperMaxEthPerWallet))
+                      )} ETH. You may lower it, never raise it. It caps addresses, not people — a determined bot can fund more wallets.`
+                    : "Optional. This platform sets no default, so a window you switch on needs a cap here."
+                }
+                error={errors.sniperMaxEthPerWallet}
+              >
+                <input
+                  type="number"
+                  min="0"
+                  step="0.0001"
+                  inputMode="decimal"
+                  placeholder={
+                    curve && curve.sniperMaxEthPerWallet > 0n
+                      ? formatEther(curve.sniperMaxEthPerWallet)
+                      : "0.1"
+                  }
+                  value={form.sniperMaxEthPerWallet}
+                  onChange={(e) => set("sniperMaxEthPerWallet")(e.target.value)}
+                  disabled={busy}
+                  className="input"
+                />
+              </Field>
+            </>
+          )}
+
+          {!openingWindow && !probingFactory && deployment && (
+            <p className="field__hint" style={{ gridColumn: "1 / -1" }}>
+              The factory on {chainEntry?.chain.name ?? launchChain} predates the
+              opening-window cap, so this launch cannot carry one. Everything else
+              is unchanged: the curve, the reserve ceiling and the creator fee all
+              work as described. A redeployed factory offers the window here
+              without any change to this page.
+            </p>
+          )}
 
           <Field label="Article headline" error={errors.articleTitle} wide>
             <input

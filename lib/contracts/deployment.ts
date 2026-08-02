@@ -242,7 +242,12 @@ export function tokenContract(address: string) {
  */
 export function openingPriceEth(
   wholeSupply: number,
-  config: CurveConfig | undefined = FACTORY_DEPLOYMENT?.defaultConfig
+  // The one member this needs, rather than the whole struct. `lib/indexer.ts`
+  // decodes launches from either generation of the `TokenCreated` event, and
+  // the older one carries five fields — every one of which this function
+  // ignores except the first. Asking for more than is read would make a
+  // perfectly usable log unusable.
+  config: Pick<CurveConfig, "virtualEthReserve"> | undefined = FACTORY_DEPLOYMENT?.defaultConfig
 ): number {
   if (!config || !Number.isFinite(wholeSupply) || wholeSupply <= 0) return 0;
   return Number(config.virtualEthReserve) / 1e18 / wholeSupply;

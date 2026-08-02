@@ -8,6 +8,16 @@ export type Token = {
   supply: number;
   starting_price: number;
   creator_wallet: string;
+  /**
+   * Whether `creator_wallet` was proved rather than claimed.
+   *
+   * True only where the publisher signed an EIP-4361 message for this site and
+   * that address, and the insert policy in lib/schema.sql checked the signed
+   * address against the row. Optional on this type because a listing written
+   * before the column existed simply has no opinion, and a `false` and an
+   * absence should read the same to every caller: not proved.
+   */
+  creator_verified?: boolean | null;
   article_title: string;
   article_body: string;
   avatar_url: string | null;

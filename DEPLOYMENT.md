@@ -328,6 +328,38 @@ reserves it holds. The JSON record is overwritten, so the previous address
 survives only in git history. The script prints the address it is about to
 replace as part of the confirmation.
 
+### When the deployed factory is older than the checkout
+
+`contracts/src/types/CurveConfig.sol` has grown once since the factory currently
+recorded in `deployments/robinhood-mainnet.json` was deployed —
+`sniperWindowSeconds`, `sniperMaxEthPerWallet` and `migrator` arrived with the
+opening window and with migration. That struct is an argument to `createToken`'s
+widest overload and a member of `TokenCreated`, so the older factory has neither
+the six-argument selector nor the current event topic.
+
+The factory at `0x7a2dddAE4c5Ae1db2b7450931FB66776C31b0131` is one of those. It
+is real, it is unpaused, and it launches tokens through
+`createToken(string,string,uint256,uint256)` — but not through the six-argument
+form, and it emits `TokenCreated` under topic
+`0x796c556f9ab8653a0ba060954c21149cffeeb55912775b2116bcef6188536dfa`.
+
+The app handles both — see **Two generations of factory** in the README — so
+nothing is broken while it stays. What it cannot do is give those launches an
+opening-window cap or a migration path, because the contract has neither. To get
+them, redeploy: `tokenCount()` on that factory is `0`, so there is nothing on it
+to strand.
+
+Two things to set deliberately when you do:
+
+- `FACTORY_SNIPER_WINDOW_SECONDS` and `FACTORY_SNIPER_MAX_ETH_PER_WALLET`, which
+  default to 120s and 0.25 ETH.
+- `FACTORY_MIGRATOR`, which defaults to the zero address — a curve that is
+  terminal. Read the migration section of `contracts/README.md` before setting
+  it: it ends the sell-back guarantee for every launch created afterwards.
+
+`DeployFactory.s.sol` writes all eight config fields into the record, so a fresh
+deploy leaves the create page stating the terms it actually deployed with.
+
 ### Deploying from CI (GitHub Actions)
 
 `.github/workflows/deploy-robinhood-mainnet.yml` runs the same script from CI,
@@ -667,6 +699,12 @@ Nothing else changes.
       process.
 - [ ] The create page's "Curve terms" box shows the terms you deployed with.
       They are read from the same JSON, so a mismatch means a stale file.
+- [ ] The create form offers **Opening window** and **Opening cap per wallet**.
+      Those two fields appear only where the factory answers
+      `MAX_SNIPER_WINDOW_SECONDS`, so their absence means the deploy landed from
+      a checkout older than that mechanism — see *When the deployed factory is
+      older than the checkout* above. The form says so in place of the fields
+      rather than silently dropping what you type into them.
 
 ### Env vars the frontend adds
 
@@ -678,6 +716,7 @@ None are required. All five are optional and documented in `.env.example`:
 | `GOOGLE_SITE_VERIFICATION` | The `content` value from Search Console's HTML-tag method. Renders the verification `<meta>` in `<head>`. Server-only. |
 | `NEXT_PUBLIC_FACTORY_ADDRESS` | Point a preview build at a different factory without editing the repo. Overrides the JSON. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Let the indexer write as the service role. Server-only — it bypasses row level security. |
+| `SUPABASE_JWT_SECRET` | Turn on wallet verification, so a byline is signed for rather than typed in. Server-only. Re-run `lib/schema.sql` after setting it. |
 | `INDEXER_SECRET` | Require `Authorization: Bearer <secret>` on `/api/indexer`. Set it on anything public. |
 | `INDEXER_FROM_BLOCK` | Override the indexer's scan floor. |
 | `COINGECKO_API_KEY` | Use a CoinGecko Pro plan for `/api/eth-price` instead of the free public endpoint. Server-only. |
