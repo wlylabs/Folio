@@ -1,19 +1,22 @@
 {
   "network": "robinhood-mainnet",
   "chainId": 4663,
-  "factory": "0x7a2dddAE4c5Ae1db2b7450931FB66776C31b0131",
-  "implementation": "0xDCF32f50ab60f70547B52166154fE09C150E6B88",
+  "factory": "0xcCdE95C857561E16E14d37f235E8cb5F5cd35469",
+  "implementation": "0xD45FFa6729460DeD0E093a7E4c4F2f6C98655305",
   "owner": "0xf6c34946fcd1AA9469BAbef0B93496E62cf1fcAa",
   "deployer": "0xf6c34946fcd1AA9469BAbef0B93496E62cf1fcAa",
-  "deployedAtBlock": 24966563,
-  "deployedAtTimestamp": 1785580022,
+  "deployedAtBlock": 25733440,
+  "deployedAtTimestamp": 1785656945,
   "explorer": "https://robinhoodchain.blockscout.com",
   "lastToken": "",
   "defaultConfig": {
-    "virtualEthReserve": "2000000000000000000",
-    "maxReserveCap": "5000000000000000000",
-    "graduationThreshold": "4000000000000000000",
+    "virtualEthReserve": "5000000000000000000",
+    "maxReserveCap": "12000000000000000000",
+    "graduationThreshold": "10000000000000000000",
     "feeBps": 100,
-    "priceMoveAlertBps": 10000
+    "priceMoveAlertBps": 10000,
+    "sniperWindowSeconds": 120,
+    "sniperMaxEthPerWallet": "250000000000000000",
+    "migrator": "0x0000000000000000000000000000000000000000"
   }
 }
