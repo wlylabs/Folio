@@ -9,17 +9,23 @@ the three faces `app/layout.tsx` self-hosts, the mark from `components/Logo.tsx`
 hairline rules and square corners. Nothing in it is a stock template, and
 nothing in it claims anything the site does not.
 
-One cut, and it serves both cases: the narration is burnt in as captions, so it
-reads in the muted autoplay a landing page gives it, and there is a score under
-it for anyone who turns the sound on. Nothing in the film is said twice.
+The narration is burnt in as captions, so it reads in the muted autoplay a
+landing page gives it, and there is a score under it for anyone who turns the
+sound on. Nothing in the film is said twice.
+
+It comes in two lengths. The 78-second film makes the whole argument; the
+27-second cut is the same film in the form an advertisement has to take, for a
+pre-roll, a post or a card at the top of a page. The short one is not the long
+one trimmed — see **The short cut** below.
 
 ```
 scripts/intro-video/
-  intro.html                 the film
-  render.mjs                 renders it to MP4
-  score.mjs                  writes the music under it
-  folio-intro.mp4            the render (1920×1080, 30 fps, captions, scored)
-  folio-intro-poster.jpg     a still, for a <video poster>
+  intro.html                 the film, both cuts
+  render.mjs                 renders either to MP4
+  score.mjs                  writes the music under either
+  folio-intro.mp4            78s · 1920×1080 · 30 fps · captions · scored
+  folio-intro-short.mp4      27.6s · the same, cut as an advertisement
+  folio-intro-poster.jpg     a still, for a <video poster> — serves both
   README.md                  this file, and the narration below
 ```
 
@@ -39,6 +45,7 @@ want to re-render.
 ```
 node scripts/intro-video/render.mjs --scale 0.5 --fps 24    # fast proof
 node scripts/intro-video/render.mjs --start 39 --end 51.5   # one scene
+node scripts/intro-video/render.mjs --cut short             # the advertisement
 node scripts/intro-video/render.mjs --out /tmp/folio.mp4 --crf 18
 ```
 
@@ -49,6 +56,7 @@ node scripts/intro-video/render.mjs --out /tmp/folio.mp4 --crf 18
 | `--crf` | `18` | x264 quality; lower is bigger. The committed file is 21 |
 | `--start`, `--end` | whole film | render a slice, in seconds |
 | `--poster`, `--poster-at` | — | also write a still, at `t` seconds |
+| `--cut` | `full` | `short` renders the 27.6-second advertisement instead |
 | `--no-captions` | off | leave the narration off the glass — for a voiced cut |
 | `--audio` | — | a WAV to mux in as AAC; sliced with `--start` so it stays in step |
 | `--ffmpeg` | auto | path to an H.264-capable ffmpeg |
@@ -81,11 +89,50 @@ The shape of it:
 - `SHOW_CAPTIONS` decides whether they are drawn at all. `?captions=0` in the
   browser, `--no-captions` under the renderer — for the case where a voice is
   carrying the narration instead.
+- `SHORT` and `SHORT_CAPTIONS` are the advertisement, and `CUT` picks between
+  them and the full film. `?cut=short` in the browser, `--cut short` under the
+  renderer.
 - `rise`, `riseEach`, `words` and `chars` are the only entrances the film has.
   One vocabulary, used everywhere.
 
 Two easings and no more — `easeOut` for anything entering, `easeInOut` for
 anything that both starts and stops on screen.
+
+## The short cut
+
+`--cut short` is a second film out of the same page: 27.6 seconds, five scenes,
+two captions.
+
+It is not the long film trimmed, and it is not a montage of clips either. Every
+segment in `SHORT` names a scene and a window inside that scene's own clock,
+and the renderer is handed `from + dur` as that scene's length — so the scene
+plays its own exit where the segment ends instead of being cut off mid-move.
+Nothing in it is a shortened animation; it is the same animations, fewer of
+them, each played whole.
+
+| | in | scene | what it is there for |
+| --- | --- | --- | --- |
+| 1 | 0:00 | Masthead | The mark, the wordmark, the promise |
+| 2 | 0:05 | The listing *is* the article | The claim, proved on screen: verified byline, price at the foot |
+| 3 | 0:14 | The market | The curve quotes both sides |
+| 4 | 0:19.2 | Real money | It is a mainnet, said plainly |
+| 5 | 0:22 | Outro | The mark, and *Launch a token* |
+
+What it drops is elaboration — the usual launch struck through, the four steps
+of a launch, the three things that hold the promises up. What it keeps is
+everything needed to know what Folio is and what it costs you to be wrong about
+it. Scene 4 is in there on purpose: an advertisement is exactly where a claim
+about real money is most tempting to leave out, and `/about` does not leave it
+out either.
+
+One thing is handled specially. Scene 7's lede is three sentences of risk, and
+three seconds is not enough to read them, so the short cut hides the paragraph
+rather than flashing it unread — `hide: ".lede"` on that segment. The headline
+carries it alone, and the long cut still gives the paragraph eleven seconds.
+
+The captions are two lines instead of six, and both scenes they sit under have
+headlines of their own. An advertisement that talks over its own pictures is
+worse than one that trusts them.
 
 ## The score
 
@@ -102,7 +149,14 @@ before. It writes a 78-second stereo WAV, exactly the length of the film.
 ```
 node scripts/intro-video/score.mjs
 node scripts/intro-video/render.mjs --audio scripts/intro-video/folio-intro-score.wav --crf 21
+
+node scripts/intro-video/score.mjs --cut short
+node scripts/intro-video/render.mjs --cut short --audio scripts/intro-video/folio-intro-short-score.wav --crf 21
 ```
+
+Each cut has its own cue list and its own arc, and `score.mjs` refuses to write
+a score whose length does not match the cut it is scoring — a bed that outlives
+its picture by a tenth of a second is a bed that gets chopped.
 
 The second command re-renders the picture as well, which takes a few minutes.
 To put a new score under the picture that is already committed, mux instead —
@@ -132,9 +186,17 @@ soft sine dropping in pitch — a kick with no click on it — and it enters at 
 second scene, so the mark draws itself in quiet.
 
 The hook is four notes of D minor pentatonic, stated where the film first says
-what Folio is and repeated five times after. It is deliberately short: the
-point of a hook is that somebody who watched this once can hum it, and nothing
-longer survives that.
+what Folio is and repeated three times after — twice, in the short cut, which
+has no time to develop anything. It is deliberately short: the point of a hook
+is that somebody who watched this once can hum it, and nothing longer survives
+that.
+
+The whole thing is thinner than it wants to be, and that is the point. A pulse
+on the downbeat and a shaker on the quarter is the least that still reads as
+time passing, and the film underneath is mostly still paper: anything busier
+stops being a bed and becomes a thing you have to listen past. The second,
+softer pulse appears only under the two scenes where the picture itself is
+busy, and nowhere else.
 
 Underneath, the mix is close rather than big — soft edges, no hard transients,
 a shaker at the top of it and paper underneath. The paper is literal: a
@@ -158,8 +220,9 @@ the only other language the film has.
 
 | flag | default | what it does |
 | --- | --- | --- |
+| `--cut` | `full` | `short` writes the advertisement's score instead |
 | `--lufs` | `-18` | integrated loudness. About where speech would sit |
-| `--out` | `folio-intro-score.wav` | where to write |
+| `--out` | per cut | where to write |
 | `--ffmpeg` | auto | path to an ffmpeg — needed for the loudness pass only |
 
 Four things in the mix are load-bearing. The reverb send is high-passed at 320

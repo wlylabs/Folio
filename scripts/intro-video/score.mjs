@@ -47,14 +47,19 @@ function args(argv) {
 }
 
 const opts = args(process.argv.slice(2));
-const OUT = path.resolve(opts.out ?? path.join(HERE, "folio-intro-score.wav"));
+/** Which cut to score: the 78-second film, or the 27-second one. */
+const CUT = opts.cut === "short" ? "short" : "full";
+const OUT = path.resolve(
+  opts.out ??
+    path.join(HERE, CUT === "short" ? "folio-intro-short-score.wav" : "folio-intro-score.wav")
+);
 const SR = 48000;
 /** Integrated loudness. Music carrying a film sits about where speech would. */
 const LUFS = Number(opts.lufs ?? -18);
 /** The last chord fades over this, ending in silence exactly where the film
     does — the picture decides how long the file is, so anything still ringing
     at the cut would be chopped rather than faded. */
-const TAIL = 2.6;
+const TAIL = CUT === "short" ? 1.8 : 2.6;
 
 /**
  * 120 bpm, and not for the usual reason: every cut in this film lands on a
@@ -110,97 +115,214 @@ const tick = (at, gain = 0.3, pan = 0) => CUES.push({ voice: "tick", at, gain, p
 const paper = (at, dur, gain = 0.3, rise = false) =>
   CUES.push({ voice: "paper", at, dur, gain, rise });
 
-/* --- The pulse and the shaker, laid down first ----------------------------- *
+/**
+ * The seventy-eight-second film.
  *
- * Both are written as a grid rather than an arrangement, then thinned where a
- * scene needs the room. The pulse enters where the film's argument does — at
- * the second scene, not the first, so the mark draws itself in quiet — and
- * both leave before the dark frame, which is the only silence in the piece
- * that matters.
+ * Written as a grid first — pulse, shaker — then the harmony over it, then the
+ * places the music agrees with a specific frame. Reading it in that order is
+ * reading it the way it was written.
  */
-for (let t = 8.0; t < 60.5; t += BEAT * 2) {
-  const bar = Math.round((t - 8.0) / BAR);
-  const down = Math.abs(t / BAR - Math.round(t / BAR)) < 1e-6;
-  // Softer between the downbeats: the pulse breathes rather than marches.
-  pulse(t, down ? 0.42 : 0.24);
-  // A held-back opening: the first four bars come up from nothing.
-  if (bar < 4) CUES[CUES.length - 1].gain *= 0.45 + 0.14 * bar;
-}
-for (let t = 4.0; t < 61.0; t += BEAT) {
-  const eighth = Math.round(t / BEAT) % 4;
-  tick(t, eighth === 0 ? 0.22 : eighth === 2 ? 0.17 : 0.11, eighth % 2 ? 0.35 : -0.3);
-}
-for (let t = 70.0; t < 76.0; t += BEAT) {
-  const eighth = Math.round(t / BEAT) % 4;
-  tick(t, (eighth === 0 ? 0.2 : 0.1) * (1 - (t - 70) / 9), eighth % 2 ? 0.35 : -0.3);
-}
-for (let t = 70.0; t < 76.5; t += BEAT * 2) pulse(t, t < 74 ? 0.4 : 0.27);
+function scoreFull() {
+  /* --- The pulse and the shaker, laid down first ----------------------------- *
+   *
+   * Thin on purpose. A pulse on every downbeat and a shaker on the quarter is
+   * the least that still reads as time passing, and the film underneath is
+   * mostly still paper — anything busier stops being a bed and starts being a
+   * thing you have to listen past. The pulse enters at the second scene, so the
+   * mark draws itself in quiet, and both leave before the dark frame.
+   */
+  for (let t = 8.0; t < 60.5; t += BAR) {
+    const bar = Math.round((t - 8.0) / BAR);
+    pulse(t, 0.42 * (bar < 4 ? 0.5 + 0.16 * bar : 1));
+    // A second, softer pulse only while the film is at its busiest — the four
+    // steps and the market — and never anywhere else.
+    if (t >= 26.5 && t < 51.5) pulse(t + BEAT * 2, 0.2);
+  }
+  for (let t = 8.0; t < 60.0; t += BEAT * 2) {
+    const off = Math.round(t / BEAT) % 4 !== 0;
+    tick(t, off ? 0.1 : 0.16, off ? 0.35 : -0.3);
+  }
+  for (let t = 70.0; t < 75.0; t += BEAT * 2) {
+    tick(t, 0.13 * (1 - (t - 70) / 8), (t / BEAT) % 4 ? 0.35 : -0.3);
+    if (t < 74.5) pulse(t, t < 74 ? 0.4 : 0.27);
+  }
 
-/* --- Harmony --------------------------------------------------------------- *
+  /* --- Harmony --------------------------------------------------------------- *
+   *
+   * D minor, and it stays there: eight scenes of one argument want a harmony
+   * turning over in place rather than a progression going somewhere. B-flat with
+   * its third taken out where the usual launch is struck through, F major for
+   * the scenes that are Folio's own answer, D under everything that carries
+   * weight.
+   */
+  chord(0.0, 7.4, ["D3", "A3", "D4", "F4"], 0.30); //  1 · masthead
+  bass(0.0, 7.4, "D2", 0.18);
+
+  chord(7.5, 4.4, ["Bb3", "F3", "D4"], 0.28); //       2 · the usual launch
+  bass(7.5, 4.4, "Bb1", 0.22);
+  chord(12.0, 3.4, ["F3", "Bb3", "F4"], 0.26); //      the third goes with the promise
+  bass(12.0, 3.5, "Bb1", 0.20);
+
+  chord(15.5, 5.0, ["F3", "C4", "A4"], 0.30); //       3 · the listing is the article
+  bass(15.5, 5.0, "F1", 0.23);
+  chord(20.5, 4.0, ["C3", "G3", "E4"], 0.28);
+  bass(20.5, 4.0, "C2", 0.22);
+  chord(24.5, 5.0, ["D3", "A3", "F4"], 0.30);
+  bass(24.5, 5.0, "D2", 0.23);
+
+  chord(29.5, 5.0, ["Bb3", "F3", "D4"], 0.28); //      4 · how a launch works
+  bass(29.5, 5.0, "Bb1", 0.22);
+  chord(34.5, 4.5, ["F3", "C4", "A4"], 0.30);
+  bass(34.5, 4.5, "F1", 0.23);
+
+  chord(39.0, 5.0, ["D3", "A3", "D4"], 0.30); //       5 · the market
+  bass(39.0, 5.0, "D2", 0.23);
+  chord(44.0, 4.0, ["Bb3", "F3", "D4"], 0.28);
+  bass(44.0, 4.0, "Bb1", 0.22);
+  chord(48.0, 3.5, ["F3", "C4", "A4"], 0.28);
+  bass(48.0, 3.5, "F1", 0.22);
+
+  chord(51.5, 5.0, ["D3", "F3", "A3", "C4"], 0.30); // 6 · what holds it up
+  bass(51.5, 5.0, "D2", 0.23);
+  chord(56.5, 4.0, ["Bb3", "F3", "D4"], 0.27);
+  bass(56.5, 4.0, "Bb1", 0.20);
+  chord(60.5, 2.4, ["F3", "C4"], 0.20); //             and the room empties out
+
+  /* 7 · Real money (1:03) — everything stops. The one inverted frame in the film
+     gets the one silence in the score: a single low note, the room it rings in,
+     and nothing else until the build starts. */
+  bass(63.4, 4.2, "D2", 0.30);
+  pluck(63.45, "D3", 0.34, 0);
+  pluck(66.45, "A3", 0.26, 0.2);
+
+  /* 8 · Outro (1:10) — the chord the piece has been circling, with its ninth in
+     it, and the hook one last time an octave up. */
+  chord(69.9, 7.0, ["D3", "A3", "D4", "F4", "A4"], 0.34);
+  bass(69.9, 6.0, "D2", 0.24);
+  chord(74.5, 3.0, ["F3", "C4", "A4", "D5"], 0.26);
+
+  /* --- Paper ----------------------------------------------------------------- *
+   *
+   * A sheet turning, more or less, on every cut — the transition sweetener every
+   * intro film has, except that on this one it is also what the product is made
+   * of. The last one is a rise rather than a swell: it is the build into the
+   * logo, and it is the only loud thing in the piece.
+   */
+  for (const t of [7.5, 15.5, 26.5, 39.0, 51.5]) paper(t - 0.55, 1.1, 0.085);
+  paper(62.4, 1.3, 0.11);
+  paper(67.2, 2.85, 0.46, true); //  the build
+  paper(69.85, 1.4, 0.1);
+
+  hook(16.0); //          3 · stated, where the article sets
+  hook(32.5, 0.85); //    4 · under the steps
+  hook(52.0, 0.85); //    6 · what holds it up
+  hook(70.5, 1.0); //     8 · once more, and that is the last of it
+
+  /* --- Accents on the picture ------------------------------------------------ *
+   *
+   * Everything above is the music. These are the places it agrees with a
+   * specific frame: each one is snapped to the nearest beat, which is never more
+   * than a sixth of a second from the cue it answers and always in time.
+   */
+  pluck(2.0, "D4", 0.26, -0.2); //   1 · F-O-L-I-O begins to land
+  pluck(3.5, "A4", 0.2, 0.2); //         the tagline
+  pluck(8.5, "Bb3", 0.26, -0.2); //  2 · the card
+  pluck(12.0, "Bb2", 0.34, 0); //        the strike-through crosses the promise
+  pluck(22.0, "C5", 0.26, 0.2); //   3 · the byline earns its Verified chip
+  pluck(23.0, "F4", 0.24, -0.2); //      the price arrives underneath
+
+  pluck(28.0, "D4", 0.28, -0.2); //  4 · the four steps, 2.1s apart on screen
+  pluck(30.5, "F4", 0.26, 0.2); //       and on the nearest beat here
+  pluck(34.5, "C5", 0.3, 0.2); //        four: one transaction
+
+  /* 5 · the curve. Five notes climb while it is drawn, and the sell leg walks
+     the same five back down to exactly where the buy began. */
+  pluck(40.0, "D4", 0.26, -0.25);
+  pluck(40.5, "E4", 0.24, -0.1);
+  pluck(41.0, "F4", 0.26, 0.05);
+  pluck(41.5, "A4", 0.28, 0.2);
+  pluck(42.0, "C5", 0.3, 0.3);
+  pluck(43.5, "A4", 0.22, 0); //         the quote is taken
+  pluck(47.5, "C5", 0.26, 0.3);
+  pluck(48.0, "A4", 0.24, 0.2);
+  pluck(48.5, "F4", 0.24, 0.05);
+  pluck(49.0, "E4", 0.22, -0.1);
+  pluck(49.5, "D4", 0.26, -0.25);
+
+  pluck(57.0, "C5", 0.22, -0.2); //  6 · and one for the three things that hold it up
+
+  pluck(73.5, "D5", 0.28, 0.15); //  8 · "Launch a token"
+  pluck(75.0, "A4", 0.18, -0.15);
+
+  return { duration: 78.0, arc: ARC_FULL };
+}
+
+/**
+ * The twenty-seven-second cut, which is not this one trimmed.
  *
- * D minor, and it stays there: eight scenes of one argument want a harmony
- * turning over in place rather than a progression going somewhere. B-flat with
- * its third taken out where the usual launch is struck through, F major for
- * the scenes that are Folio's own answer, D under everything that carries
- * weight.
+ * An advertisement has about four seconds to be liked and no time at all to
+ * develop, so the hook arrives almost immediately and is stated twice rather
+ * than five times, the pulse runs under two scenes instead of six, and the
+ * drop is one bar rather than four. Everything that survives is here because
+ * the short cut's pictures are the same pictures: the mark, the article, the
+ * curve, the money being real, and the ask.
  */
-chord(0.0, 7.4, ["D3", "A3", "D4", "F4"], 0.30); //  1 · masthead
-bass(0.0, 7.4, "D2", 0.18);
+function scoreShort() {
+  /* Pulse under the two scenes that carry the argument, and nowhere else. */
+  for (let t = 5.0; t < 18.5; t += BAR) pulse(t, 0.42 * (t < 7 ? 0.6 : 1));
+  for (let t = 8.0; t < 18.0; t += BEAT * 2) {
+    const off = Math.round(t / BEAT) % 4 !== 0;
+    tick(t, off ? 0.1 : 0.16, off ? 0.35 : -0.3);
+  }
+  for (let t = 22.0; t < 25.5; t += BAR) pulse(t, 0.4);
+  tick(22.0, 0.14, -0.3);
+  tick(23.0, 0.1, 0.35);
 
-chord(7.5, 4.4, ["Bb3", "F3", "D4"], 0.28); //       2 · the usual launch
-bass(7.5, 4.4, "Bb1", 0.22);
-chord(12.0, 3.4, ["F3", "Bb3", "F4"], 0.26); //      the third goes with the promise
-bass(12.0, 3.5, "Bb1", 0.20);
+  /* Harmony: D, F, C, D, and home. Five chords is all twenty-seven seconds
+     wants, and they change where the picture does. */
+  chord(0.0, 4.6, ["D3", "A3", "D4", "F4"], 0.30); //  1 · the mark
+  bass(0.0, 4.6, "D2", 0.18);
+  chord(5.0, 5.0, ["F3", "C4", "A4"], 0.30); //        2 · the listing is the article
+  bass(5.0, 5.0, "F1", 0.23);
+  chord(10.0, 4.0, ["C3", "G3", "E4"], 0.28);
+  bass(10.0, 4.0, "C2", 0.22);
+  chord(14.0, 5.2, ["D3", "A3", "D4"], 0.30); //       3 · the market
+  bass(14.0, 5.2, "D2", 0.23);
+  bass(19.3, 2.4, "D2", 0.30); //                      4 · real money: nothing else
+  pluck(19.4, "D3", 0.34, 0);
+  chord(21.9, 5.4, ["D3", "A3", "D4", "F4", "A4"], 0.34); // 5 · the mark, and the ask
+  bass(21.9, 4.6, "D2", 0.30);
 
-chord(15.5, 5.0, ["F3", "C4", "A4"], 0.30); //       3 · the listing is the article
-bass(15.5, 5.0, "F1", 0.23);
-chord(20.5, 4.0, ["C3", "G3", "E4"], 0.28);
-bass(20.5, 4.0, "C2", 0.22);
-chord(24.5, 5.0, ["D3", "A3", "F4"], 0.30);
-bass(24.5, 5.0, "D2", 0.23);
+  /* Paper on the cuts, and the build into the last scene. */
+  paper(4.5, 1.0, 0.085);
+  paper(13.5, 1.0, 0.085);
+  paper(18.7, 1.1, 0.11);
+  paper(20.3, 1.75, 0.46, true); //  the build
+  paper(21.85, 1.3, 0.1);
 
-chord(29.5, 5.0, ["Bb3", "F3", "D4"], 0.28); //      4 · how a launch works
-bass(29.5, 5.0, "Bb1", 0.22);
-chord(34.5, 4.5, ["F3", "C4", "A4"], 0.30);
-bass(34.5, 4.5, "F1", 0.23);
+  /* The hook, twice: where the article sets, and under the mark at the end. */
+  hook(6.0);
+  hook(22.4, 1.0);
 
-chord(39.0, 5.0, ["D3", "A3", "D4"], 0.30); //       5 · the market
-bass(39.0, 5.0, "D2", 0.23);
-chord(44.0, 4.0, ["Bb3", "F3", "D4"], 0.28);
-bass(44.0, 4.0, "Bb1", 0.22);
-chord(48.0, 3.5, ["F3", "C4", "A4"], 0.28);
-bass(48.0, 3.5, "F1", 0.22);
+  /* And the frames worth agreeing with. */
+  pluck(2.0, "D4", 0.26, -0.2); //   1 · F-O-L-I-O lands
+  pluck(3.5, "A4", 0.2, 0.2); //         the tagline
+  pluck(11.0, "C5", 0.26, 0.2); //   2 · the byline earns its Verified chip
+  pluck(12.0, "F4", 0.24, -0.2); //      the price arrives underneath
 
-chord(51.5, 5.0, ["D3", "F3", "A3", "C4"], 0.30); // 6 · what holds it up
-bass(51.5, 5.0, "D2", 0.23);
-chord(56.5, 4.0, ["Bb3", "F3", "D4"], 0.27);
-bass(56.5, 4.0, "Bb1", 0.20);
-chord(60.5, 2.4, ["F3", "C4"], 0.20); //             and the room empties out
+  /* 3 · the curve, drawn and then walked back down — the one thing from the
+     long cut that no shortening is allowed to touch. */
+  pluck(15.0, "D4", 0.26, -0.25);
+  pluck(15.5, "E4", 0.24, -0.1);
+  pluck(16.0, "F4", 0.26, 0.05);
+  pluck(16.5, "A4", 0.28, 0.2);
+  pluck(17.0, "C5", 0.3, 0.3);
+  pluck(18.0, "A4", 0.22, 0); //         the quote is taken
 
-/* 7 · Real money (1:03) — everything stops. The one inverted frame in the film
-   gets the one silence in the score: a single low note, the room it rings in,
-   and nothing else until the build starts. */
-bass(63.4, 4.2, "D2", 0.30);
-pluck(63.45, "D3", 0.34, 0);
-pluck(66.45, "A3", 0.26, 0.2);
+  pluck(24.0, "D5", 0.28, 0.15); //  5 · "Launch a token"
 
-/* 8 · Outro (1:10) — the chord the piece has been circling, with its ninth in
-   it, and the hook one last time an octave up. */
-chord(69.9, 7.0, ["D3", "A3", "D4", "F4", "A4"], 0.34);
-bass(69.9, 6.0, "D2", 0.24);
-chord(74.5, 3.0, ["F3", "C4", "A4", "D5"], 0.26);
-
-/* --- Paper ----------------------------------------------------------------- *
- *
- * A sheet turning, more or less, on every cut — the transition sweetener every
- * intro film has, except that on this one it is also what the product is made
- * of. The last one is a rise rather than a swell: it is the build into the
- * logo, and it is the only loud thing in the piece.
- */
-for (const t of [7.5, 15.5, 26.5, 39.0, 51.5]) paper(t - 0.55, 1.1, 0.085);
-paper(62.4, 1.3, 0.11);
-paper(67.2, 2.85, 0.46, true); //  the build
-paper(69.85, 1.4, 0.1);
+  return { duration: 27.6, arc: ARC_SHORT };
+}
 
 /* --- The hook -------------------------------------------------------------- *
  *
@@ -223,52 +345,6 @@ const hook = (at, gain = 1, octave = 0) => {
   }
 };
 
-hook(16.0); //          3 · stated, where the article sets
-hook(20.5, 0.8); //     answered a fourth down the phrase
-hook(32.5, 0.85); //    4 · under the steps
-hook(44.0, 0.8); //     5 · after the quote is taken
-hook(52.0, 0.9); //     6 · what holds it up
-hook(70.5, 1.0); //     8 · once more, and that is the last of it
-
-/* --- Accents on the picture ------------------------------------------------ *
- *
- * Everything above is the music. These are the places it agrees with a
- * specific frame: each one is snapped to the nearest beat, which is never more
- * than a sixth of a second from the cue it answers and always in time.
- */
-pluck(2.0, "D4", 0.26, -0.2); //   1 · F-O-L-I-O begins to land
-pluck(3.5, "A4", 0.2, 0.2); //         the tagline
-pluck(8.5, "Bb3", 0.26, -0.2); //  2 · the card
-pluck(12.0, "Bb2", 0.34, 0); //        the strike-through crosses the promise
-pluck(22.0, "C5", 0.26, 0.2); //   3 · the byline earns its Verified chip
-pluck(23.0, "F4", 0.24, -0.2); //      the price arrives underneath
-
-pluck(28.0, "D4", 0.28, -0.2); //  4 · the four steps, 2.1s apart on screen
-pluck(30.5, "F4", 0.26, 0.2); //       and on the nearest beat here
-pluck(32.5, "A4", 0.28, -0.2);
-pluck(34.5, "C5", 0.3, 0.2); //        four: one transaction
-
-/* 5 · the curve. Five notes climb while it is drawn, and the sell leg walks
-   the same five back down to exactly where the buy began. */
-pluck(40.0, "D4", 0.26, -0.25);
-pluck(40.5, "E4", 0.24, -0.1);
-pluck(41.0, "F4", 0.26, 0.05);
-pluck(41.5, "A4", 0.28, 0.2);
-pluck(42.0, "C5", 0.3, 0.3);
-pluck(43.5, "A4", 0.22, 0); //         the quote is taken
-pluck(47.5, "C5", 0.26, 0.3);
-pluck(48.0, "A4", 0.24, 0.2);
-pluck(48.5, "F4", 0.24, 0.05);
-pluck(49.0, "E4", 0.22, -0.1);
-pluck(49.5, "D4", 0.26, -0.25);
-
-pluck(53.0, "F4", 0.24, -0.2); //  6 · bylines
-pluck(55.0, "A4", 0.22, 0.2); //       articles
-pluck(57.0, "C5", 0.22, -0.2); //      trades
-
-pluck(73.5, "D5", 0.28, 0.15); //  8 · "Launch a token"
-pluck(75.0, "A4", 0.18, -0.15);
-
 /* -------------------------------------------------------------------------- */
 /* The arc                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -283,13 +359,24 @@ pluck(75.0, "A4", 0.18, -0.15);
  * drop and the 0 at 70, and the distance between them is the only reason the
  * ending lands.
  */
-const ARC = [
+const ARC_FULL = [
   [0.0, -7], [4.0, -5.5], [8.0, -4.5], [15.5, -2.6], [26.5, -1.5], [39.0, -0.7],
   [51.5, 0], [60.4, -0.5],
   [61.6, -9], [63.4, -10], [67.3, -11], //  the film's one silence
   [68.6, -5.5], [70.0, 0], //               the build, and the logo
   [78.0, 0],
 ];
+
+/** The same shape in a third of the time: up, hold, stop, build, land. */
+const ARC_SHORT = [
+  [0.0, -6], [2.0, -4], [5.0, -2], [14.0, -0.6], [18.4, -0.6],
+  [19.1, -9], [20.2, -10], //      the film's one silence, one bar of it
+  [21.2, -5], [22.0, 0], //        the build, and the mark
+  [27.6, 0],
+];
+
+/** The arc of whichever cut is being written, read at scheduling time. */
+let ARC = ARC_FULL;
 
 function arc(t) {
   for (let i = 1; i < ARC.length; i++) {
@@ -632,16 +719,22 @@ function findFfmpeg() {
 /* Main                                                                       */
 /* -------------------------------------------------------------------------- */
 
-/** The film's own length, so the score cannot drift from the cut. */
-function filmDuration() {
+/**
+ * The length of the cut being scored, read out of intro.html rather than
+ * written down twice. A score that outlives its picture by a tenth of a second
+ * is a score that gets chopped, so this is never a constant here.
+ */
+function filmDuration(cut) {
   const page = fs.readFileSync(path.join(HERE, "intro.html"), "utf8");
-  const open = page.indexOf("[", page.indexOf("const SCENES = ["));
+  const name = cut === "short" ? "const SHORT = [" : "const SCENES = [";
+  const open = page.indexOf("[", page.indexOf(name));
   const close = page.indexOf("];", open);
   const scenes = JSON.parse(
     page
       .slice(open, close + 1)
+      .replace(/\/\/[^\n]*/g, "")
       .replace(/(\w+):/g, '"$1":')
-      .replace(/,\s*]/g, "]")
+      .replace(/,(\s*[\]}])/g, "$1")
   );
   const last = scenes[scenes.length - 1];
   return last.at + last.dur;
@@ -649,12 +742,21 @@ function filmDuration() {
 
 async function main() {
   const ffmpeg = findFfmpeg();
-  const duration = filmDuration();
+  const written = CUT === "short" ? scoreShort() : scoreFull();
+  ARC = written.arc;
+
+  const duration = filmDuration(CUT);
+  if (Math.abs(duration - written.duration) > 0.001) {
+    throw new Error(
+      `the ${CUT} cut is ${duration}s in intro.html but ${written.duration}s in this score`
+    );
+  }
   const frames = Math.round(duration * SR);
 
   console.log(`· ffmpeg   ${ffmpeg}`);
   console.log(
-    `· ${CUES.length} cues over ${duration.toFixed(1)}s · ${(60 / BEAT).toFixed(0)} bpm · ${LUFS} LUFS`
+    `· ${CUES.length} cues over ${duration.toFixed(1)}s · ${CUT} cut · ` +
+      `${(60 / BEAT).toFixed(0)} bpm · ${LUFS} LUFS`
   );
 
   const L = new Float32Array(frames);

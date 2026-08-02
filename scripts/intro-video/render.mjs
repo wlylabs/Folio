@@ -47,13 +47,17 @@ const FPS = Number(opts.fps ?? 30);
 const SCALE = Number(opts.scale ?? 1);
 const QUALITY = Number(opts.quality ?? 94);
 const CRF = Number(opts.crf ?? 18);
-const OUT = path.resolve(opts.out ?? path.join(HERE, "folio-intro.mp4"));
+const OUT = path.resolve(
+  opts.out ?? path.join(HERE, opts.cut === "short" ? "folio-intro-short.mp4" : "folio-intro.mp4")
+);
 const POSTER = opts.poster ? path.resolve(opts.poster) : null;
 const POSTER_AT = Number(opts["poster-at"] ?? 4.6);
 /** A sound track to mux in — score.mjs's output, or a recorded voice. */
 const AUDIO = opts.audio ? path.resolve(String(opts.audio)) : null;
 /** Burnt-in captions. Off under a voice: see `SHOW_CAPTIONS` in intro.html. */
 const CAPTIONS = !opts["no-captions"];
+/** Which cut to render: the 78-second film, or the 27-second one. */
+const CUT = opts.cut === "short" ? "short" : "full";
 
 /* -------------------------------------------------------------------------- */
 /* Fonts                                                                      */
@@ -204,10 +208,11 @@ async function main() {
 
   // Told before the document runs, so the page never starts its own clock —
   // and knows whether this cut carries its narration on the glass.
-  await page.addInitScript((captions) => {
+  await page.addInitScript(({ captions, cut }) => {
     window.FOLIO_MANUAL = true;
     window.FOLIO_CAPTIONS = captions;
-  }, CAPTIONS);
+    window.FOLIO_CUT = cut;
+  }, { captions: CAPTIONS, cut: CUT });
 
   await page.goto("file://" + path.join(HERE, "intro.html"), { waitUntil: "load" });
   await page.evaluate((css) => {
@@ -227,6 +232,7 @@ async function main() {
   if (AUDIO) console.log(`· audio    ${AUDIO}`);
   console.log(
     `· ${W}×${H} · ${FPS} fps · ${(end - start).toFixed(1)}s · ${frames} frames` +
+      (CUT === "short" ? " · short cut" : "") +
       (CAPTIONS ? "" : " · no captions")
   );
 

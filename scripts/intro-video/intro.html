@@ -890,7 +890,42 @@ const SCENES = [
   { id: "s8", at: 70.0, dur:  8.0 },
 ];
 
-const DURATION = SCENES[SCENES.length - 1].at + SCENES[SCENES.length - 1].dur;
+/* The twenty-seven-second cut, for the places a seventy-eight-second film does
+   not get watched: a pre-roll, a post, a card on a landing page.
+
+   It is not the film trimmed. Every segment names a scene and a window inside
+   that scene's own clock, and the renderer is handed `from + dur` as the
+   scene's length, so the scene fades where the segment ends rather than being
+   cut off mid-move. Nothing here is a shortened animation; it is the same
+   animations, fewer of them, each played whole.
+
+   What it keeps is the argument in its shortest honest form: the mark, the
+   listing that is an article, the curve that quotes both sides, that the money
+   is real, and where to go. What it drops — the usual launch struck through,
+   the four steps, the three things that hold it up — is elaboration. */
+const SHORT = [
+  { id: "s1", at:  0.0, dur: 5.0, from: 0 },    // the mark, FOLIO, the tagline
+  { id: "s3", at:  5.0, dur: 9.0, from: 0 },    // the article, verified, priced
+  { id: "s5", at: 14.0, dur: 5.2, from: 0.6 },  // the curve, and a live quote
+  // Scene 7's lede is three sentences of risk, and three seconds is not enough
+  // to read them. The headline says the thing that matters on its own, so the
+  // paragraph is dropped here rather than flashed unread — `hide` takes it out
+  // for this segment only. The long cut still gives it eleven seconds.
+  { id: "s7", at: 19.2, dur: 2.8, from: 0.25, hide: ".lede" },
+  { id: "s8", at: 22.0, dur: 5.6, from: 0 },    // the mark again, and the ask
+];
+
+/* Two lines, where the long cut has six. The scenes' own headlines carry the
+   rest, and an advertisement that talks over its own pictures is worse than
+   one that trusts them. */
+const SHORT_CAPTIONS = [
+  { at: 6.2, out: 13.2, width: 820,
+    text: "Publish the piece. The token is minted out of it, and priced on the page." },
+  { at: 15.0, out: 18.6, width: 900,
+    text: "Holders buy from the curve and sell straight back into it." },
+];
+
+const FULL = SCENES.map((s) => ({ ...s, from: 0 }));
 
 /* The narration, timed against the same clock. Captions are deliberately not
    owned by a scene: a sentence can hold across a cut, the way a voice does.
@@ -912,6 +947,14 @@ const CAPTIONS = [
   { at: 63.8, out: 69.4, invert: true,
     text: "And the part no intro should bury: this is a mainnet, and the money is real." },
 ];
+
+/** Which cut this page is playing. `window.FOLIO_CUT = "short"`, or `?cut=short`. */
+const CUT =
+  (window.FOLIO_CUT || new URLSearchParams(location.search).get("cut")) === "short"
+    ? { scenes: SHORT, captions: SHORT_CAPTIONS }
+    : { scenes: FULL, captions: CAPTIONS };
+
+const DURATION = CUT.scenes[CUT.scenes.length - 1].at + CUT.scenes[CUT.scenes.length - 1].dur;
 
 /* ==========================================================================
    Per-scene renderers. Each takes local time in seconds.
@@ -1128,21 +1171,24 @@ const SHOW_CAPTIONS =
 function seek(t) {
   t = clamp(t, 0, DURATION);
 
-  for (const s of SCENES) {
+  for (const s of CUT.scenes) {
     const el = document.getElementById(s.id);
     const live = t >= s.at && t < s.at + s.dur + 0.001;
     el.classList.toggle("on", live);
     if (!live) continue;
     el.style.opacity = "1";
     el.style.transform = "none";
-    R[s.id](t - s.at, s.dur);
+    if (s.hide) for (const n of $$(s.hide, el)) n.style.display = "none";
+    // The scene is told its own length is where this segment ends, so its exit
+    // plays out inside the cut rather than being clipped by it.
+    R[s.id](s.from + t - s.at, s.from + s.dur);
   }
 
   // Captions.
   const cap = $("#caption");
   const txt = $(".txt", cap);
   const active =
-    SHOW_CAPTIONS && CAPTIONS.find((c) => t >= c.at - 0.5 && t <= c.out + 0.5);
+    SHOW_CAPTIONS && CUT.captions.find((c) => t >= c.at - 0.5 && t <= c.out + 0.5);
   if (active) {
     if (txt.dataset.k !== active.at + "") {
       txt.textContent = active.text;
