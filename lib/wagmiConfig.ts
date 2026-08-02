@@ -29,7 +29,7 @@ import {
   onWalletBoot,
   walletBootLevel,
 } from "./walletBoot";
-import { warmWalletDirectory } from "./walletDirectory";
+import { unblockWalletDirectoryPaging, warmWalletDirectory } from "./walletDirectory";
 import { walletConnectMetadata } from "./walletMetadata";
 import { hasStoredWalletConnectSession } from "./walletSession";
 
@@ -385,9 +385,14 @@ function deferBoot(createWallet: CreateWalletFn): CreateWalletFn {
  * @reown/appkit, and the directory is the first thing it reaches for. See
  * lib/walletDirectory.ts for why the handshake is worth moving, and why a
  * reader who never approaches a connect button never opens it.
+ *
+ * The same level, and the same file, take the wait out of that list's second
+ * page: AppKit holds a page of forty wallets back until twenty of their icons
+ * have been fetched, and the tiles fetch their own icons anyway.
  */
 if (hasWalletConnectProjectId) {
   onWalletBoot(WALLET_BOOT_MODAL, warmWalletDirectory);
+  onWalletBoot(WALLET_BOOT_MODAL, unblockWalletDirectoryPaging);
 }
 
 /** Every wallet in a list, deferred. */
