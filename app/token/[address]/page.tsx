@@ -61,9 +61,10 @@ async function getToken(address: string): Promise<Token | null> {
 export async function generateMetadata({
   params,
 }: {
-  params: { address: string };
+  params: Promise<{ address: string }>;
 }): Promise<Metadata> {
-  const token = await getToken(params.address);
+  const { address } = await params;
+  const token = await getToken(address);
   // An address with no listing behind it. The page itself calls notFound(), and
   // Next renders not-found with a 404 and its own noindex — so this is the
   // belt-and-braces copy for anything that reads metadata without following
@@ -101,11 +102,12 @@ export async function generateMetadata({
 export default async function TokenPage({
   params,
 }: {
-  params: { address: string };
+  params: Promise<{ address: string }>;
 }) {
   if (!isSupabaseConfigured) return <SetupNotice />;
 
-  const token = await getToken(params.address);
+  const { address } = await params;
+  const token = await getToken(address);
   if (!token) return notFound();
 
   /*

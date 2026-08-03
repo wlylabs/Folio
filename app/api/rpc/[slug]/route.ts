@@ -130,8 +130,9 @@ const TIMEOUT_MS = 12_000;
 /** JSON-RPC's own "internal error", for the failures that happen on this side. */
 const INTERNAL_ERROR = -32603;
 
-export async function POST(request: Request, { params }: { params: { slug: string } }) {
-  if (!isChainSlug(params.slug)) {
+export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  if (!isChainSlug(slug)) {
     return rpcError(-32601, "Unknown chain.", 404);
   }
 
@@ -187,7 +188,7 @@ export async function POST(request: Request, { params }: { params: { slug: strin
     }
   }
 
-  const entry = chainBySlug(params.slug);
+  const entry = chainBySlug(slug);
   const upstream = entry?.rpcEnv || entry?.chain.rpcUrls.default.http[0];
   if (!upstream) {
     return rpcError(INTERNAL_ERROR, "No endpoint is configured for this chain.", 500);
@@ -216,7 +217,7 @@ export async function POST(request: Request, { params }: { params: { slug: strin
       },
     });
   } catch (err) {
-    console.error(`RPC relay to ${params.slug} failed:`, err);
+    console.error(`RPC relay to ${slug} failed:`, err);
     return rpcError(INTERNAL_ERROR, "The chain's RPC did not answer.", 502);
   }
 }
