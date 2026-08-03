@@ -3,10 +3,14 @@
 Naskah siap tempel untuk fitur **Articles** di X. Ada dua versi lengkap —
 Bahasa Indonesia dan English — plus post pengantar untuk menautkan artikelnya.
 
-Cara pakai: salin blok di antara garis `====` (judul, subjudul, isi) langsung ke
-editor Articles. Naskahnya sengaja tidak memakai simbol markdown (`##`, `**`),
-karena editor X menempelkannya apa adanya. Judul bagian ditulis di barisnya
-sendiri — tinggal blok teksnya lalu pilih *Heading* di toolbar.
+Cara pakai: baris pertama di dalam blok `====` adalah judulnya, sisanya isi.
+Editor Articles hanya punya dua kolom — judul dan isi, tidak ada subjudul — jadi
+kalimat pembuka yang dulu berdiri sebagai subjudul sekarang menjadi baris pertama
+isi, dan judulnya membawa sendiri klaim pembedanya.
+
+Naskahnya sengaja tidak memakai simbol markdown (`##`, `**`), karena editor X
+menempelkannya apa adanya. Judul bagian ditulis di barisnya sendiri — tinggal
+blok teksnya lalu pilih *Heading* di toolbar.
 
 Satu hal yang harus diisi sebelum posting: setiap `[URL FOLIO]` diganti alamat
 situsnya. Angka-angka di naskah diambil dari repositori ini — factory
@@ -20,7 +24,7 @@ wallet — jadi kalau parameter itu berubah, naskah ini ikut berubah.
 
 ====================================================================
 
-Kalau Halaman Listing-nya Adalah Artikelnya
+Listing-nya Adalah Artikelnya — dan Tidak Bisa Diedit Setelah Ada yang Beli
 
 Folio adalah launchpad tempat token diterbitkan sebagai tulisan — dan tulisan itu tidak bisa diedit setelah orang membelinya.
 
@@ -112,7 +116,7 @@ Tulis dulu. Kalau argumennya tidak sanggup berdiri sebagai artikel, mungkin ia m
 
 ====================================================================
 
-When the Listing Is the Article
+The Listing Is the Article — and It Cannot Be Edited After You Buy
 
 Folio is a launchpad where a token ships as a piece of writing — and the writing cannot be edited once somebody has bought on it.
 
