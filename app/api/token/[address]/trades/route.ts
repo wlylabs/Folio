@@ -39,8 +39,8 @@ const inflight = new Map<string, Promise<TradeHistory>>();
  */
 const MAX_ENTRIES = 200;
 
-export async function GET(request: Request, { params }: { params: { address: string } }) {
-  const address = params.address.toLowerCase();
+export async function GET(request: Request, { params }: { params: Promise<{ address: string }> }) {
+  const address = (await params).address.toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(address)) {
     return NextResponse.json({ error: "Not an address." }, { status: 400 });
   }
